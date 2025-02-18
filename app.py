@@ -19,6 +19,17 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
+if not SUPABASE_URL or not SUPABASE_KEY:
+    st.error("Supabase 관리자에게 문의하세요.")
+    st.stop()
+
+# Supabase 클라이언트 초기화
+try:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    st.error(f"Supabase 연결 중 오류가 발생했습니다: {str(e)}")
+    st.stop()
+
 # Supabase 클라이언트 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
