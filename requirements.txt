@@ -1,0 +1,12 @@
+supabase
+streamlit
+g4f
+pytz
+geopy
+requests
+beautifulsoup4
+pandas
+uuid
+googlesearch-python
+python-dotenv
+logging
