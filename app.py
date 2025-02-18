@@ -271,7 +271,7 @@ def show_login_page():
                     st.success(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님!")
                     
                 time.sleep(1)
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"로그인 중 오류가 발생했습니다: {str(e)}")
         elif submit_button:
