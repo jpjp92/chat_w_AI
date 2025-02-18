@@ -8,5 +8,3 @@ beautifulsoup4
 pandas
 uuid
 googlesearch-python
-python-dotenv
-logging
