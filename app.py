@@ -19,8 +19,6 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
-
-
 # Supabase 클라이언트 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
