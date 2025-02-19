@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from googlesearch import search
 from g4f.client import Client
+from timezonefinder import TimezoneFinder
 
 # Supabase 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -205,186 +206,66 @@ def extract_city_from_query(query):
     
     return "서울"  # 기본값
 
-
-# # 날씨 관련 함수들
-# def get_english_city_name(korean_city_name):
-#     """
-#     Converts Korean city names to English using Geopy
-#     Returns the English city name or the original name if conversion fails
-#     """
-#     geolocator = Nominatim(user_agent="geo_app")
+# 시간 관련 함수들 수정
+def get_timezone_by_city(city_name):
+    """
+    도시명을 입력받아 해당 지역의 타임존 반환
+    """
+    geolocator = Nominatim(user_agent="geo_app")
+    tf = TimezoneFinder()
     
-#     try:
-#         # First attempt: Try with original name
-#         location = geolocator.geocode(korean_city_name, language='en')
-#         if location and location.raw and 'display_name' in location.raw:
-#             display_name = location.raw['display_name']
-#             address_parts = display_name.split(',')
-            
-#             for part in reversed(address_parts):
-#                 city_name = part.strip()
-#                 if city_name.endswith('-si'):
-#                     return city_name[:-3]
-#                 elif city_name.endswith('-gun'):
-#                     return city_name[:-4]
-        
-#         # Second attempt: Try with "시" suffix
-#         city_with_si = korean_city_name + "시"
-#         location_with_si = geolocator.geocode(city_with_si, language='en')
-#         if location_with_si and location_with_si.raw and 'name' in location_with_si.raw:
-#             return location_with_si.raw['name']
-        
-#         # Fallback: Direct mapping for major cities
-#         city_mapping = {
-#             "서울": "Seoul",
-#             "부산": "Busan",
-#             "대구": "Daegu",
-#             "인천": "Incheon",
-#             "광주": "Gwangju",
-#             "대전": "Daejeon",
-#             "울산": "Ulsan",
-#             "세종": "Sejong",
-#             "제주": "Jeju"
-#         }
-        
-#         if korean_city_name in city_mapping:
-#             return city_mapping[korean_city_name]
-            
-#         # If all attempts fail, return the original name
-#         return korean_city_name
-        
-#     except Exception as e:
-#         logger.error(f"도시 이름 변환 중 오류 발생: {str(e)}")
-#         return korean_city_name
-
-# def get_city_weather(city_name):
-#     """
-#     Gets weather information for the specified city
-#     """
-#     # Check if city name contains Korean characters
-#     if any(char.isalpha() and ord(char) > 127 for char in city_name):
-#         english_city = get_english_city_name(city_name)
-#         if not english_city:
-#             return f"'{city_name}'의 날씨 정보를 찾을 수 없습니다. ❌"
-#         city_name = english_city
+    try:
+        location = geolocator.geocode(city_name, timeout=10)
+        if location:
+            timezone_str = tf.timezone_at(lng=location.longitude, lat=location.latitude)
+            if timezone_str:
+                return pytz.timezone(timezone_str)
+    except Exception as e:
+        logger.error(f"시간대 찾기 실패 ({city_name}): {str(e)}")
     
-#     url = "http://api.openweathermap.org/data/2.5/weather"
-#     params = {
-#         'q': city_name,
-#         'appid': WEATHER_API_KEY,
-#         'units': 'metric',
-#         'lang': 'kr'
-#     }
-    
-#     try:
-#         response = requests.get(url, params=params, timeout=5)
-#         response.raise_for_status()
-#         data = response.json()
-        
-#         weather_emojis = {
-#             'Clear': '☀️',
-#             'Clouds': '☁️',
-#             'Rain': '🌧️',
-#             'Snow': '❄️',
-#             'Thunderstorm': '⛈️',
-#             'Drizzle': '🌦️',
-#             'Mist': '🌫️'
-#         }
-        
-#         weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
-        
-#         return (
-#             f"현재 {city_name} 날씨 정보 {weather_emoji}\n\n"
-#             f"날씨: {data['weather'][0]['description']}\n"
-#             f"현재 온도: {data['main']['temp']}°C 🌡️\n"
-#             f"체감 온도: {data['main']['feels_like']}°C 🤔\n"
-#             f"최저 온도: {data['main']['temp_min']}°C ⬇️\n"
-#             f"최고 온도: {data['main']['temp_max']}°C ⬆️\n"
-#             f"습도: {data['main']['humidity']}% 💧\n"
-#             f"풍속: {data['wind']['speed']}m/s 🌪️"
-#         )
-#     except requests.exceptions.RequestException as e:
-#         logger.error(f"날씨 API 요청 중 오류 발생: {str(e)}")
-#         return f"{city_name}의 날씨 정보를 가져오는 중 오류가 발생했습니다. ❌"
-#     except KeyError as e:
-#         logger.error(f"날씨 데이터 파싱 중 오류 발생: {str(e)}")
-#         return f"{city_name}의 날씨 데이터 형식이 올바르지 않습니다. ❌"
-#     except Exception as e:
-#         logger.error(f"예상치 못한 오류 발생: {str(e)}")
-#         return f"날씨 정보를 처리하는 중 오류가 발생했습니다. ❌"
+    return pytz.timezone("Asia/Seoul")  # 기본값: 서울
 
-# def get_english_city_name(korean_city_name):
-#     geolocator = Nominatim(user_agent="geo_app")
-#     try:
-#         location = geolocator.geocode(korean_city_name, language='en')
-#         if location and location.raw and 'display_name' in location.raw:
-#             display_name = location.raw['display_name']
-#             address_parts = display_name.split(',')
-            
-#             for part in reversed(address_parts):
-#                 city_name = part.strip()
-#                 if city_name.endswith('-si'):
-#                     return city_name[:-3]
-#                 elif city_name.endswith('-gun'):
-#                     return city_name[:-4]
+def get_time_by_city(city_name="서울"):
+    """
+    지정된 도시의 현재 시간을 반환
+    """
+    try:
+        timezone = get_timezone_by_city(city_name)
+        city_time = datetime.now(timezone)
+        am_pm = "오전" if city_time.strftime("%p") == "AM" else "오후"
         
-#         return korean_city_name
-#     except Exception as e:
-#         logger.error(f"도시 이름 변환 중 오류 발생: {str(e)}")
-#         return korean_city_name
+        return (f"현재 시간은 {city_name} 기준 {city_time.strftime('%Y년 %m월 %d일')} "
+                f"{am_pm} {city_time.strftime('%I:%M')}입니다. ⏰")
+    except Exception as e:
+        logger.error(f"시간 가져오기 실패 ({city_name}): {str(e)}")
+        return f"{city_name}의 시간 정보를 가져올 수 없습니다. 다시 시도해 주세요. ❌"
 
-# def get_city_weather(city_name):
-#     if any(char.isalpha() and ord(char) > 127 for char in city_name):
-#         english_city = get_english_city_name(city_name)
-#         if not english_city:
-#             return f"'{city_name}'의 영문 도시명을 찾을 수 없습니다. ❌"
-#         city_name = english_city
+def extract_city_from_time_query(query):
+    """
+    시간 관련 쿼리에서 도시명 추출
+    """
+    import re
     
-#     url = "http://api.openweathermap.org/data/2.5/weather"
-#     params = {
-#         'q': city_name,
-#         'appid': WEATHER_API_KEY,
-#         'units': 'metric',
-#         'lang': 'kr'
-#     }
+    # 도시명 패턴: 2-20글자 문자 + 선택적 '시'/'군'
+    city_patterns = [
+        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간',
+        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)\s*시간',
+        r'시간\s*([가-힣a-zA-Z]{2,20}(?:시|군)?)',
+    ]
     
-#     try:
-#         response = requests.get(url, params=params, timeout=5)
-#         response.raise_for_status()
-#         data = response.json()
-        
-#         weather_emojis = {
-#             'Clear': '☀️',
-#             'Clouds': '☁️',
-#             'Rain': '🌧️',
-#             'Snow': '❄️',
-#             'Thunderstorm': '⛈️',
-#             'Drizzle': '🌦️',
-#             'Mist': '🌫️'
-#         }
-        
-#         weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
-        
-#         return (
-#             f"현재 {city_name} 날씨 정보 {weather_emoji}\n\n"
-#             f"날씨: {data['weather'][0]['description']}\n"
-#             f"현재 온도: {data['main']['temp']}°C 🌡️\n"
-#             f"체감 온도: {data['main']['feels_like']}°C 🤔\n"
-#             f"최저 온도: {data['main']['temp_min']}°C ⬇️\n"
-#             f"최고 온도: {data['main']['temp_max']}°C ⬆️\n"
-#             f"습도: {data['main']['humidity']}% 💧\n"
-#             f"풍속: {data['wind']['speed']}m/s 🌪️"
-#         )
-#     except Exception as e:
-#         logger.error(f"날씨 정보 조회 중 오류 발생: {str(e)}")
-#         return f"{city_name}의 날씨 정보를 가져오는 중 오류가 발생했습니다. ❌"
+    for pattern in city_patterns:
+        match = re.search(pattern, query)
+        if match:
+            return match.group(1)
+    
+    return "서울"  # 기본값
 
-# 시간 관련 함수
-def get_korea_time():
-    seoul_tz = pytz.timezone("Asia/Seoul")
-    seoul_time = datetime.now(seoul_tz)
-    am_pm = "오전" if seoul_time.strftime("%p") == "AM" else "오후"
-    return f"현재 시간은 대한민국 기준 {seoul_time.strftime('%Y년 %m월 %d일')} {am_pm} {seoul_time.strftime('%I:%M')}입니다. ⏰"
+# # 시간 관련 함수
+# def get_korea_time():
+#     seoul_tz = pytz.timezone("Asia/Seoul")
+#     seoul_time = datetime.now(seoul_tz)
+#     am_pm = "오전" if seoul_time.strftime("%p") == "AM" else "오후"
+#     return f"현재 시간은 대한민국 기준 {seoul_time.strftime('%Y년 %m월 %d일')} {am_pm} {seoul_time.strftime('%I:%M')}입니다. ⏰"
 
 # 웹 검색 관련 함수들
 def search_and_summarize(query, num_results=5):
@@ -457,12 +338,11 @@ def extract_city_from_query(query):
     
     return "서울"
 
+# needs_search 함수 수정
 def needs_search(query):
     time_keywords = [
-        "현재 시간", "서울 시간", "한국 시간", "오늘 시간", "몇 시", 
-        "지금", "시간", "몇시", "몇 시야", "지금 시간",
-        "현재", "시계", "한국", "서울", "대한민국",
-        "지금 몇 시"
+        "현재 시간", "시간", "몇 시", "지금", "시간", "몇시", 
+        "몇 시야", "지금 시간", "현재", "시계"
     ]
     
     weather_keywords = ["날씨", "온도", "기온"]
@@ -475,6 +355,26 @@ def needs_search(query):
         return "weather"
         
     return "search"
+
+
+# def needs_search(query):
+#     time_keywords = [
+#         "현재 시간", "서울 시간", "한국 시간", "오늘 시간", "몇 시", 
+#         "지금", "시간", "몇시", "몇 시야", "지금 시간",
+#         "현재", "시계", "한국", "서울", "대한민국",
+#         "지금 몇 시"
+#     ]
+    
+#     weather_keywords = ["날씨", "온도", "기온"]
+    
+#     if any(keyword in query.lower() for keyword in time_keywords):
+#         if any(timeword in query.lower() for timeword in ["시간", "몇시", "몇 시", "시계"]):
+#             return "time"
+    
+#     if any(keyword in query for keyword in weather_keywords):
+#         return "weather"
+        
+#     return "search"
 
 # 로그인 페이지
 def show_login_page():
@@ -513,7 +413,6 @@ def show_chat_dashboard():
     
     # 사용자 입력
     user_prompt = st.chat_input("질문해 주세요!")
-    
     if user_prompt:
         st.chat_message("user").markdown(user_prompt)
         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
@@ -527,13 +426,34 @@ def show_chat_dashboard():
                 query_type = needs_search(user_prompt)
                 
                 if query_type == "time":
-                    final_response = get_korea_time()
+                    city = extract_city_from_time_query(user_prompt)
+                    final_response = get_time_by_city(city)
                 elif query_type == "weather":
                     city = extract_city_from_query(user_prompt)
                     final_response = get_city_weather(city)
                 else:
                     search_results = search_and_summarize(user_prompt)
                     final_response = get_ai_summary(search_results)
+    # if user_prompt:
+    #     st.chat_message("user").markdown(user_prompt)
+    #     st.session_state.chat_history.append({"role": "user", "content": user_prompt})
+        
+    #     with st.chat_message("assistant"):
+    #         message_placeholder = st.empty()
+    #         message_placeholder.markdown("⏳ 응답 생성 중...")
+            
+    #         try:
+    #             start_time = time.time()
+    #             query_type = needs_search(user_prompt)
+                
+    #             if query_type == "time":
+    #                 final_response = get_korea_time()
+    #             elif query_type == "weather":
+    #                 city = extract_city_from_query(user_prompt)
+    #                 final_response = get_city_weather(city)
+    #             else:
+    #                 search_results = search_and_summarize(user_prompt)
+    #                 final_response = get_ai_summary(search_results)
                 
                 end_time = time.time()
                 time_taken = round(end_time - start_time, 2)
