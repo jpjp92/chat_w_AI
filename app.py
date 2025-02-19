@@ -86,15 +86,54 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
         logger.error(f"채팅 기록 저장 중 오류 발생: {str(e)}")
         st.error("채팅 기록 저장 중 오류가 발생했습니다.")
 
-# 한국 주요 도시 매핑
+# 주요 도시 매핑 확장 (한국어 - 영어)
 CITY_MAPPING = {
-    "서울": "Seoul", "부산": "Busan", "대구": "Daegu", "인천": "Incheon",
-    "광주": "Gwangju", "대전": "Daejeon", "울산": "Ulsan", "세종": "Sejong",
-    "제주": "Jeju", "수원": "Suwon", "창원": "Changwon", "전주": "Jeonju",
-    "청주": "Cheongju", "성남": "Seongnam", "고양": "Goyang"
+    # 한국 도시
+    "서울": "Seoul,KR", "부산": "Busan,KR", "대구": "Daegu,KR", 
+    "인천": "Incheon,KR", "광주": "Gwangju,KR", "대전": "Daejeon,KR",
+    "울산": "Ulsan,KR", "세종": "Sejong,KR", "제주": "Jeju,KR",
+    # 해외 주요 도시
+    "뉴욕": "New York,US", "런던": "London,GB", "파리": "Paris,FR",
+    "도쿄": "Tokyo,JP", "베이징": "Beijing,CN", "시드니": "Sydney,AU",
+    "로마": "Rome,IT", "베를린": "Berlin,DE", "마드리드": "Madrid,ES",
+    "상하이": "Shanghai,CN", "홍콩": "Hong Kong,HK", "싱가포르": "Singapore,SG"
 }
 
 # 날씨 관련 함수들
+def get_city_code(city_name):
+    """
+    도시명을 받아서 OpenWeather API용 도시 코드를 반환
+    한글, 영문 도시명 모두 처리
+    """
+    # 이미 매핑된 도시인 경우
+    if city_name in CITY_MAPPING:
+        return CITY_MAPPING[city_name]
+    
+    # 영문으로 입력된 경우 (예: "New York", "London" 등)
+    if all(ord(c) < 128 for c in city_name):
+        return f"{city_name},US" if "," not in city_name else city_name
+    
+    # 한글 도시명을 영문으로 변환 시도
+    geolocator = Nominatim(user_agent="geo_app")
+    try:
+        # 먼저 한국 도시로 검색
+        location = geolocator.geocode(f"{city_name}, South Korea", language="en")
+        if location:
+            return f"{location.raw.get('display_name').split(',')[0].strip()},KR"
+            
+        # 전 세계 도시로 검색
+        location = geolocator.geocode(city_name, language="en")
+        if location:
+            country_code = location.raw.get('address', {}).get('country_code', '').upper()
+            city_name = location.raw.get('display_name').split(',')[0].strip()
+            return f"{city_name},{country_code}" if country_code else city_name
+            
+    except Exception as e:
+        logger.error(f"도시 코드 변환 실패: {str(e)}")
+        
+    return f"{city_name}"
+
+
 def get_english_city_name(korean_city_name):
     """
     한국어 도시명을 영어로 변환
@@ -127,18 +166,12 @@ def get_english_city_name(korean_city_name):
 def get_city_weather(city_name):
     """
     OpenWeather API에서 지정된 도시의 날씨 정보를 조회
+    국내외 도시 모두 지원
     """
-    # 한글 도시명일 경우 변환
-    if any(char.isalpha() and ord(char) > 127 for char in city_name):
-        english_city = get_english_city_name(city_name)
-        if not english_city:
-            return f"'{city_name}'의 날씨 정보를 찾을 수 없습니다. ❌"
-        city_name = english_city
-    
-    full_city_query = f"{city_name},KR"
+    city_code = get_city_code(city_name)
     url = "http://api.openweathermap.org/data/2.5/weather"
     params = {
-        'q': full_city_query,
+        'q': city_code,
         'appid': WEATHER_API_KEY,
         'units': 'metric',
         'lang': 'kr'
@@ -160,9 +193,10 @@ def get_city_weather(city_name):
         }
         
         weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
+        display_name = f"{data['name']}, {data['sys']['country']}"
         
         return (
-            f"현재 {city_name} 날씨 정보 {weather_emoji}\n\n"
+            f"현재 {display_name} 날씨 정보 {weather_emoji}\n\n"
             f"날씨: {data['weather'][0]['description']}\n"
             f"현재 온도: {data['main']['temp']}°C 🌡️\n"
             f"체감 온도: {data['main']['feels_like']}°C 🤔\n"
@@ -180,31 +214,114 @@ def get_city_weather(city_name):
     except Exception as e:
         logger.error(f"예상치 못한 오류: {str(e)}")
         return f"날씨 정보를 처리하는 중 오류가 발생했습니다. ❌"
+# def get_city_weather(city_name):
+#     """
+#     OpenWeather API에서 지정된 도시의 날씨 정보를 조회
+#     """
+#     # 한글 도시명일 경우 변환
+#     if any(char.isalpha() and ord(char) > 127 for char in city_name):
+#         english_city = get_english_city_name(city_name)
+#         if not english_city:
+#             return f"'{city_name}'의 날씨 정보를 찾을 수 없습니다. ❌"
+#         city_name = english_city
+    
+#     full_city_query = f"{city_name},KR"
+#     url = "http://api.openweathermap.org/data/2.5/weather"
+#     params = {
+#         'q': full_city_query,
+#         'appid': WEATHER_API_KEY,
+#         'units': 'metric',
+#         'lang': 'kr'
+#     }
+    
+#     try:
+#         response = requests.get(url, params=params, timeout=5)
+#         response.raise_for_status()
+#         data = response.json()
+        
+#         weather_emojis = {
+#             'Clear': '☀️',
+#             'Clouds': '☁️',
+#             'Rain': '🌧️',
+#             'Snow': '❄️',
+#             'Thunderstorm': '⛈️',
+#             'Drizzle': '🌦️',
+#             'Mist': '🌫️'
+#         }
+        
+#         weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
+        
+#         return (
+#             f"현재 {city_name} 날씨 정보 {weather_emoji}\n\n"
+#             f"날씨: {data['weather'][0]['description']}\n"
+#             f"현재 온도: {data['main']['temp']}°C 🌡️\n"
+#             f"체감 온도: {data['main']['feels_like']}°C 🤔\n"
+#             f"최저 온도: {data['main']['temp_min']}°C ⬇️\n"
+#             f"최고 온도: {data['main']['temp_max']}°C ⬆️\n"
+#             f"습도: {data['main']['humidity']}% 💧\n"
+#             f"풍속: {data['wind']['speed']}m/s 🌪️"
+#         )
+#     except requests.exceptions.RequestException as e:
+#         logger.error(f"날씨 API 요청 오류: {str(e)}")
+#         return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
+#     except KeyError as e:
+#         logger.error(f"날씨 데이터 파싱 오류: {str(e)}")
+#         return f"'{city_name}'의 날씨 데이터 형식이 올바르지 않습니다. ❌"
+#     except Exception as e:
+#         logger.error(f"예상치 못한 오류: {str(e)}")
+#         return f"날씨 정보를 처리하는 중 오류가 발생했습니다. ❌"
 
 def extract_city_from_query(query):
     """
-    사용자 질의에서 도시명 추출
+    사용자 질의에서 도시명 추출 (한글/영문 모두 지원)
     """
     import re
     
-    # 도시명 패턴: 2-4글자 한글 + 선택적 '시'/'군'
+    # 도시명 패턴: 한글 2-4글자 또는 영문 2-20글자 + 선택적 '시'/'군'/'city'
     city_patterns = [
-        r'([가-힣]{2,4}(?:시|군)?)의?\s*날씨',
-        r'([가-힣]{2,4}(?:시|군)?)\s*날씨',
-        r'날씨\s*([가-힣]{2,4}(?:시|군)?)',
+        r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
+        r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
+        r'날씨\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
+        r'weather\s+in\s+([a-zA-Z\s]{2,20})',
+        r'([a-zA-Z\s]{2,20})\s+weather'
     ]
     
     for pattern in city_patterns:
-        match = re.search(pattern, query)
+        match = re.search(pattern, query, re.IGNORECASE)
         if match:
-            return match.group(1)
+            return match.group(1).strip()
     
     # 매핑된 도시명 검색
     for city in CITY_MAPPING.keys():
-        if city in query:
+        if city.lower() in query.lower():
             return city
     
     return "서울"  # 기본값
+    
+# def extract_city_from_query(query):
+#     """
+#     사용자 질의에서 도시명 추출
+#     """
+#     import re
+    
+#     # 도시명 패턴: 2-4글자 한글 + 선택적 '시'/'군'
+#     city_patterns = [
+#         r'([가-힣]{2,4}(?:시|군)?)의?\s*날씨',
+#         r'([가-힣]{2,4}(?:시|군)?)\s*날씨',
+#         r'날씨\s*([가-힣]{2,4}(?:시|군)?)',
+#     ]
+    
+#     for pattern in city_patterns:
+#         match = re.search(pattern, query)
+#         if match:
+#             return match.group(1)
+    
+#     # 매핑된 도시명 검색
+#     for city in CITY_MAPPING.keys():
+#         if city in query:
+#             return city
+    
+#     return "서울"  # 기본값
 
 # 시간 관련 함수들 수정
 def get_timezone_by_city(city_name):
