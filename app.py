@@ -241,7 +241,7 @@ def needs_search(query):
     return "search"
 
 def show_login_page():
-    st.title("로그인 🤗🤖")  # 친근한 타이틀
+    st.title("로그인 🤗")  # 친근한 타이틀
     with st.form("login_form"):
         nickname = st.text_input("닉네임을 입력하세요", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")  # 버튼에 로켓 이모티콘
