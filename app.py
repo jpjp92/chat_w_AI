@@ -79,14 +79,12 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
 
 # OpenWeather Geocoding API로 도시 정보 가져오기
 def get_city_info(city_name):
-    url = "https://api.openweathermap.org/geo/1.0/direct"  # HTTPS로 변경
+    url = "https://api.openweathermap.org/geo/1.0/direct"
     params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
-    
     session = requests.Session()
     retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("https://", adapter)
-    
     try:
         response = session.get(url, params=params, timeout=5)
         response.raise_for_status()
@@ -110,14 +108,12 @@ def get_city_weather(city_name):
     city_info = get_city_info(city_name)
     if not city_info:
         return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
-    url = "https://api.openweathermap.org/data/2.5/weather"  # HTTPS로 변경
+    url = "https://api.openweathermap.org/data/2.5/weather"
     params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-    
     session = requests.Session()
     retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("https://", adapter)
-    
     try:
         response = session.get(url, params=params, timeout=5)
         response.raise_for_status()
@@ -155,77 +151,6 @@ def get_time_by_city(city_name="서울"):
         return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
 
 # 의약품 검색 함수
-# def get_drug_info(drug_name):
-#     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
-#     params = {
-#         'serviceKey': DRUG_API_KEY,
-#         'pageNo': '1',
-#         'numOfRows': '1',
-#         'itemName': quote(drug_name),
-#         'type': 'json'
-#     }
-#     try:
-#         response = requests.get(url, params=params, timeout=5)
-#         response.raise_for_status()
-#         data = response.json()
-        
-#         if 'body' in data and 'items' in data['body'] and data['body']['items']:
-#             item = data['body']['items'][0]
-#             def cut_to_sentence(text, max_len=150):
-#                 if not text or len(text) <= max_len:
-#                     return text
-#                 truncated = text[:max_len]
-#                 last_punctuation = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'), truncated.rfind(','))
-#                 if last_punctuation > 0:
-#                     result = truncated[:last_punctuation + 1]
-#                     if len(text) > max_len:
-#                         result += " 등"
-#                     return result
-#                 return truncated + "..."
-            
-#             efcy = cut_to_sentence(item.get('efcyQesitm', '정보 없음'))
-#             use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
-#             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
-            
-#             use_method_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', use_method_raw)
-#             atpn_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', atpn_raw)
-            
-#             logger.info(f"원문 useMethodQesitm: {item.get('useMethodQesitm', '정보 없음')}")
-#             logger.info(f"후처리 use_method_raw: {use_method_raw}")
-            
-#             use_method = use_method_raw.replace('. ', '.\n')
-#             atpn = atpn_raw.replace('. ', '.\n')
-            
-#             return (
-#                 f"💊 **의약품 정보** 💊\n\n"
-#                 f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
-#                 f"✅ **제조사**: {item.get('entpName', '정보 없음')}\n\n"
-#                 f"✅ **효능**: {efcy}\n\n"
-#                 f"✅ **용법용량**: {use_method}\n\n"
-#                 f"✅ **주의사항**: {atpn}\n\n"
-#                 f"ℹ️ 자세한 정보는 <a href='https://www.health.kr/searchDrug/search_detail.asp'>약학정보원</a>에서 확인하세요! 🩺"
-#             )
-#         else:
-#             logger.info(f"'{drug_name}' API 검색 실패, 구글 검색으로 대체")
-#             search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
-#             if not search_results.empty:
-#                 return (
-#                     f"'{drug_name}'에 대한 공식 의약품 정보를 찾을 수 없습니다. 🩺\n"
-#                     f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
-#                     f"{get_ai_summary(search_results)}"
-#                 )
-#             return f"'{drug_name}'에 대한 의약품 정보를 찾을 수 없습니다. 🩺"
-#     except Exception as e:
-#         logger.error(f"의약품 API 오류: {str(e)}")
-#         search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
-#         if not search_results.empty:
-#             return (
-#                 f"'{drug_name}' 의약품 정보를 API에서 가져오는 중 오류가 발생했습니다. ❌\n"
-#                 f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
-#                 f"{get_ai_summary(search_results)}"
-#             )
-#         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
-
 def get_drug_info(drug_name):
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
     params = {
@@ -239,7 +164,6 @@ def get_drug_info(drug_name):
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
-        
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
             item = data['body']['items'][0]
             def cut_to_sentence(text, max_len=150):
@@ -253,24 +177,15 @@ def get_drug_info(drug_name):
                         result += " 등"
                     return result
                 return truncated + "..."
-            
             efcy = cut_to_sentence(item.get('efcyQesitm', '정보 없음'))
             use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
-            
-            # 수정된 후처리 로직
-            # 1. 모든 숫자 범위의 틸드(~)를 하이픈(-)으로 변환
             use_method_raw = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)
             atpn_raw = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', atpn_raw)
-            
-            # 로그로 원문과 후처리 결과 확인
             logger.info(f"원문 useMethodQesitm: {item.get('useMethodQesitm', '정보 없음')}")
             logger.info(f"후처리 use_method_raw: {use_method_raw}")
-            
-            # 문장 구분을 위해 개행 추가
             use_method = use_method_raw.replace('. ', '.\n')
             atpn = atpn_raw.replace('. ', '.\n')
-            
             return (
                 f"💊 **의약품 정보** 💊\n\n"
                 f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
@@ -314,7 +229,7 @@ def extract_city_from_query(query):
         match = re.search(pattern, query, re.IGNORECASE)
         if match:
             city = match.group(1).strip()
-            if city != "현재":  # "현재" 제외
+            if city != "현재":
                 return city
     return "서울"
 
@@ -328,7 +243,7 @@ def extract_city_from_time_query(query):
         match = re.search(pattern, query)
         if match:
             city = match.group(1).strip()
-            if city != "현재":  # "현재" 제외
+            if city != "현재":
                 return city
     return "서울"
 
@@ -373,6 +288,24 @@ def get_ai_summary(search_results):
         logger.error(f"AI 요약 중 오류 발생: {str(e)}")
         return "검색 결과 요약 중 오류가 발생했습니다. ❌"
 
+# 대화형 응답 생성 함수
+def get_conversational_response(query, chat_history):
+    # 대화 기록을 메시지 형식으로 변환
+    messages = [{"role": "system", "content": "당신은 친절하고 상호작용적인 AI 챗봇입니다. 사용자의 질문에 답하고, 필요하면 추가 질문을 던져 대화를 이어가세요."}]
+    for msg in chat_history[-5:]:  # 최근 5개 메시지만 포함해 컨텍스트 유지
+        messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({"role": "user", "content": query})
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=messages
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"대화 응답 생성 중 오류: {str(e)}")
+        return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
+
 # 쿼리 타입 판단 함수
 def needs_search(query):
     time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
@@ -395,7 +328,7 @@ def needs_search(query):
         query_lower.endswith("약") or 
         re.match(drug_pattern, query_lower)):
         return "drug"
-    return "search"
+    return "conversation"  # 기본적으로 대화형으로 처리
 
 # 로그인 및 대시보드 함수
 def show_login_page():
@@ -441,26 +374,34 @@ def show_chat_dashboard():
                     final_response = (
                         "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n\n"
                         "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n\n"
-                        "이 사이트는 16가지 성격 유형을 기반으로 한 간단하고 재미있는 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡"
+                        "이 사이트는 16가지 성격 유형을 기반으로 한 간단하고 재미있는 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡\n\n"
+                        "혹시 MBTI에 대해 더 궁금한 점이 있나요?"
                     )
                 elif query_type == "multi_iq":
                     final_response = (
                         "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n\n"
                         "[Multi IQ Test](https://multiiqtest.com/) 🚀\n\n"
-                        "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 언어, 논리, 공간 등 다양한 지능 영역을 평가해줍니다! 📚✨"
+                        "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 언어, 논리, 공간 등 다양한 지능 영역을 평가해줍니다! 📚✨\n\n"
+                        "테스트 결과에 대해 이야기하고 싶으신가요?"
                     )
                 elif query_type == "time":
                     city = extract_city_from_time_query(user_prompt)
-                    final_response = get_time_by_city(city)
+                    time_info = get_time_by_city(city)
+                    final_response = f"{time_info}\n\n혹시 {city}의 다른 정보도 궁금하시면 말씀해주세요!"
                 elif query_type == "weather":
                     city = extract_city_from_query(user_prompt)
-                    final_response = get_city_weather(city)
+                    weather_info = get_city_weather(city)
+                    final_response = f"{weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 주간 예보 같은 것도 알려드릴 수 있어요!"
                 elif query_type == "drug":
                     drug_name = user_prompt.strip()
-                    final_response = get_drug_info(drug_name)
+                    drug_info = get_drug_info(drug_name)
+                    final_response = f"{drug_info}\n\n이 약에 대해 더 궁금한 점 있으신가요? 복용법이나 부작용에 대해 추가로 물어보셔도 돼요!"
+                elif query_type == "conversation":
+                    final_response = get_conversational_response(user_prompt, st.session_state.chat_history)
                 else:
                     search_results = search_and_summarize(user_prompt)
-                    final_response = get_ai_summary(search_results)
+                    summary = get_ai_summary(search_results)
+                    final_response = f"{summary}\n\n이 주제에 대해 더 이야기하고 싶으신가요? 궁금한 점이 있으면 언제든 물어보세요!"
                 
                 end_time = time.time()
                 time_taken = round(end_time - start_time, 2)
@@ -469,7 +410,7 @@ def show_chat_dashboard():
                 message_placeholder.markdown(final_response, unsafe_allow_html=True)
                 save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, final_response, time_taken)
             except Exception as e:
-                error_message = f"❌ 오류 발생: {str(e)}"
+                error_message = f"❌ 오류 발생: {str(e)}\n\n다시 물어보시면 최선을 다해 답변해드릴게요!"
                 logger.error(error_message)
                 message_placeholder.markdown(error_message)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_message})
