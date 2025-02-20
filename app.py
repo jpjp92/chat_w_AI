@@ -301,7 +301,7 @@ def needs_search(query):
 def show_login_page():
     st.title("로그인 🤗🤖")
     with st.form("login_form"):
-        nickname = st.text_input("닉네임을 입력하세요", placeholder="예: AI Lover")
+        nickname = st.text_input("닉네임을 입력하세요", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")
         if submit_button and nickname:
             try:
