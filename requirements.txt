@@ -2,7 +2,6 @@ supabase
 streamlit
 g4f
 pytz
-geopy
 requests
 beautifulsoup4
 pandas
