@@ -185,8 +185,8 @@ def get_drug_info(drug_name):
             atpn_raw = re.sub(r'(\d{1,2})~?(\d{1,2}세)', r'\1-\2', atpn_raw.replace('-', '~'))
             
             # 단일 숫자 유지 (예: "12세" → "12세")
-            use_method_raw = re.sub(r'(\d{1,2})세', r'\1세', use_method_raw)
-            atpn_raw = re.sub(r'(\d{1,2})세', r'\1세', atpn_raw)
+            use_method_raw = re.sub(r'(\d+)세', r'\1세', use_method_raw)
+            atpn_raw = re.sub(r'(\d+)세', r'\1세', atpn_raw)
             
             # 이미 하이픈이 있는 경우 중복 방지
             use_method_raw = re.sub(r'(\d+)-(\d+세)', r'\1-\2', use_method_raw)
