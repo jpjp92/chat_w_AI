@@ -77,13 +77,18 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
         logger.error(f"채팅 기록 저장 중 오류 발생: {str(e)}")
         st.error("채팅 기록 저장 중 오류가 발생했습니다.")
 
-
 # OpenWeather Geocoding API로 도시 정보 가져오기
 def get_city_info(city_name):
-    url = "https://api.openweathermap.org/geo/1.0/direct"  # HTTP -> HTTPS
+    url = "https://api.openweathermap.org/geo/1.0/direct"  # HTTPS로 변경
     params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
+    
+    session = requests.Session()
+    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    
     try:
-        response = requests.get(url, params=params, timeout=5)
+        response = session.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
         if data and len(data) > 0:
@@ -100,15 +105,21 @@ def get_city_info(city_name):
         logger.error(f"Geocoding 실패 ({city_name}): {str(e)}")
         return None
 
-# 날씨 정보 가져오기
+# 날씨 및 시간 함수
 def get_city_weather(city_name):
     city_info = get_city_info(city_name)
     if not city_info:
         return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
-    url = "https://api.openweathermap.org/data/2.5/weather"  # HTTP -> HTTPS
+    url = "https://api.openweathermap.org/data/2.5/weather"  # HTTPS로 변경
     params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+    
+    session = requests.Session()
+    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    
     try:
-        response = requests.get(url, params=params, timeout=5)
+        response = session.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
         weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
@@ -160,7 +171,6 @@ def get_drug_info(drug_name):
         
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
             item = data['body']['items'][0]
-            # 문장 단위로 자연스럽게 자르기 (최대 150자 내 마지막 마침표, 쉼표 등)
             def cut_to_sentence(text, max_len=150):
                 if not text or len(text) <= max_len:
                     return text
@@ -177,15 +187,9 @@ def get_drug_info(drug_name):
             use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
             
-            # 수정된 후처리 로직
-            # 1. 틸드(~)를 하이픈(-)으로 변환 (명시적 범위만 대상)
             use_method_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', use_method_raw)
             atpn_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', atpn_raw)
             
-            # 2. 단일 숫자 + 세는 그대로 유지하고, 불필요한 변환 방지
-            # (추가적인 숫자 분리 로직 제거)
-            
-            # 로그로 원문과 후처리 결과 확인
             logger.info(f"원문 useMethodQesitm: {item.get('useMethodQesitm', '정보 없음')}")
             logger.info(f"후처리 use_method_raw: {use_method_raw}")
             
@@ -211,7 +215,6 @@ def get_drug_info(drug_name):
                     f"{get_ai_summary(search_results)}"
                 )
             return f"'{drug_name}'에 대한 의약품 정보를 찾을 수 없습니다. 🩺"
-
     except Exception as e:
         logger.error(f"의약품 API 오류: {str(e)}")
         search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
@@ -224,14 +227,16 @@ def get_drug_info(drug_name):
         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
 
 # 도시명 및 쿼리 추출 함수
-def extract_city_from_time_query(query):
+def extract_city_from_query(query):
     city_patterns = [
-        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간',
-        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)\s*시간',
-        r'시간\s*([가-힣a-zA-Z\s]{2,20}(?:시|군)?)',
+        r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
+        r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
+        r'날씨\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
+        r'weather\s+in\s+([a-zA-Z\s]{2,20})',
+        r'([a-zA-Z\s]{2,20})\s+weather'
     ]
     for pattern in city_patterns:
-        match = re.search(pattern, query)
+        match = re.search(pattern, query, re.IGNORECASE)
         if match:
             city = match.group(1).strip()
             if city != "현재":  # "현재" 제외
@@ -247,7 +252,9 @@ def extract_city_from_time_query(query):
     for pattern in city_patterns:
         match = re.search(pattern, query)
         if match:
-            return match.group(1)
+            city = match.group(1).strip()
+            if city != "현재":  # "현재" 제외
+                return city
     return "서울"
 
 # 웹 검색 및 요약 함수
