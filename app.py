@@ -77,7 +77,7 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
 
 # OpenWeather Geocoding API로 도시 정보 가져오기
 def get_city_info(city_name):
-    url = "https://api.openweather.org/geo/1.0/direct"
+    url = "http://api.openweather.org/geo/1.0/direct"
     params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
     try:
         response = requests.get(url, params=params, timeout=5)
