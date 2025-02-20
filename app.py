@@ -1,4 +1,4 @@
-# 라이브러리 설정
+# 라이브러리 설정 (동일)
 import streamlit as st
 import time
 import uuid
@@ -18,26 +18,21 @@ from g4f.client import Client
 from timezonefinder import TimezoneFinder
 import re
 
-# Supabase 설정
+# Supabase 및 환경 변수 설정 (동일)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
-
-# Supabase 및 GPT 클라이언트 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = Client()
 
-# 로깅 설정
+# 로깅 설정 (동일)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("HybridChat")
 
-# 페이지 설정
-st.set_page_config(
-    page_title="AI 챗봇",
-    page_icon="🤖"
-)
+# 페이지 설정 (동일)
+st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
-# 세션 상태 초기화
+# 세션 상태 초기화 (동일)
 def init_session_state():
     if "is_logged_in" not in st.session_state:
         st.session_state.is_logged_in = False
@@ -50,7 +45,7 @@ def init_session_state():
 
 init_session_state()
 
-# 사용자 관리 함수
+# 사용자 관리 및 채팅 기록 저장 함수 (동일)
 def create_or_get_user(nickname):
     try:
         user = supabase.table("users").select("*").eq("nickname", nickname).execute()
@@ -65,7 +60,6 @@ def create_or_get_user(nickname):
         logger.error(f"사용자 생성/조회 중 오류 발생: {str(e)}")
         raise Exception("사용자 처리 중 오류가 발생했습니다.")
 
-# 채팅 기록 저장 함수
 def save_chat_history(user_id, session_id, question, answer, time_taken):
     try:
         supabase.table("chat_history").insert({
@@ -80,7 +74,7 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
         logger.error(f"채팅 기록 저장 중 오류 발생: {str(e)}")
         st.error("채팅 기록 저장 중 오류가 발생했습니다.")
 
-# 주요 도시 매핑
+# 도시 매핑 및 날씨/시간 함수 (동일, 약간 간소화)
 CITY_MAPPING = {
     "서울": "Seoul,KR", "부산": "Busan,KR", "대구": "Daegu,KR",
     "인천": "Incheon,KR", "광주": "Gwangju,KR", "대전": "Daejeon,KR",
@@ -89,7 +83,6 @@ CITY_MAPPING = {
     "도쿄": "Tokyo,JP", "베이징": "Beijing,CN", "시드니": "Sydney,AU"
 }
 
-# 날씨 및 시간 관련 함수들
 def get_city_code(city_name):
     if city_name in CITY_MAPPING:
         return CITY_MAPPING[city_name]
@@ -139,7 +132,7 @@ def get_time_by_city(city_name="서울"):
         logger.error(f"시간 가져오기 실패: {str(e)}")
         return f"{city_name}의 시간 정보를 가져올 수 없습니다. ❌"
 
-# 쿼리 타입 결정 함수
+# 쿼리 타입 결정 함수 (동일)
 def determine_query_type(query):
     time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야"]
     weather_keywords = ["날씨", "온도", "기온"]
@@ -159,7 +152,7 @@ def determine_query_type(query):
         is_search = True
     return "search" if is_search else "chat"
 
-# 검색 쿼리 전처리 함수
+# 검색 쿼리 전처리 함수 (동일)
 def preprocess_search_query(query):
     remove_suffixes = ["이란", "란", "은", "는", "이나", "나", "을", "를", "에서"]
     for suffix in remove_suffixes:
@@ -173,69 +166,64 @@ def preprocess_search_query(query):
         query = f"what is {base_topic} definition guide"
     return query
 
-# 비동기 웹 검색 함수
-async def async_search_and_summarize(query, num_results=5):
+# 동기 검색 함수로 변경 (Streamlit 호환성 확보)
+def search_and_summarize(query, num_results=5):
     processed_query = preprocess_search_query(query)
-    async with aiohttp.ClientSession() as session:
-        data = []
-        search_results = [link async for link in search(processed_query, num_results=num_results)]
-        
-        async def fetch_page(link):
+    data = []
+    try:
+        for link in search(processed_query, num_results=num_results):
             try:
-                async with session.get(link, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                    html = await response.text()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    title = soup.title.get_text() if soup.title else "No title"
-                    description = ' '.join([p.get_text().strip() for p in soup.find_all('p')[:3] if len(p.get_text().strip()) > 100])
-                    return {"keyword": query, "link": link, "title": title, "description": description[:800]}
+                response = requests.get(link, timeout=5)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                title = soup.title.get_text() if soup.title else "No title"
+                description = ' '.join([p.get_text().strip() for p in soup.find_all('p')[:3] if len(p.get_text().strip()) > 100])
+                data.append({"keyword": query, "link": link, "title": title, "description": description[:800]})
             except Exception as e:
                 logger.error(f"페이지 가져오기 실패 ({link}): {str(e)}")
-                return None
-
-        tasks = [fetch_page(link) for link in search_results]
-        results = await asyncio.gather(*tasks)
-        data = [r for r in results if r is not None]
         return pd.DataFrame(data)
+    except Exception as e:
+        logger.error(f"검색 중 오류: {str(e)}")
+        return pd.DataFrame()
 
-# 비동기 GPT 대화 응답
-async def get_chat_response(query, chat_history):
+# 비동기 GPT 호출 대신 동기 호출로 변경
+def get_chat_response(query, chat_history):
     try:
         messages = [{"role": "system", "content": "당신은 친절하고 도움이 되는 AI 어시스턴트입니다. 한국어로 자연스럽게 대화해주세요."}]
         for msg in chat_history[-5:]:
             messages.append({"role": "user" if msg["role"] == "user" else "assistant", "content": msg["content"]})
         messages.append({"role": "user", "content": query})
-        response = await client.chat.completions.create(model="gpt-4", messages=messages)
+        response = client.chat.completions.create(model="gpt-4", messages=messages)  # 동기 호출
         return response.choices[0].message.content
     except Exception as e:
         logger.error(f"채팅 응답 생성 중 오류: {str(e)}")
         return "죄송합니다. 응답 생성 중 문제가 발생했습니다. 다시 시도해 주세요. ❌"
 
-# Streamlit에서 비동기 실행을 위한 헬퍼 함수
-async def process_query(query, chat_history):
+# 쿼리 처리 함수 (동기 방식으로 수정)
+def process_query(query, chat_history):
     query_type = determine_query_type(query)
     start_time = time.time()
 
     if query_type == "time":
-        city = re.search(r'([가-힣a-zA-Z]{2,20}(?:시|군)?)', query) or "서울"
+        city = re.search(r'([가-힣a-zA-Z]{2,20}(?:시|군)?)', query)
         response = get_time_by_city(city.group(1) if city else "서울")
     elif query_type == "weather":
-        city = re.search(r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)', query) or "서울"
+        city = re.search(r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)', query)
         response = get_city_weather(city.group(1) if city else "서울")
     elif query_type == "search":
-        search_results = await async_search_and_summarize(query)
-        context = "\n\n".join([f"출처: {row['title']}\n내용: {row['description']}" for _, row in search_results.iterrows()])
-        response = await client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": f"다음 검색 결과를 2~3문장으로 요약:\n\n{context}"}]
-        )
-        response = response.choices[0].message.content + "\n\n📚 출고:\n" + "\n".join([f"• [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
+        search_results = search_and_summarize(query)
+        if search_results.empty:
+            response = "검색 결과를 찾을 수 없습니다. ❌"
+        else:
+            context = "\n\n".join([f"출처: {row['title']}\n내용: {row['description']}" for _, row in search_results.iterrows()])
+            response_content = get_chat_response(f"다음 검색 결과를 2~3문장으로 요약:\n\n{context}", chat_history)
+            response = response_content + "\n\n📚 출처:\n" + "\n".join([f"• [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
     else:  # chat
-        response = await get_chat_response(query, chat_history)
+        response = get_chat_response(query, chat_history)
 
     time_taken = round(time.time() - start_time, 2)
     return response, time_taken
 
-# 로그인 페이지
+# 로그인 페이지 (동일)
 def show_login_page():
     st.title("AI 챗봇 로그인 🤖")
     with st.form("login_form"):
@@ -252,7 +240,7 @@ def show_login_page():
             except Exception as e:
                 st.error(f"로그인 중 오류: {str(e)}")
 
-# 메인 채팅 대시보드
+# 메인 채팅 대시보드 (동기 방식으로 수정)
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     for message in st.session_state.chat_history:
@@ -268,18 +256,17 @@ def show_chat_dashboard():
             message_placeholder = st.empty()
             message_placeholder.markdown("⏳ 응답 생성 중...")
             try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                final_response, time_taken = loop.run_until_complete(process_query(user_prompt, st.session_state.chat_history))
+                final_response, time_taken = process_query(user_prompt, st.session_state.chat_history)
                 message_placeholder.markdown(final_response)
                 st.session_state.chat_history.append({"role": "assistant", "content": final_response})
                 save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, final_response, time_taken)
             except Exception as e:
                 error_message = f"❌ 오류 발생: {str(e)}"
+                logger.error(error_message)
                 message_placeholder.markdown(error_message)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_message})
 
-# 메인 실행 부분
+# 메인 실행 부분 (동일)
 def main():
     init_session_state()
     if not st.session_state.is_logged_in:
