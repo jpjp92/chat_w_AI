@@ -287,7 +287,7 @@ def show_chat_dashboard():
                     )
                 elif query_type == "multi_iq":
                     final_response = (
-                        "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n\n"
+                        "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능을 검사 할 수 있어요! 😄\n\n"
                         "[Multi IQ Test](https://multiiqtest.com/) 🚀\n\n"
                         "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 언어, 논리, 공간 등 다양한 지능 영역을 평가해줍니다! 📚✨"
                     )
