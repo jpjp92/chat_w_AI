@@ -11,3 +11,4 @@ googlesearch-python
 timezonefinder
 asyncio
 aiohttp
+curl_cffi
