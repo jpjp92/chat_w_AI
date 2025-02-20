@@ -162,11 +162,9 @@ def get_drug_info(drug_name):
                 if not text or len(text) <= max_len:
                     return text
                 truncated = text[:max_len]
-                # 문장 끝 (., !, ?) 또는 쉼표(,)로 자르기
                 last_punctuation = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'), truncated.rfind(','))
                 if last_punctuation > 0:
                     result = truncated[:last_punctuation + 1]
-                    # 자연스러운 마무리 추가
                     if len(text) > max_len:
                         result += " 등"
                     return result
@@ -176,23 +174,15 @@ def get_drug_info(drug_name):
             use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
             
-            # 틸드(~)를 하이픈(-)으로 변환 (단, "12세"처럼 단일 숫자는 유지)
+            # 수정된 후처리 로직
+            # 1. 틸드(~)를 하이픈(-)으로 변환 (명시적 범위만 대상)
             use_method_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', use_method_raw)
             atpn_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', atpn_raw)
             
-            # 숫자 분리 (틸드/하이픈이 없는 경우만 처리, 단일 숫자는 유지)
-            use_method_raw = re.sub(r'(\d{1,2})~?(\d{1,2}세)', r'\1-\2', use_method_raw.replace('-', '~'))
-            atpn_raw = re.sub(r'(\d{1,2})~?(\d{1,2}세)', r'\1-\2', atpn_raw.replace('-', '~'))
+            # 2. 단일 숫자 + 세는 그대로 유지하고, 불필요한 변환 방지
+            # (추가적인 숫자 분리 로직 제거)
             
-            # 단일 숫자 유지 (예: "12세" → "12세")
-            use_method_raw = re.sub(r'(\d+)세', r'\1세', use_method_raw)
-            atpn_raw = re.sub(r'(\d+)세', r'\1세', atpn_raw)
-            
-            # 이미 하이픈이 있는 경우 중복 방지
-            use_method_raw = re.sub(r'(\d+)-(\d+세)', r'\1-\2', use_method_raw)
-            atpn_raw = re.sub(r'(\d+)-(\d+세)', r'\1-\2', atpn_raw)
-            
-            # 로그로 원문 확인 (상세히)
+            # 로그로 원문과 후처리 결과 확인
             logger.info(f"원문 useMethodQesitm: {item.get('useMethodQesitm', '정보 없음')}")
             logger.info(f"후처리 use_method_raw: {use_method_raw}")
             
