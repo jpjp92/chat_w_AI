@@ -176,13 +176,17 @@ def get_drug_info(drug_name):
             use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
             
-            # 틸드(~)를 하이픈(-)으로 변환
+            # 틸드(~)를 하이픈(-)으로 변환 (단, "12세"처럼 단일 숫자는 유지)
             use_method_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', use_method_raw)
             atpn_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', atpn_raw)
             
-            # 숫자 분리 (틸드/하이픈이 없는 경우만 처리)
-            use_method_raw = re.sub(r'(\d{1,2})(\d{1,2}세)', r'\1-\2', use_method_raw.replace('-', '~'))
-            atpn_raw = re.sub(r'(\d{1,2})(\d{1,2}세)', r'\1-\2', atpn_raw.replace('-', '~'))
+            # 숫자 분리 (틸드/하이픈이 없는 경우만 처리, 단일 숫자는 유지)
+            use_method_raw = re.sub(r'(\d{1,2})~?(\d{1,2}세)', r'\1-\2', use_method_raw.replace('-', '~'))
+            atpn_raw = re.sub(r'(\d{1,2})~?(\d{1,2}세)', r'\1-\2', atpn_raw.replace('-', '~'))
+            
+            # 단일 숫자 유지 (예: "12세" → "12세")
+            use_method_raw = re.sub(r'(\d{1,2})세', r'\1세', use_method_raw)
+            atpn_raw = re.sub(r'(\d{1,2})세', r'\1세', atpn_raw)
             
             # 이미 하이픈이 있는 경우 중복 방지
             use_method_raw = re.sub(r'(\d+)-(\d+세)', r'\1-\2', use_method_raw)
@@ -341,7 +345,7 @@ def show_login_page():
             st.toast("닉네임을 입력해주세요.", icon="⚠️")
 
 def show_chat_dashboard():
-    st.title("AI 쁨봇 🤖")
+    st.title("AI 챗봇 🤖")
     for message in st.session_state.chat_history:
         with st.chat_message(message['role']):
             st.markdown(message['content'], unsafe_allow_html=True)
