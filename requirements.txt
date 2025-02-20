@@ -9,3 +9,5 @@ pandas
 uuid
 googlesearch-python
 timezonefinder
+asyncio
+aiohttp
