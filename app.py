@@ -298,6 +298,27 @@ def needs_search(query):
     return "search"
 
 # 로그인 및 대시보드 함수
+# def show_login_page():
+#     st.title("로그인 🤗")
+#     with st.form("login_form"):
+#         nickname = st.text_input("닉네임을 입력하세요", placeholder="예: 후안")
+#         submit_button = st.form_submit_button("시작하기 🚀")
+#         if submit_button and nickname:
+#             try:
+#                 user_id, is_existing = create_or_get_user(nickname)
+#                 st.session_state.user_id = user_id
+#                 st.session_state.is_logged_in = True
+#                 if is_existing:
+#                     st.success(f"환영합니다, {nickname}님! 🎉")
+#                 else:
+#                     st.success(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님! 🎉")
+#                 time.sleep(1)
+#                 st.rerun()
+#             except Exception as e:
+#                 st.error(f"로그인 중 오류가 발생했습니다: {str(e)}")
+#         elif submit_button:
+#             st.warning("닉네임을 입력해주세요.")
+
 def show_login_page():
     st.title("로그인 🤗")
     with st.form("login_form"):
@@ -309,15 +330,15 @@ def show_login_page():
                 st.session_state.user_id = user_id
                 st.session_state.is_logged_in = True
                 if is_existing:
-                    st.success(f"환영합니다, {nickname}님! 🎉")
+                    st.toast(f"환영합니다, {nickname}님! 🎉")
                 else:
-                    st.success(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님! 🎉")
+                    st.toast(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님! 🎉")
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
-                st.error(f"로그인 중 오류가 발생했습니다: {str(e)}")
+                st.toast(f"로그인 중 오류가 발생했습니다: {str(e)}", icon="❌")
         elif submit_button:
-            st.warning("닉네임을 입력해주세요.")
+            st.toast("닉네임을 입력해주세요.", icon="⚠️")
 
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
