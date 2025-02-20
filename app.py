@@ -299,7 +299,7 @@ def needs_search(query):
 
 # 로그인 및 대시보드 함수
 def show_login_page():
-    st.title("로그인 🤗🤖")
+    st.title("로그인 🤗")
     with st.form("login_form"):
         nickname = st.text_input("닉네임을 입력하세요", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")
