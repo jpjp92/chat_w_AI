@@ -240,21 +240,20 @@ def needs_search(query):
         return "weather"
     return "search"
 
-# 로그인 및 대시보드 함수
 def show_login_page():
-    st.title("AI 챗봇 로그인 🤖")
+    st.title("로그인 🤗🤖")  # 친근한 타이틀
     with st.form("login_form"):
-        nickname = st.text_input("닉네임을 입력하세요", placeholder="예: AI Lover")
-        submit_button = st.form_submit_button("시작하기")
+        nickname = st.text_input("닉네임을 입력하세요", placeholder="예: 후안")
+        submit_button = st.form_submit_button("시작하기 🚀")  # 버튼에 로켓 이모티콘
         if submit_button and nickname:
             try:
                 user_id, is_existing = create_or_get_user(nickname)
                 st.session_state.user_id = user_id
                 st.session_state.is_logged_in = True
                 if is_existing:
-                    st.success(f"환영합니다, {nickname}님!")
+                    st.success(f"환영합니다, {nickname}님! 🎉")  # 성공 메시지에 축하 이모티콘
                 else:
-                    st.success(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님!")
+                    st.success(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님! 🎉")  # 신규 사용자 메시지에도 추가
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
@@ -282,15 +281,15 @@ def show_chat_dashboard():
                 
                 if query_type == "mbti":
                     final_response = (
-                        "MBTI 검사를 원하시나요? 아래 사이트에서 무료로 성격 유형 검사를 할 수 있습니다!\n\n"
-                        "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC)\n\n"
-                        "이 사이트는 16가지 성격 유형을 기반으로 한 간단하고 재미있는 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있습니다."
+                        "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n\n"
+                        "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n\n"
+                        "이 사이트는 16가지 성격 유형을 기반으로 한 간단하고 재미있는 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡"
                     )
                 elif query_type == "multi_iq":
                     final_response = (
-                        "다중지능 검사를 원하시나요? 아래 사이트에서 무료로 다중지능 테스트를 할 수 있습니다!\n\n"
-                        "[Multi IQ Test](https://multiiqtest.com/)\n\n"
-                        "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 언어, 논리, 공간 등 다양한 지능 영역을 평가합니다."
+                        "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n\n"
+                        "[Multi IQ Test](https://multiiqtest.com/) 🚀\n\n"
+                        "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 언어, 논리, 공간 등 다양한 지능 영역을 평가해줍니다! 📚✨"
                     )
                 elif query_type == "time":
                     city = extract_city_from_time_query(user_prompt)
