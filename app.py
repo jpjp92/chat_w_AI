@@ -44,7 +44,7 @@ def init_session_state():
 
 init_session_state()
 
-# 사용자 관리 및 채팅 기록 저장 함수 (변경 없음)
+# 사용자 관리 및 채팅 기록 저장 함수
 def create_or_get_user(nickname):
     try:
         user = supabase.table("users").select("*").eq("nickname", nickname).execute()
@@ -73,28 +73,10 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
         logger.error(f"채팅 기록 저장 중 오류 발생: {str(e)}")
         st.error("채팅 기록 저장 중 오류가 발생했습니다.")
 
-# 주요 도시 매핑 (필요 시 참조용으로 유지)
-CITY_MAPPING = {
-    "서울": "Seoul,KR", "부산": "Busan,KR", "대구": "Daegu,KR", 
-    "인천": "Incheon,KR", "광주": "Gwangju,KR", "대전": "Daejeon,KR",
-    "울산": "Ulsan,KR", "세종": "Sejong,KR", "제주": "Jeju,KR",
-    "뉴욕": "New York,US", "런던": "London,GB", "파리": "Paris,FR",
-    "도쿄": "Tokyo,JP", "베이징": "Beijing,CN", "시드니": "Sydney,AU",
-    "로마": "Rome,IT", "베를린": "Berlin,DE", "마드리드": "Madrid,ES",
-    "상하이": "Shanghai,CN", "홍콩": "Hong Kong,HK", "싱가포르": "Singapore,SG"
-}
-
 # OpenWeather Geocoding API로 도시 정보 가져오기
 def get_city_info(city_name):
-    """
-    OpenWeather Geocoding API를 사용해 도시 정보(이름, 국가 코드, 좌표) 반환
-    """
     url = "http://api.openweathermap.org/geo/1.0/direct"
-    params = {
-        'q': city_name,
-        'limit': 1,
-        'appid': WEATHER_API_KEY
-    }
+    params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
     try:
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
@@ -115,15 +97,12 @@ def get_city_info(city_name):
         logger.error(f"Geocoding 실패 ({city_name}): {str(e)}")
         return None
 
-# 날씨 조회 함수 (Geocoding API 활용)
+# 날씨 및 시간 함수
 def get_city_weather(city_name):
-    """
-    OpenWeather API로 날씨 정보를 좌표 기반으로 조회
-    """
     city_info = get_city_info(city_name)
     if not city_info:
         return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. 도시명을 확인해 주세요. ❌"
-
+    
     url = "http://api.openweathermap.org/data/2.5/weather"
     params = {
         'lat': city_info["lat"],
@@ -132,20 +111,13 @@ def get_city_weather(city_name):
         'units': 'metric',
         'lang': 'kr'
     }
-    
     try:
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
-        
-        weather_emojis = {
-            'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️',
-            'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'
-        }
-        
+        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
         weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
         display_name = f"{data['name']}, {data['sys']['country']}"
-        
         return (
             f"현재 {display_name} 날씨 정보 {weather_emoji}\n\n"
             f"날씨: {data['weather'][0]['description']}\n"
@@ -159,33 +131,24 @@ def get_city_weather(city_name):
     except requests.exceptions.RequestException as e:
         logger.error(f"날씨 API 요청 오류: {str(e)}")
         return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
-    except KeyError as e:
-        logger.error(f"날씨 데이터 파싱 오류: {str(e)}")
-        return f"'{city_name}'의 날씨 데이터 형식이 올바르지 않습니다. ❌"
     except Exception as e:
         logger.error(f"예상치 못한 오류: {str(e)}")
         return f"날씨 정보를 처리하는 중 오류가 발생했습니다. ❌"
 
-# 시간 조회 함수 (Geocoding API 활용)
 def get_time_by_city(city_name="서울"):
-    """
-    OpenWeather Geocoding API로 좌표를 얻어 타임존 계산 후 시간 반환
-    """
     city_info = get_city_info(city_name)
     if not city_info:
         return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. 도시명을 확인해 주세요. ❌"
-
+    
     tf = TimezoneFinder()
     try:
         timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"])
         if not timezone_str:
-            logger.warning(f"타임존 찾기 실패, 기본값 사용: Asia/Seoul")
+            logger.warning(f"타임존 없음, 기본값 사용: Asia/Seoul")
             timezone_str = "Asia/Seoul"
-        
         timezone = pytz.timezone(timezone_str)
         city_time = datetime.now(timezone)
         am_pm = "오전" if city_time.strftime("%p") == "AM" else "오후"
-        
         return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일')} {am_pm} {city_time.strftime('%I:%M')} ⏰"
     except Exception as e:
         logger.error(f"시간 처리 실패 ({city_name}): {str(e)}")
@@ -193,9 +156,6 @@ def get_time_by_city(city_name="서울"):
 
 # 도시명 추출 함수
 def extract_city_from_query(query):
-    """
-    사용자 질의에서 도시명 추출 (한글/영문 모두 지원)
-    """
     city_patterns = [
         r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
         r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
@@ -203,36 +163,25 @@ def extract_city_from_query(query):
         r'weather\s+in\s+([a-zA-Z\s]{2,20})',
         r'([a-zA-Z\s]{2,20})\s+weather'
     ]
-    
     for pattern in city_patterns:
         match = re.search(pattern, query, re.IGNORECASE)
         if match:
             return match.group(1).strip()
-    
-    for city in CITY_MAPPING.keys():
-        if city.lower() in query.lower():
-            return city
-    
     return "서울"
 
 def extract_city_from_time_query(query):
-    """
-    시간 관련 쿼리에서 도시명 추출
-    """
     city_patterns = [
         r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간',
         r'([가-힣a-zA-Z]{2,20}(?:시|군)?)\s*시간',
-        r'시간\s*([가-힣a-zA-Z]{2,20}(?:시|군)?)',
+        r'시간\s*([가-힣a-zA-Z\s]{2,20}(?:시|군)?)',
     ]
-    
     for pattern in city_patterns:
         match = re.search(pattern, query)
         if match:
             return match.group(1)
-    
     return "서울"
 
-# 웹 검색 및 요약 함수 (변경 없음)
+# 웹 검색 및 요약 함수
 def search_and_summarize(query, num_results=5):
     logger.info(f"검색 시작: {query}")
     data = []
@@ -260,7 +209,6 @@ def search_and_summarize(query, num_results=5):
 def get_ai_summary(search_results):
     if search_results.empty:
         return "검색 결과를 찾을 수 없습니다. ❌"
-    
     context = "\n\n".join([f"출처: {row['title']}\n내용: {row['description']}" for _, row in search_results.iterrows()])
     try:
         response = client.chat.completions.create(
@@ -274,10 +222,16 @@ def get_ai_summary(search_results):
         logger.error(f"AI 요약 중 오류 발생: {str(e)}")
         return "검색 결과 요약 중 오류가 발생했습니다. ❌"
 
-# 쿼리 타입 판단 함수
+# 쿼리 타입 판단 함수 (우선순위 추가)
 def needs_search(query):
     time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
     weather_keywords = ["날씨", "온도", "기온"]
+    
+    # 우선순위 쿼리 체크
+    if query.strip().lower() == "mbti 검사":
+        return "mbti"
+    if query.strip().lower() == "다중지능 검사":
+        return "multi_iq"
     
     if any(keyword in query.lower() for keyword in time_keywords):
         if any(timeword in query.lower() for timeword in ["시간", "몇시", "몇 시", "시계"]):
@@ -286,7 +240,7 @@ def needs_search(query):
         return "weather"
     return "search"
 
-# 로그인 및 대시보드 함수 (변경 없음)
+# 로그인 및 대시보드 함수
 def show_login_page():
     st.title("AI 챗봇 로그인 🤖")
     with st.form("login_form"):
@@ -326,7 +280,19 @@ def show_chat_dashboard():
                 start_time = time.time()
                 query_type = needs_search(user_prompt)
                 
-                if query_type == "time":
+                if query_type == "mbti":
+                    final_response = (
+                        "MBTI 검사를 원하시나요? 아래 사이트에서 무료로 성격 유형 검사를 할 수 있습니다!\n\n"
+                        "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC)\n\n"
+                        "이 사이트는 16가지 성격 유형을 기반으로 한 간단하고 재미있는 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있습니다."
+                    )
+                elif query_type == "multi_iq":
+                    final_response = (
+                        "다중지능 검사를 원하시나요? 아래 사이트에서 무료로 다중지능 테스트를 할 수 있습니다!\n\n"
+                        "[Multi IQ Test](https://multiiqtest.com/)\n\n"
+                        "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 언어, 논리, 공간 등 다양한 지능 영역을 평가합니다."
+                    )
+                elif query_type == "time":
                     city = extract_city_from_time_query(user_prompt)
                     final_response = get_time_by_city(city)
                 elif query_type == "weather":
