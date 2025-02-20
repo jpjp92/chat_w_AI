@@ -141,6 +141,7 @@ def get_time_by_city(city_name="서울"):
         return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
 
 # 의약품 검색 함수
+# 의약품 검색 함수
 def get_drug_info(drug_name):
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
     params = {
@@ -158,16 +159,20 @@ def get_drug_info(drug_name):
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
             item = data['body']['items'][0]
             efcy = item.get('efcyQesitm', '정보 없음')[:150] + ("..." if len(item.get('efcyQesitm', '')) > 150 else "")
-            use_method = item.get('useMethodQesitm', '정보 없음')[:150] + ("..." if len(item.get('useMethodQesitm', '')) > 150 else "")
-            atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
+            use_method_raw = item.get('useMethodQesitm', '정보 없음')[:150] + ("..." if len(item.get('useMethodQesitm', '')) > 150 else "")
+            atpn_raw = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
+            
+            # replace를 f-string 밖에서 처리
+            use_method = use_method_raw.replace('. ', '.\n')
+            atpn = atpn_raw.replace('. ', '.\n')
             
             return (
                 f"💊 **의약품 정보** 💊\n\n"
                 f"• **약품명**: {item.get('itemName', '정보 없음')}\n\n"
                 f"• **제조사**: {item.get('entpName', '정보 없음')}\n\n"
                 f"• **효능**: {efcy}에 효과적\n\n"
-                f"• **용법용량**: {use_method.replace('. ', '.\n')}\n\n"
-                f"• **주의사항**: {atpn.replace('. ', '.\n')}"
+                f"• **용법용량**: {use_method}\n\n"
+                f"• **주의사항**: {atpn}"
             )
         else:
             logger.info(f"'{drug_name}' API 검색 실패, 구글 검색으로 대체")
@@ -190,7 +195,7 @@ def get_drug_info(drug_name):
                 f"{get_ai_summary(search_results)}"
             )
         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
-
+        
 # 도시명 및 쿼리 추출 함수
 def extract_city_from_query(query):
     city_patterns = [
