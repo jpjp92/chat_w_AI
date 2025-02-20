@@ -155,6 +155,77 @@ def get_time_by_city(city_name="서울"):
         return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
 
 # 의약품 검색 함수
+# def get_drug_info(drug_name):
+#     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
+#     params = {
+#         'serviceKey': DRUG_API_KEY,
+#         'pageNo': '1',
+#         'numOfRows': '1',
+#         'itemName': quote(drug_name),
+#         'type': 'json'
+#     }
+#     try:
+#         response = requests.get(url, params=params, timeout=5)
+#         response.raise_for_status()
+#         data = response.json()
+        
+#         if 'body' in data and 'items' in data['body'] and data['body']['items']:
+#             item = data['body']['items'][0]
+#             def cut_to_sentence(text, max_len=150):
+#                 if not text or len(text) <= max_len:
+#                     return text
+#                 truncated = text[:max_len]
+#                 last_punctuation = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'), truncated.rfind(','))
+#                 if last_punctuation > 0:
+#                     result = truncated[:last_punctuation + 1]
+#                     if len(text) > max_len:
+#                         result += " 등"
+#                     return result
+#                 return truncated + "..."
+            
+#             efcy = cut_to_sentence(item.get('efcyQesitm', '정보 없음'))
+#             use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
+#             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
+            
+#             use_method_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', use_method_raw)
+#             atpn_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', atpn_raw)
+            
+#             logger.info(f"원문 useMethodQesitm: {item.get('useMethodQesitm', '정보 없음')}")
+#             logger.info(f"후처리 use_method_raw: {use_method_raw}")
+            
+#             use_method = use_method_raw.replace('. ', '.\n')
+#             atpn = atpn_raw.replace('. ', '.\n')
+            
+#             return (
+#                 f"💊 **의약품 정보** 💊\n\n"
+#                 f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
+#                 f"✅ **제조사**: {item.get('entpName', '정보 없음')}\n\n"
+#                 f"✅ **효능**: {efcy}\n\n"
+#                 f"✅ **용법용량**: {use_method}\n\n"
+#                 f"✅ **주의사항**: {atpn}\n\n"
+#                 f"ℹ️ 자세한 정보는 <a href='https://www.health.kr/searchDrug/search_detail.asp'>약학정보원</a>에서 확인하세요! 🩺"
+#             )
+#         else:
+#             logger.info(f"'{drug_name}' API 검색 실패, 구글 검색으로 대체")
+#             search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
+#             if not search_results.empty:
+#                 return (
+#                     f"'{drug_name}'에 대한 공식 의약품 정보를 찾을 수 없습니다. 🩺\n"
+#                     f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
+#                     f"{get_ai_summary(search_results)}"
+#                 )
+#             return f"'{drug_name}'에 대한 의약품 정보를 찾을 수 없습니다. 🩺"
+#     except Exception as e:
+#         logger.error(f"의약품 API 오류: {str(e)}")
+#         search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
+#         if not search_results.empty:
+#             return (
+#                 f"'{drug_name}' 의약품 정보를 API에서 가져오는 중 오류가 발생했습니다. ❌\n"
+#                 f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
+#                 f"{get_ai_summary(search_results)}"
+#             )
+#         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
+
 def get_drug_info(drug_name):
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
     params = {
@@ -187,12 +258,16 @@ def get_drug_info(drug_name):
             use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
             
-            use_method_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', use_method_raw)
-            atpn_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', atpn_raw)
+            # 수정된 후처리 로직
+            # 1. 모든 숫자 범위의 틸드(~)를 하이픈(-)으로 변환
+            use_method_raw = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)
+            atpn_raw = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', atpn_raw)
             
+            # 로그로 원문과 후처리 결과 확인
             logger.info(f"원문 useMethodQesitm: {item.get('useMethodQesitm', '정보 없음')}")
             logger.info(f"후처리 use_method_raw: {use_method_raw}")
             
+            # 문장 구분을 위해 개행 추가
             use_method = use_method_raw.replace('. ', '.\n')
             atpn = atpn_raw.replace('. ', '.\n')
             
