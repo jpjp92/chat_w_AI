@@ -77,7 +77,7 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
 
 # OpenWeather Geocoding API로 도시 정보 가져오기
 def get_city_info(city_name):
-    url = "http://api.openweathermap.org/geo/1.0/direct"
+    url = "http://api.openweather.org/geo/1.0/direct"
     params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
     try:
         response = requests.get(url, params=params, timeout=5)
@@ -157,25 +157,38 @@ def get_drug_info(drug_name):
         
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
             item = data['body']['items'][0]
-            # 문장 단위로 자르기 (최대 150자 내 마지막 마침표까지)
+            # 문장 단위로 자연스럽게 자르기 (최대 150자 내 마지막 마침표, 쉼표 등)
             def cut_to_sentence(text, max_len=150):
-                if len(text) <= max_len:
+                if not text or len(text) <= max_len:
                     return text
                 truncated = text[:max_len]
-                last_period = truncated.rfind('.')
-                if last_period > 0:
-                    return truncated[:last_period + 1]
+                # 문장 끝 (., !, ?) 또는 쉼표(,)로 자르기
+                last_punctuation = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'), truncated.rfind(','))
+                if last_punctuation > 0:
+                    result = truncated[:last_punctuation + 1]
+                    # 자연스러운 마무리 추가
+                    if len(text) > max_len:
+                        result += " 등"
+                    return result
                 return truncated + "..."
             
             efcy = cut_to_sentence(item.get('efcyQesitm', '정보 없음'))
             use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
             
-            # 하이픈 후처리 (예: "712세" -> "7-12세")
-            use_method_raw = re.sub(r'(\d+)(\d+세)', r'\1-\2', use_method_raw)
-            atpn_raw = re.sub(r'(\d+)(\d+세)', r'\1-\2', atpn_raw)
+            # 틸드(~)를 하이픈(-)으로 변환
+            use_method_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', use_method_raw)
+            atpn_raw = re.sub(r'(\d+)~(\d+세)', r'\1-\2', atpn_raw)
             
-            # 로그로 원문 확인
+            # 숫자 분리 (틸드/하이픈이 없는 경우만 처리)
+            use_method_raw = re.sub(r'(\d{1,2})(\d{1,2}세)', r'\1-\2', use_method_raw.replace('-', '~'))
+            atpn_raw = re.sub(r'(\d{1,2})(\d{1,2}세)', r'\1-\2', atpn_raw.replace('-', '~'))
+            
+            # 이미 하이픈이 있는 경우 중복 방지
+            use_method_raw = re.sub(r'(\d+)-(\d+세)', r'\1-\2', use_method_raw)
+            atpn_raw = re.sub(r'(\d+)-(\d+세)', r'\1-\2', atpn_raw)
+            
+            # 로그로 원문 확인 (상세히)
             logger.info(f"원문 useMethodQesitm: {item.get('useMethodQesitm', '정보 없음')}")
             logger.info(f"후처리 use_method_raw: {use_method_raw}")
             
@@ -328,7 +341,7 @@ def show_login_page():
             st.toast("닉네임을 입력해주세요.", icon="⚠️")
 
 def show_chat_dashboard():
-    st.title("AI 챗봇 🤖")
+    st.title("AI 쁨봇 🤖")
     for message in st.session_state.chat_history:
         with st.chat_message(message['role']):
             st.markdown(message['content'], unsafe_allow_html=True)
