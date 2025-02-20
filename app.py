@@ -1,4 +1,4 @@
-# 라이브러리 설정 (동일)
+# 라이브러리 설정
 import streamlit as st
 import time
 import uuid
@@ -18,21 +18,21 @@ from g4f.client import Client
 from timezonefinder import TimezoneFinder
 import re
 
-# Supabase 및 환경 변수 설정 (동일)
+# Supabase 및 환경 변수 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = Client()
 
-# 로깅 설정 (동일)
+# 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("HybridChat")
 
-# 페이지 설정 (동일)
+# 페이지 설정
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
-# 세션 상태 초기화 (동일)
+# 세션 상태 초기화
 def init_session_state():
     if "is_logged_in" not in st.session_state:
         st.session_state.is_logged_in = False
@@ -45,7 +45,7 @@ def init_session_state():
 
 init_session_state()
 
-# 사용자 관리 및 채팅 기록 저장 함수 (동일)
+# 사용자 관리 함수
 def create_or_get_user(nickname):
     try:
         user = supabase.table("users").select("*").eq("nickname", nickname).execute()
@@ -60,6 +60,7 @@ def create_or_get_user(nickname):
         logger.error(f"사용자 생성/조회 중 오류 발생: {str(e)}")
         raise Exception("사용자 처리 중 오류가 발생했습니다.")
 
+# 채팅 기록 저장 함수
 def save_chat_history(user_id, session_id, question, answer, time_taken):
     try:
         supabase.table("chat_history").insert({
@@ -74,7 +75,7 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
         logger.error(f"채팅 기록 저장 중 오류 발생: {str(e)}")
         st.error("채팅 기록 저장 중 오류가 발생했습니다.")
 
-# 도시 매핑 및 날씨/시간 함수 (동일, 약간 간소화)
+# 주요 도시 매핑
 CITY_MAPPING = {
     "서울": "Seoul,KR", "부산": "Busan,KR", "대구": "Daegu,KR",
     "인천": "Incheon,KR", "광주": "Gwangju,KR", "대전": "Daejeon,KR",
@@ -83,18 +84,33 @@ CITY_MAPPING = {
     "도쿄": "Tokyo,JP", "베이징": "Beijing,CN", "시드니": "Sydney,AU"
 }
 
+# 도시명 변환 및 날씨/시간 함수
 def get_city_code(city_name):
+    # "날씨" 제거
+    city_name = re.sub(r'\s*날씨$', '', city_name.strip())
+    
     if city_name in CITY_MAPPING:
         return CITY_MAPPING[city_name]
+    
     geolocator = Nominatim(user_agent="geo_app")
     try:
-        location = geolocator.geocode(f"{city_name}, South Korea", language="en") or geolocator.geocode(city_name, language="en")
+        # 한국 도시 먼저 시도
+        location = geolocator.geocode(f"{city_name}, South Korea", language="en")
+        if location:
+            country_code = location.raw.get('address', {}).get('country_code', 'kr').upper()
+            return f"{location.raw.get('display_name').split(',')[0].strip()},{country_code}"
+        
+        # 전 세계 도시 검색
+        location = geolocator.geocode(city_name, language="en")
         if location:
             country_code = location.raw.get('address', {}).get('country_code', '').upper()
             return f"{location.raw.get('display_name').split(',')[0].strip()},{country_code}"
+        
+        # 기본값
+        return "Seoul,KR"
     except Exception as e:
         logger.error(f"도시 코드 변환 실패: {str(e)}")
-    return f"{city_name}"
+        return "Seoul,KR"  # 오류 시 기본값
 
 def get_city_weather(city_name):
     city_code = get_city_code(city_name)
@@ -114,9 +130,12 @@ def get_city_weather(city_name):
             f"습도: {data['main']['humidity']}% 💧\n"
             f"풍속: {data['wind']['speed']}m/s 🌪️"
         )
-    except Exception as e:
+    except requests.exceptions.HTTPError as e:
         logger.error(f"날씨 가져오기 실패: {str(e)}")
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. 도시명을 확인해 주세요. ❌"
+    except Exception as e:
+        logger.error(f"날씨 처리 중 오류: {str(e)}")
+        return f"날씨 정보를 처리하는 중 오류가 발생했습니다. ❌"
 
 def get_time_by_city(city_name="서울"):
     geolocator = Nominatim(user_agent="geo_app")
@@ -132,7 +151,7 @@ def get_time_by_city(city_name="서울"):
         logger.error(f"시간 가져오기 실패: {str(e)}")
         return f"{city_name}의 시간 정보를 가져올 수 없습니다. ❌"
 
-# 쿼리 타입 결정 함수 (동일)
+# 쿼리 타입 결정 함수
 def determine_query_type(query):
     time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야"]
     weather_keywords = ["날씨", "온도", "기온"]
@@ -152,7 +171,7 @@ def determine_query_type(query):
         is_search = True
     return "search" if is_search else "chat"
 
-# 검색 쿼리 전처리 함수 (동일)
+# 검색 쿼리 전처리 함수
 def preprocess_search_query(query):
     remove_suffixes = ["이란", "란", "은", "는", "이나", "나", "을", "를", "에서"]
     for suffix in remove_suffixes:
@@ -166,7 +185,7 @@ def preprocess_search_query(query):
         query = f"what is {base_topic} definition guide"
     return query
 
-# 동기 검색 함수로 변경 (Streamlit 호환성 확보)
+# 동기 검색 함수
 def search_and_summarize(query, num_results=5):
     processed_query = preprocess_search_query(query)
     data = []
@@ -185,20 +204,20 @@ def search_and_summarize(query, num_results=5):
         logger.error(f"검색 중 오류: {str(e)}")
         return pd.DataFrame()
 
-# 비동기 GPT 호출 대신 동기 호출로 변경
+# 동기 GPT 대화 응답
 def get_chat_response(query, chat_history):
     try:
         messages = [{"role": "system", "content": "당신은 친절하고 도움이 되는 AI 어시스턴트입니다. 한국어로 자연스럽게 대화해주세요."}]
         for msg in chat_history[-5:]:
             messages.append({"role": "user" if msg["role"] == "user" else "assistant", "content": msg["content"]})
         messages.append({"role": "user", "content": query})
-        response = client.chat.completions.create(model="gpt-4", messages=messages)  # 동기 호출
+        response = client.chat.completions.create(model="gpt-4", messages=messages)
         return response.choices[0].message.content
     except Exception as e:
         logger.error(f"채팅 응답 생성 중 오류: {str(e)}")
         return "죄송합니다. 응답 생성 중 문제가 발생했습니다. 다시 시도해 주세요. ❌"
 
-# 쿼리 처리 함수 (동기 방식으로 수정)
+# 쿼리 처리 함수
 def process_query(query, chat_history):
     query_type = determine_query_type(query)
     start_time = time.time()
@@ -207,8 +226,12 @@ def process_query(query, chat_history):
         city = re.search(r'([가-힣a-zA-Z]{2,20}(?:시|군)?)', query)
         response = get_time_by_city(city.group(1) if city else "서울")
     elif query_type == "weather":
-        city = re.search(r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)', query)
-        response = get_city_weather(city.group(1) if city else "서울")
+        # "날씨" 키워드 제외하고 도시명만 추출
+        city_match = re.search(r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨', query) or \
+                     re.search(r'날씨\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)', query) or \
+                     re.search(r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)', query)
+        city = city_match.group(1) if city_match else "서울"
+        response = get_city_weather(city)
     elif query_type == "search":
         search_results = search_and_summarize(query)
         if search_results.empty:
@@ -223,7 +246,7 @@ def process_query(query, chat_history):
     time_taken = round(time.time() - start_time, 2)
     return response, time_taken
 
-# 로그인 페이지 (동일)
+# 로그인 페이지
 def show_login_page():
     st.title("AI 챗봇 로그인 🤖")
     with st.form("login_form"):
@@ -240,7 +263,7 @@ def show_login_page():
             except Exception as e:
                 st.error(f"로그인 중 오류: {str(e)}")
 
-# 메인 채팅 대시보드 (동기 방식으로 수정)
+# 메인 채팅 대시보드
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     for message in st.session_state.chat_history:
@@ -266,7 +289,7 @@ def show_chat_dashboard():
                 message_placeholder.markdown(error_message)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_message})
 
-# 메인 실행 부분 (동일)
+# 메인 실행 부분
 def main():
     init_session_state()
     if not st.session_state.is_logged_in:
