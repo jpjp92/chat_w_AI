@@ -15,6 +15,8 @@ from g4f.client import Client
 from timezonefinder import TimezoneFinder
 import re
 from urllib.parse import quote
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 # Supabase 및 API 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -75,9 +77,10 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
         logger.error(f"채팅 기록 저장 중 오류 발생: {str(e)}")
         st.error("채팅 기록 저장 중 오류가 발생했습니다.")
 
+
 # OpenWeather Geocoding API로 도시 정보 가져오기
 def get_city_info(city_name):
-    url = "http://api.openweather.org/geo/1.0/direct"
+    url = "https://api.openweathermap.org/geo/1.0/direct"  # HTTP -> HTTPS
     params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
     try:
         response = requests.get(url, params=params, timeout=5)
@@ -97,12 +100,12 @@ def get_city_info(city_name):
         logger.error(f"Geocoding 실패 ({city_name}): {str(e)}")
         return None
 
-# 날씨 및 시간 함수
+# 날씨 정보 가져오기
 def get_city_weather(city_name):
     city_info = get_city_info(city_name)
     if not city_info:
         return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
-    url = "http://api.openweathermap.org/data/2.5/weather"
+    url = "https://api.openweathermap.org/data/2.5/weather"  # HTTP -> HTTPS
     params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
     try:
         response = requests.get(url, params=params, timeout=5)
@@ -221,18 +224,18 @@ def get_drug_info(drug_name):
         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
 
 # 도시명 및 쿼리 추출 함수
-def extract_city_from_query(query):
+def extract_city_from_time_query(query):
     city_patterns = [
-        r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
-        r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
-        r'날씨\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
-        r'weather\s+in\s+([a-zA-Z\s]{2,20})',
-        r'([a-zA-Z\s]{2,20})\s+weather'
+        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간',
+        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)\s*시간',
+        r'시간\s*([가-힣a-zA-Z\s]{2,20}(?:시|군)?)',
     ]
     for pattern in city_patterns:
-        match = re.search(pattern, query, re.IGNORECASE)
+        match = re.search(pattern, query)
         if match:
-            return match.group(1).strip()
+            city = match.group(1).strip()
+            if city != "현재":  # "현재" 제외
+                return city
     return "서울"
 
 def extract_city_from_time_query(query):
