@@ -141,7 +141,6 @@ def get_time_by_city(city_name="서울"):
         return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
 
 # 의약품 검색 함수
-# 의약품 검색 함수
 def get_drug_info(drug_name):
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
     params = {
@@ -158,11 +157,20 @@ def get_drug_info(drug_name):
         
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
             item = data['body']['items'][0]
-            efcy = item.get('efcyQesitm', '정보 없음')[:150] + ("..." if len(item.get('efcyQesitm', '')) > 150 else "")
-            use_method_raw = item.get('useMethodQesitm', '정보 없음')[:150] + ("..." if len(item.get('useMethodQesitm', '')) > 150 else "")
-            atpn_raw = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
+            # 문장 단위로 자르기 (최대 150자 내 마지막 마침표까지)
+            def cut_to_sentence(text, max_len=150):
+                if len(text) <= max_len:
+                    return text
+                truncated = text[:max_len]
+                last_period = truncated.rfind('.')
+                if last_period > 0:
+                    return truncated[:last_period + 1]
+                return truncated + "..."
             
-            # replace를 f-string 밖에서 처리
+            efcy = cut_to_sentence(item.get('efcyQesitm', '정보 없음'))
+            use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
+            atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
+            
             use_method = use_method_raw.replace('. ', '.\n')
             atpn = atpn_raw.replace('. ', '.\n')
             
@@ -170,9 +178,10 @@ def get_drug_info(drug_name):
                 f"💊 **의약품 정보** 💊\n\n"
                 f"• **약품명**: {item.get('itemName', '정보 없음')}\n\n"
                 f"• **제조사**: {item.get('entpName', '정보 없음')}\n\n"
-                f"• **효능**: {efcy}에 효과적\n\n"
+                f"• **효능**: {efcy}\n\n"
                 f"• **용법용량**: {use_method}\n\n"
-                f"• **주의사항**: {atpn}"
+                f"• **주의사항**: {atpn}\n\n"
+                f"자세한 정보는 <a href='https://www.health.kr/searchDrug/search_detail.asp'>약학정보원</a>에서 확인하세요! 🩺"
             )
         else:
             logger.info(f"'{drug_name}' API 검색 실패, 구글 검색으로 대체")
@@ -195,7 +204,7 @@ def get_drug_info(drug_name):
                 f"{get_ai_summary(search_results)}"
             )
         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
-        
+
 # 도시명 및 쿼리 추출 함수
 def extract_city_from_query(query):
     city_patterns = [
@@ -314,7 +323,7 @@ def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     for message in st.session_state.chat_history:
         with st.chat_message(message['role']):
-            st.markdown(message['content'])
+            st.markdown(message['content'], unsafe_allow_html=True)
     
     user_prompt = st.chat_input("질문해 주세요!")
     if user_prompt:
@@ -357,7 +366,7 @@ def show_chat_dashboard():
                 time_taken = round(end_time - start_time, 2)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": final_response})
-                message_placeholder.markdown(final_response)
+                message_placeholder.markdown(final_response, unsafe_allow_html=True)
                 save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, final_response, time_taken)
             except Exception as e:
                 error_message = f"❌ 오류 발생: {str(e)}"
