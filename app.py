@@ -14,11 +14,13 @@ from googlesearch import search
 from g4f.client import Client
 from timezonefinder import TimezoneFinder
 import re
+from urllib.parse import quote
 
-# Supabase 설정
+# Supabase 및 API 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+DRUG_API_KEY = os.getenv("DRUG_API_KEY")
 
 # Supabase 및 GPT 클라이언트 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -90,9 +92,7 @@ def get_city_info(city_name):
             }
             logger.info(f"Geocoding 성공: {city_info}")
             return city_info
-        else:
-            logger.warning(f"도시 정보 없음: {city_name}")
-            return None
+        return None
     except Exception as e:
         logger.error(f"Geocoding 실패 ({city_name}): {str(e)}")
         return None
@@ -101,16 +101,9 @@ def get_city_info(city_name):
 def get_city_weather(city_name):
     city_info = get_city_info(city_name)
     if not city_info:
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. 도시명을 확인해 주세요. ❌"
-    
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
     url = "http://api.openweathermap.org/data/2.5/weather"
-    params = {
-        'lat': city_info["lat"],
-        'lon': city_info["lon"],
-        'appid': WEATHER_API_KEY,
-        'units': 'metric',
-        'lang': 'kr'
-    }
+    params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
     try:
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
@@ -128,24 +121,17 @@ def get_city_weather(city_name):
             f"습도: {data['main']['humidity']}% 💧\n"
             f"풍속: {data['wind']['speed']}m/s 🌪️"
         )
-    except requests.exceptions.RequestException as e:
-        logger.error(f"날씨 API 요청 오류: {str(e)}")
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
     except Exception as e:
-        logger.error(f"예상치 못한 오류: {str(e)}")
-        return f"날씨 정보를 처리하는 중 오류가 발생했습니다. ❌"
+        logger.error(f"날씨 처리 오류: {str(e)}")
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
 
 def get_time_by_city(city_name="서울"):
     city_info = get_city_info(city_name)
     if not city_info:
-        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. 도시명을 확인해 주세요. ❌"
-    
+        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
     tf = TimezoneFinder()
     try:
-        timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"])
-        if not timezone_str:
-            logger.warning(f"타임존 없음, 기본값 사용: Asia/Seoul")
-            timezone_str = "Asia/Seoul"
+        timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
         timezone = pytz.timezone(timezone_str)
         city_time = datetime.now(timezone)
         am_pm = "오전" if city_time.strftime("%p") == "AM" else "오후"
@@ -154,7 +140,58 @@ def get_time_by_city(city_name="서울"):
         logger.error(f"시간 처리 실패 ({city_name}): {str(e)}")
         return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
 
-# 도시명 추출 함수
+# 의약품 검색 함수
+def get_drug_info(drug_name):
+    url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
+    params = {
+        'serviceKey': DRUG_API_KEY,
+        'pageNo': '1',
+        'numOfRows': '1',
+        'itemName': quote(drug_name),
+        'type': 'json'
+    }
+    try:
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'body' in data and 'items' in data['body'] and data['body']['items']:
+            item = data['body']['items'][0]
+            efcy = item.get('efcyQesitm', '정보 없음')[:150] + ("..." if len(item.get('efcyQesitm', '')) > 150 else "")
+            use_method = item.get('useMethodQesitm', '정보 없음')[:150] + ("..." if len(item.get('useMethodQesitm', '')) > 150 else "")
+            atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
+            
+            return (
+                f"💊 **의약품 정보** 💊\n\n"
+                f"• **약품명**: {item.get('itemName', '정보 없음')}\n"
+                f"• **제조사**: {item.get('entpName', '정보 없음')}\n"
+                f"• **효능**: {efcy}에 효과적\n"
+                f"• **용법용량**: {use_method}\n"
+                f"• **주의사항**: {atpn} 질환이 있는 경우 주의 필요"
+            )
+        else:
+            logger.info(f"'{drug_name}' API 검색 실패, 구글 검색으로 대체")
+            search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
+            if not search_results.empty:
+                return (
+                    f"'{drug_name}'에 대한 공식 의약품 정보를 찾을 수 없습니다. 🩺\n"
+                    f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
+                    f"{get_ai_summary(search_results)}"
+                )
+            return f"'{drug_name}'에 대한 의약품 정보를 찾을 수 없습니다. 🩺"
+
+    except Exception as e:
+        logger.error(f"의약품 API 오류: {str(e)}")
+        search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
+        if not search_results.empty:
+            return (
+                f"'{drug_name}' 의약품 정보를 API에서 가져오는 중 오류가 발생했습니다. ❌\n"
+                f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
+                f"{get_ai_summary(search_results)}"
+            )
+        return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
+
+# 도시명 및 쿼리 추출 함수
 def extract_city_from_query(query):
     city_patterns = [
         r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
@@ -222,38 +259,45 @@ def get_ai_summary(search_results):
         logger.error(f"AI 요약 중 오류 발생: {str(e)}")
         return "검색 결과 요약 중 오류가 발생했습니다. ❌"
 
-# 쿼리 타입 판단 함수 (우선순위 추가)
+# 쿼리 타입 판단 함수
 def needs_search(query):
     time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
     weather_keywords = ["날씨", "온도", "기온"]
+    drug_keywords = ["약", "의약품", "약품"]
     
-    # 우선순위 쿼리 체크
-    if query.strip().lower() == "mbti 검사":
+    query_lower = query.strip().lower()
+    
+    if query_lower == "mbti 검사":
         return "mbti"
-    if query.strip().lower() == "다중지능 검사":
+    if query_lower == "다중지능 검사":
         return "multi_iq"
-    
-    if any(keyword in query.lower() for keyword in time_keywords):
-        if any(timeword in query.lower() for timeword in ["시간", "몇시", "몇 시", "시계"]):
+    if any(keyword in query_lower for keyword in time_keywords):
+        if any(timeword in query_lower for timeword in ["시간", "몇시", "몇 시", "시계"]):
             return "time"
-    if any(keyword in query for keyword in weather_keywords):
+    if any(keyword in query_lower for keyword in weather_keywords):
         return "weather"
+    drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)?$'
+    if (any(keyword in query_lower for keyword in drug_keywords) or 
+        query_lower.endswith("약") or 
+        re.match(drug_pattern, query_lower)):
+        return "drug"
     return "search"
 
+# 로그인 및 대시보드 함수
 def show_login_page():
-    st.title("로그인 🤗")  # 친근한 타이틀
+    st.title("로그인 🤗🤖")
     with st.form("login_form"):
-        nickname = st.text_input("닉네임을 입력하세요", placeholder="예: 후안")
-        submit_button = st.form_submit_button("시작하기 🚀")  # 버튼에 로켓 이모티콘
+        nickname = st.text_input("닉네임을 입력하세요", placeholder="예: AI Lover")
+        submit_button = st.form_submit_button("시작하기 🚀")
         if submit_button and nickname:
             try:
                 user_id, is_existing = create_or_get_user(nickname)
                 st.session_state.user_id = user_id
                 st.session_state.is_logged_in = True
                 if is_existing:
-                    st.success(f"환영합니다, {nickname}님! 🎉")  # 성공 메시지에 축하 이모티콘
+                    st.success(f"환영합니다, {nickname}님! 🎉")
                 else:
-                    st.success(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님! 🎉")  # 신규 사용자 메시지에도 추가
+                    st.success(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님! 🎉")
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
@@ -287,7 +331,7 @@ def show_chat_dashboard():
                     )
                 elif query_type == "multi_iq":
                     final_response = (
-                        "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능을 검사 할 수 있어요! 😄\n\n"
+                        "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n\n"
                         "[Multi IQ Test](https://multiiqtest.com/) 🚀\n\n"
                         "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 언어, 논리, 공간 등 다양한 지능 영역을 평가해줍니다! 📚✨"
                     )
@@ -297,6 +341,9 @@ def show_chat_dashboard():
                 elif query_type == "weather":
                     city = extract_city_from_query(user_prompt)
                     final_response = get_city_weather(city)
+                elif query_type == "drug":
+                    drug_name = user_prompt.strip()
+                    final_response = get_drug_info(drug_name)
                 else:
                     search_results = search_and_summarize(user_prompt)
                     final_response = get_ai_summary(search_results)
