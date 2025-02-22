@@ -217,15 +217,15 @@ class WeatherAPI:
         
         except Exception as e:
             logger.error(f"주간 예보 처리 오류: {str(e)}")
-            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '주간 서울 날씨 알려줘'"
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
 
 # Supabase 및 API 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 DRUG_API_KEY = os.getenv("DRUG_API_KEY")
-NAVER_CLIENT_ID = "your_naver_client_id"  # 네이버 API ID
-NAVER_CLIENT_SECRET = "your_naver_client_secret"  # 네이버 API Secret
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+NAVER_CLIENT_SECRET =os.getenv("NAVER_CLIENT_SECRET")  
 
 # Supabase 및 GPT 클라이언트 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
