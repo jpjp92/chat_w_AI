@@ -3,7 +3,7 @@ import time
 import uuid
 from supabase import create_client
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import logging
 import requests
@@ -103,11 +103,11 @@ def get_city_info(city_name):
         logger.error(f"Geocoding 실패 ({city_name}): {str(e)}")
         return None
 
-# 날씨 및 시간 함수
+# 날씨 함수
 def get_city_weather(city_name):
     city_info = get_city_info(city_name)
     if not city_info:
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"  # 마지막 문장 제거
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
     url = "https://api.openweathermap.org/data/2.5/weather"
     params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
     session = requests.Session()
@@ -133,7 +133,54 @@ def get_city_weather(city_name):
         )
     except Exception as e:
         logger.error(f"날씨 처리 오류: {str(e)}")
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"  # 마지막 문장 제거
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
+
+def get_forecast_by_day(city_name, days_from_today=1):
+    city_info = get_city_info(city_name)
+    if not city_info:
+        return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 내일 날씨 알려줘'"
+    
+    url = "https://api.openweathermap.org/data/2.5/forecast"
+    params = {
+        'lat': city_info["lat"],
+        'lon': city_info["lon"],
+        'appid': WEATHER_API_KEY,
+        'units': 'metric',
+        'lang': 'kr'
+    }
+    session = requests.Session()
+    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    
+    try:
+        response = session.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
+        forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
+        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+        
+        found = False
+        for forecast in data['list']:
+            dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d %H:%M')
+            date_only = dt.split()[0]
+            if date_only == target_date:
+                found = True
+                weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
+                forecast_text += (
+                    f"{dt}: {forecast['weather'][0]['description']} {weather_emoji}\n"
+                    f"온도: {forecast['main']['temp']}°C, 습도: {forecast['main']['humidity']}%, 풍속: {forecast['wind']['speed']}m/s\n\n"
+                )
+        
+        if not found:
+            return f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다. ❌"
+        return forecast_text.strip()
+    
+    except Exception as e:
+        logger.error(f"날씨 예보 처리 오류: {str(e)}")
+        return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
 
 def get_weekly_forecast(city_name):
     city_info = get_city_info(city_name)
@@ -158,21 +205,25 @@ def get_weekly_forecast(city_name):
         response.raise_for_status()
         data = response.json()
         
+        today = datetime.now().date()
+        week_end = today + timedelta(days=6 - today.weekday())  # 이번 주 일요일까지
         daily_forecast = {}
         for forecast in data['list']:
-            dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
-            if dt not in daily_forecast:
-                daily_forecast[dt] = {
-                    'temp_min': forecast['main']['temp_min'],
-                    'temp_max': forecast['main']['temp_max'],
-                    'weather': forecast['weather'][0]['description']
-                }
-            else:
-                daily_forecast[dt]['temp_min'] = min(daily_forecast[dt]['temp_min'], forecast['main']['temp_min'])
-                daily_forecast[dt]['temp_max'] = max(daily_forecast[dt]['temp_max'], forecast['main']['temp_max'])
+            dt = datetime.fromtimestamp(forecast['dt']).date()
+            if today <= dt <= week_end:
+                dt_str = dt.strftime('%Y-%m-%d')
+                if dt_str not in daily_forecast:
+                    daily_forecast[dt_str] = {
+                        'temp_min': forecast['main']['temp_min'],
+                        'temp_max': forecast['main']['temp_max'],
+                        'weather': forecast['weather'][0]['description']
+                    }
+                else:
+                    daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], forecast['main']['temp_min'])
+                    daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], forecast['main']['temp_max'])
         
-        forecast_text = f"{city_info['name']}의 5일 주간 예보 🌤️\n\n"
-        for date, info in list(daily_forecast.items())[:5]:
+        forecast_text = f"{city_info['name']}의 이번 주 날씨 예보 🌤️\n\n"
+        for date, info in daily_forecast.items():
             forecast_text += f"{date}: {info['weather']}, 최저 {info['temp_min']}°C, 최고 {info['temp_max']}°C\n"
         return forecast_text
     
@@ -261,23 +312,21 @@ def get_drug_info(drug_name):
 
 # 도시명 및 쿼리 추출 함수
 def extract_city_from_query(query):
+    time_keywords = ["오늘", "내일", "모레", "이번 주"]  # 시간 키워드 제외
     city_patterns = [
-        r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
-        r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
-        r'날씨\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
-        r'weather\s+in\s+([a-zA-Z\s]{2,20})',
-        r'([a-zA-Z\s]{2,20})\s+weather',
-        r'오늘\s*날씨'
+        r'(?:오늘|내일|모레|이번 주)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
+        r'(?:오늘|내일|모레|이번 주)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
+        r'날씨\s*(?:오늘|내일|모레|이번 주)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
+        r'weather\s*(?:today|tomorrow|day after tomorrow|this week)?\s*in\s+([a-zA-Z\s]{2,20})',
+        r'(?:오늘|내일|모레|이번 주)?\s*([a-zA-Z\s]{2,20})\s+weather'
     ]
     for pattern in city_patterns:
         match = re.search(pattern, query, re.IGNORECASE)
-        if match and match.group(0) == "오늘 날씨":
-            return "서울"
-        elif match:
+        if match:
             city = match.group(1).strip()
-            if city != "현재":
+            if city not in time_keywords and city != "현재":
                 return city
-    return "서울"
+    return "서울"  # 기본값
 
 def extract_city_from_time_query(query):
     city_patterns = [
@@ -350,7 +399,7 @@ def get_conversational_response(query, chat_history):
         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
         return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
 
-# 쿼리 타입 판단 함수 (캐싱 적용)
+# 쿼리 타입 판단 함수
 @lru_cache(maxsize=128)
 def needs_search(query):
     query_lower = query.strip().lower()
@@ -376,9 +425,12 @@ def needs_search(query):
     
     # 4. 날씨 관련 질문
     weather_keywords = ["날씨", "온도", "기온"]
-    if any(keyword in query_lower for keyword in weather_keywords) and \
-       any(forecast_word in query_lower for forecast_word in ["주간 예보", "일주일 날씨", "5일 예보"]):
-        return "forecast"
+    if any(keyword in query_lower for keyword in weather_keywords) and "내일" in query_lower:
+        return "tomorrow_weather"
+    elif any(keyword in query_lower for keyword in weather_keywords) and "모레" in query_lower:
+        return "day_after_tomorrow_weather"
+    elif any(keyword in query_lower for keyword in weather_keywords) and "이번 주" in query_lower:
+        return "weekly_forecast"
     elif any(keyword in query_lower for keyword in weather_keywords):
         return "weather"
     
@@ -457,11 +509,19 @@ def show_chat_dashboard():
                 elif query_type == "weather":
                     city = extract_city_from_query(user_prompt)
                     weather_info = get_city_weather(city)
-                    final_response = f"{weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 주간 예보 같은 것도 알려드릴 수 있어요!😄"
-                elif query_type == "forecast":
+                    final_response = f"{weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 내일 날씨나 주간 예보도 알려드릴 수 있어요!😄"
+                elif query_type == "tomorrow_weather":
                     city = extract_city_from_query(user_prompt)
-                    forecast_info = get_weekly_forecast(city)
-                    final_response = f"{forecast_info}\n\n{city} 날씨에 대해 더 궁금한 점 있으신가요?"
+                    tomorrow_weather_info = get_forecast_by_day(city, days_from_today=1)
+                    final_response = f"{tomorrow_weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 모레 날씨나 주간 예보도 알려드릴 수 있어요!😄"
+                elif query_type == "day_after_tomorrow_weather":
+                    city = extract_city_from_query(user_prompt)
+                    day_after_tomorrow_info = get_forecast_by_day(city, days_from_today=2)
+                    final_response = f"{day_after_tomorrow_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 이번 주 예보도 알려드릴 수 있어요!😄"
+                elif query_type == "weekly_forecast":
+                    city = extract_city_from_query(user_prompt)
+                    weekly_forecast_info = get_weekly_forecast(city)
+                    final_response = f"{weekly_forecast_info}\n\n{city} 날씨에 대해 더 궁금한 점 있으신가요?"
                 elif query_type == "drug":
                     drug_name = user_prompt.strip()
                     drug_info = get_drug_info(drug_name)
