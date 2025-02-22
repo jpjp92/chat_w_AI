@@ -16,7 +16,7 @@ import re
 import json
 import urllib.request
 import urllib.parse
-from langdetect import detect  # 언어 감지용 라이브러리
+from langdetect import detect
 from urllib.parse import quote
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -87,7 +87,7 @@ class WeatherAPI:
             return result
         except Exception as e:
             logger.error(f"날씨 처리 오류: {str(e)}")
-            return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
+            return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
 
     def get_forecast_by_day(self, city_name, days_from_today=1):
         cache_key = f"forecast:{city_name}:{days_from_today}"
@@ -98,7 +98,7 @@ class WeatherAPI:
         
         city_info = get_city_info(city_name)
         if not city_info:
-            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 내일 날씨 알려줘'"
+            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
         
         url = "https://api.openweathermap.org/data/2.5/forecast"
         params = {
@@ -146,7 +146,7 @@ class WeatherAPI:
         
         except Exception as e:
             logger.error(f"날씨 예보 처리 오류: {str(e)}")
-            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
+            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌"
 
     def get_weekly_forecast(self, city_name):
         cache_key = f"weekly_forecast:{city_name}"
@@ -157,7 +157,7 @@ class WeatherAPI:
         
         city_info = get_city_info(city_name)
         if not city_info:
-            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '주간 서울 날씨 알려줘'"
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
         
         url = "https://api.openweathermap.org/data/2.5/forecast"
         params = {
@@ -217,7 +217,7 @@ class WeatherAPI:
         
         except Exception as e:
             logger.error(f"주간 예보 처리 오류: {str(e)}")
-            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌"
 
 # Supabase 및 API 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -225,7 +225,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 DRUG_API_KEY = os.getenv("DRUG_API_KEY")
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
-NAVER_CLIENT_SECRET =os.getenv("NAVER_CLIENT_SECRET")  
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")  
 
 # Supabase 및 GPT 클라이언트 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -316,7 +316,7 @@ def get_city_info(city_name):
 def get_time_by_city(city_name="서울"):
     city_info = get_city_info(city_name)
     if not city_info:
-        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 시간 알려줘'"
+        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
     tf = TimezoneFinder()
     try:
         timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
@@ -326,7 +326,7 @@ def get_time_by_city(city_name="서울"):
         return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일')} {am_pm} {city_time.strftime('%I:%M')} ⏰"
     except Exception as e:
         logger.error(f"시간 처리 실패 ({city_name}): {str(e)}")
-        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 시간 알려줘'"
+        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
 
 # 의약품 검색 함수
 def get_drug_info(drug_name):
@@ -439,8 +439,10 @@ def get_naver_api_results(query):
 
     results = []
     try:
+        logger.info(f"Naver API 호출 시도: {query}, 현재 요청 횟수: {naver_request_count}")
         response = urllib.request.urlopen(request)
         naver_request_count += 1
+        logger.info(f"Naver API 호출 성공: {query}, 요청 횟수 증가 -> {naver_request_count}")
         if response.getcode() == 200:
             response_body = response.read().decode('utf-8')
             data = json.loads(response_body)
@@ -454,39 +456,35 @@ def get_naver_api_results(query):
                 date = datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %z').strftime('%Y-%m-%d') if date_str else "날짜 없음"
                 results.append({"title": title, "contents": contents, "url": url, "date": date})
     except Exception as e:
-        logger.error(f"Naver API 오류: {str(e)}, Google 검색으로 전환")
+        logger.error(f"Naver API 호출 실패: {query}, 오류: {str(e)}, Google 검색으로 전환")
         return search_and_summarize(query, num_results=5)
     
     return pd.DataFrame(results)
 
 # 웹 검색 및 요약 함수
 def search_and_summarize(query, num_results=5):
-    language = detect(query)
-    if language == 'ko' and naver_request_count < NAVER_DAILY_LIMIT:
-        return get_naver_api_results(query)
-    else:
-        logger.info(f"Google 검색 사용: {query}")
-        data = []
-        try:
-            for link in search(query, num_results=num_results):
-                try:
-                    response = requests.get(link, timeout=5)
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    title = soup.title.get_text() if soup.title else "No title"
-                    description = ' '.join([p.get_text() for p in soup.find_all('p')[:3]])
-                    data.append({
-                        "keyword": query,
-                        "link": link,
-                        "title": title,
-                        "contents": description[:500]
-                    })
-                except Exception as e:
-                    logger.error(f"개별 검색 결과 처리 중 오류: {str(e)}")
-                    continue
-            return pd.DataFrame(data)
-        except Exception as e:
-            logger.error(f"Google 검색 중 오류 발생: {str(e)}")
-            return pd.DataFrame()
+    logger.info(f"Google 검색 사용: {query}")
+    data = []
+    try:
+        for link in search(query, num_results=num_results):
+            try:
+                response = requests.get(link, timeout=5)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                title = soup.title.get_text() if soup.title else "No title"
+                description = ' '.join([p.get_text() for p in soup.find_all('p')[:3]])
+                data.append({
+                    "keyword": query,
+                    "link": link,
+                    "title": title,
+                    "contents": description[:500]
+                })
+            except Exception as e:
+                logger.error(f"개별 검색 결과 처리 중 오류: {str(e)}")
+                continue
+        return pd.DataFrame(data)
+    except Exception as e:
+        logger.error(f"Google 검색 중 오류 발생: {str(e)}")
+        return pd.DataFrame()
 
 def get_ai_summary(search_results):
     if search_results.empty:
@@ -602,52 +600,50 @@ def show_chat_dashboard():
             try:
                 start_time = time.time()
                 query_type = needs_search(user_prompt)
-                
+                base_response = ""
+
                 if query_type == "mbti":
-                    final_response = (
+                    base_response = (
                         "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n\n"
                         "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n\n"
-                        "이 사이트는 16가지 성격 유형을 기반으로 한 간단하고 재미있는 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡\n\n"
-                        "혹시 MBTI에 대해 더 궁금한 점이 있나요?"
+                        "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡"
                     )
                 elif query_type == "multi_iq":
-                    final_response = (
+                    base_response = (
                         "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n\n"
                         "[Multi IQ Test](https://multiiqtest.com/) 🚀\n\n"
-                        "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 언어, 논리, 공간 등 다양한 지능 영역을 평가해줍니다! 📚✨\n\n"
-                        "테스트 결과에 대해 이야기하고 싶으신가요?"
+                        "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
                     )
                 elif query_type == "time":
                     city = extract_city_from_time_query(user_prompt)
-                    time_info = get_time_by_city(city)
-                    final_response = f"{time_info}\n\n혹시 {city}의 다른 정보도 궁금하시면 말씀해주세요!😄"
+                    base_response = get_time_by_city(city)
                 elif query_type == "weather":
                     city = extract_city_from_query(user_prompt)
-                    weather_info = weather_api.get_city_weather(city)
-                    final_response = f"{weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 내일 날씨나 주간 예보도 알려드릴 수 있어요! 예: '주간 서울 날씨 알려줘'😄"
+                    base_response = weather_api.get_city_weather(city)
                 elif query_type == "tomorrow_weather":
                     city = extract_city_from_query(user_prompt)
-                    tomorrow_weather_info = weather_api.get_forecast_by_day(city, days_from_today=1)
-                    final_response = f"{tomorrow_weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 모레 날씨나 주간 예보도 알려드릴 수 있어요! 예: '주간 서울 날씨 알려줘'😄"
+                    base_response = weather_api.get_forecast_by_day(city, days_from_today=1)
                 elif query_type == "day_after_tomorrow_weather":
                     city = extract_city_from_query(user_prompt)
-                    day_after_tomorrow_info = weather_api.get_forecast_by_day(city, days_from_today=2)
-                    final_response = f"{day_after_tomorrow_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 이번 주 예보도 알려드릴 수 있어요! 예: '주간 서울 날씨 알려줘'😄"
+                    base_response = weather_api.get_forecast_by_day(city, days_from_today=2)
                 elif query_type == "weekly_forecast":
                     city = extract_city_from_query(user_prompt)
-                    weekly_forecast_info = weather_api.get_weekly_forecast(city)
-                    final_response = f"{weekly_forecast_info}\n\n{city} 날씨에 대해 더 궁금한 점 있으신가요?"
+                    base_response = weather_api.get_weekly_forecast(city)
                 elif query_type == "drug":
                     drug_name = user_prompt.strip()
-                    drug_info = get_drug_info(drug_name)
-                    final_response = f"{drug_info}\n\n이 약에 대해 더 궁금한 점 있으신가요? 복용법이나 부작용에 대해 추가로 물어보셔도 돼요!"
+                    base_response = get_drug_info(drug_name)
                 elif query_type == "conversation":
-                    final_response = get_conversational_response(user_prompt, st.session_state.chat_history)
+                    base_response = get_conversational_response(user_prompt, st.session_state.chat_history)
                 elif query_type == "search":
                     search_results = search_and_summarize(user_prompt)
-                    summary = get_ai_summary(search_results)
-                    final_response = summary
-                
+                    base_response = get_ai_summary(search_results)
+
+                # 대화 맥락을 반영한 최종 응답 생성
+                final_response = get_conversational_response(
+                    f"다음 정보를 바탕으로 사용자와 대화를 이어가세요:\n\n{base_response}\n\n사용자 질문: {user_prompt}",
+                    st.session_state.chat_history
+                )
+
                 end_time = time.time()
                 time_taken = round(end_time - start_time, 2)
                 
