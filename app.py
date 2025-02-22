@@ -13,10 +13,208 @@ from googlesearch import search
 from g4f.client import Client
 from timezonefinder import TimezoneFinder
 import re
+import json
 from urllib.parse import quote
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from functools import lru_cache
+from typing import Dict, Any
+
+# 캐시 클래스 정의
+class MemoryCache:
+    def __init__(self):
+        self.cache: Dict[str, Any] = {}
+        self.expiry: Dict[str, float] = {}
+    
+    def get(self, key: str) -> Any:
+        if key in self.cache:
+            if time.time() < self.expiry[key]:
+                return self.cache[key]
+            else:
+                del self.cache[key]
+                del self.expiry[key]
+        return None
+    
+    def setex(self, key: str, ttl: int, value: Any):
+        self.cache[key] = value
+        self.expiry[key] = time.time() + ttl
+
+# WeatherAPI 클래스 정의
+class WeatherAPI:
+    def __init__(self, cache_ttl=600):
+        self.cache = MemoryCache()
+        self.cache_ttl = cache_ttl
+
+    def get_city_weather(self, city_name):
+        cache_key = f"weather:{city_name}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data:
+            logger.info(f"Cache hit for {cache_key}")
+            return cached_data
+        
+        city_info = get_city_info(city_name)
+        if not city_info:
+            return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
+        
+        url = "https://api.openweathermap.org/data/2.5/weather"
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+        session = requests.Session()
+        retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        try:
+            response = session.get(url, params=params, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+            weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
+            display_name = f"{data['name']}, {data['sys']['country']}"
+            result = (
+                f"현재 {display_name} 날씨 정보 {weather_emoji}\n\n"
+                f"날씨: {data['weather'][0]['description']}\n"
+                f"현재 온도: {data['main']['temp']}°C 🌡️\n"
+                f"체감 온도: {data['main']['feels_like']}°C 🤔\n"
+                f"최저 온도: {data['main']['temp_min']}°C ⬇️\n"
+                f"최고 온도: {data['main']['temp_max']}°C ⬆️\n"
+                f"습도: {data['main']['humidity']}% 💧\n"
+                f"풍속: {data['wind']['speed']}m/s 🌪️"
+            )
+            self.cache.setex(cache_key, self.cache_ttl, result)
+            logger.info(f"Cache set for {cache_key}")
+            return result
+        except Exception as e:
+            logger.error(f"날씨 처리 오류: {str(e)}")
+            return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
+
+    def get_forecast_by_day(self, city_name, days_from_today=1):
+        cache_key = f"forecast:{city_name}:{days_from_today}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data:
+            logger.info(f"Cache hit for {cache_key}")
+            return cached_data
+        
+        city_info = get_city_info(city_name)
+        if not city_info:
+            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 내일 날씨 알려줘'"
+        
+        url = "https://api.openweathermap.org/data/2.5/forecast"
+        params = {
+            'lat': city_info["lat"],
+            'lon': city_info["lon"],
+            'appid': WEATHER_API_KEY,
+            'units': 'metric',
+            'lang': 'kr'
+        }
+        session = requests.Session()
+        retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        
+        try:
+            response = session.get(url, params=params, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            
+            target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
+            forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
+            weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+            
+            found = False
+            for forecast in data['list']:
+                dt = datetime.fromtimestamp(forecast['dt'])
+                date_only = dt.strftime('%Y-%m-%d')
+                if date_only == target_date:
+                    found = True
+                    time_only = dt.strftime('%H:%M')
+                    weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
+                    forecast_text += (
+                        f"⏰ {time_only}  {forecast['weather'][0]['description']} {weather_emoji}  "
+                        f"{forecast['main']['temp']}°C  💧{forecast['main']['humidity']}%  🌬️{forecast['wind']['speed']}m/s\n"
+                    )
+            
+            if not found:
+                result = f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다. ❌"
+            else:
+                result = forecast_text.strip()
+            
+            self.cache.setex(cache_key, self.cache_ttl, result)
+            logger.info(f"Cache set for {cache_key}")
+            return result
+        
+        except Exception as e:
+            logger.error(f"날씨 예보 처리 오류: {str(e)}")
+            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
+
+    def get_weekly_forecast(self, city_name):
+        cache_key = f"weekly_forecast:{city_name}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data:
+            logger.info(f"Cache hit for {cache_key}")
+            return cached_data
+        
+        city_info = get_city_info(city_name)
+        if not city_info:
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 주간 예보 알려줘'"
+        
+        url = "https://api.openweathermap.org/data/2.5/forecast"
+        params = {
+            'lat': city_info["lat"],
+            'lon': city_info["lon"],
+            'appid': WEATHER_API_KEY,
+            'units': 'metric',
+            'lang': 'kr'
+        }
+        session = requests.Session()
+        retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        
+        try:
+            response = session.get(url, params=params, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            
+            today = datetime.now().date()
+            week_end = today + timedelta(days=6)  # 7일간
+            daily_forecast = {}
+            weekdays_kr = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+            today_weekday = today.weekday()
+            
+            for forecast in data['list']:
+                dt = datetime.fromtimestamp(forecast['dt']).date()
+                if today <= dt <= week_end:
+                    dt_str = dt.strftime('%Y-%m-%d')
+                    if dt_str not in daily_forecast:
+                        weekday_idx = (today_weekday + (dt - today).days) % 7
+                        daily_forecast[dt_str] = {
+                            'weekday': weekdays_kr[weekday_idx],
+                            'temp_min': forecast['main']['temp_min'],
+                            'temp_max': forecast['main']['temp_max'],
+                            'weather': forecast['weather'][0]['description']
+                        }
+                    else:
+                        daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], forecast['main']['temp_min'])
+                        daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], forecast['main']['temp_max'])
+            
+            today_str = today.strftime('%Y-%m-%d')
+            today_weekday_str = weekdays_kr[today_weekday]
+            forecast_text = f"{today_str}({today_weekday_str}) 기준 {city_info['name']}의 주간 날씨 예보 🌤️\n\n"
+            weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+            
+            for date, info in daily_forecast.items():
+                weather_emoji = weather_emojis.get(info['weather'].split()[0], '🌤️')  # 첫 단어로 이모지 매핑
+                forecast_text += (
+                    f"{info['weekday']}: {info['weather']} {weather_emoji}  "
+                    f"최저 {info['temp_min']}°C  최고 {info['temp_max']}°C\n"
+                )
+            
+            self.cache.setex(cache_key, self.cache_ttl, forecast_text)
+            logger.info(f"Cache set for {cache_key}")
+            return forecast_text
+        
+        except Exception as e:
+            logger.error(f"주간 예보 처리 오류: {str(e)}")
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
 
 # Supabase 및 API 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -27,6 +225,9 @@ DRUG_API_KEY = os.getenv("DRUG_API_KEY")
 # Supabase 및 GPT 클라이언트 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = Client()
+
+# WeatherAPI 인스턴스 생성
+weather_api = WeatherAPI(cache_ttl=600)
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -102,134 +303,6 @@ def get_city_info(city_name):
     except Exception as e:
         logger.error(f"Geocoding 실패 ({city_name}): {str(e)}")
         return None
-
-# 날씨 함수
-def get_city_weather(city_name):
-    city_info = get_city_info(city_name)
-    if not city_info:
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
-    url = "https://api.openweathermap.org/data/2.5/weather"
-    params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-    session = requests.Session()
-    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("https://", adapter)
-    try:
-        response = session.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-        weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
-        display_name = f"{data['name']}, {data['sys']['country']}"
-        return (
-            f"현재 {display_name} 날씨 정보 {weather_emoji}\n\n"
-            f"날씨: {data['weather'][0]['description']}\n"
-            f"현재 온도: {data['main']['temp']}°C 🌡️\n"
-            f"체감 온도: {data['main']['feels_like']}°C 🤔\n"
-            f"최저 온도: {data['main']['temp_min']}°C ⬇️\n"
-            f"최고 온도: {data['main']['temp_max']}°C ⬆️\n"
-            f"습도: {data['main']['humidity']}% 💧\n"
-            f"풍속: {data['wind']['speed']}m/s 🌪️"
-        )
-    except Exception as e:
-        logger.error(f"날씨 처리 오류: {str(e)}")
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
-
-def get_forecast_by_day(city_name, days_from_today=1):
-    city_info = get_city_info(city_name)
-    if not city_info:
-        return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 내일 날씨 알려줘'"
-    
-    url = "https://api.openweathermap.org/data/2.5/forecast"
-    params = {
-        'lat': city_info["lat"],
-        'lon': city_info["lon"],
-        'appid': WEATHER_API_KEY,
-        'units': 'metric',
-        'lang': 'kr'
-    }
-    session = requests.Session()
-    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("https://", adapter)
-    
-    try:
-        response = session.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        
-        target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
-        forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
-        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-        
-        found = False
-        for forecast in data['list']:
-            dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d %H:%M')
-            date_only = dt.split()[0]
-            if date_only == target_date:
-                found = True
-                weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
-                forecast_text += (
-                    f"{dt}: {forecast['weather'][0]['description']} {weather_emoji}\n"
-                    f"온도: {forecast['main']['temp']}°C, 습도: {forecast['main']['humidity']}%, 풍속: {forecast['wind']['speed']}m/s\n\n"
-                )
-        
-        if not found:
-            return f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다. ❌"
-        return forecast_text.strip()
-    
-    except Exception as e:
-        logger.error(f"날씨 예보 처리 오류: {str(e)}")
-        return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
-
-def get_weekly_forecast(city_name):
-    city_info = get_city_info(city_name)
-    if not city_info:
-        return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 주간 예보 알려줘'"
-    
-    url = "https://api.openweathermap.org/data/2.5/forecast"
-    params = {
-        'lat': city_info["lat"],
-        'lon': city_info["lon"],
-        'appid': WEATHER_API_KEY,
-        'units': 'metric',
-        'lang': 'kr'
-    }
-    session = requests.Session()
-    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("https://", adapter)
-    
-    try:
-        response = session.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        
-        today = datetime.now().date()
-        week_end = today + timedelta(days=6 - today.weekday())  # 이번 주 일요일까지
-        daily_forecast = {}
-        for forecast in data['list']:
-            dt = datetime.fromtimestamp(forecast['dt']).date()
-            if today <= dt <= week_end:
-                dt_str = dt.strftime('%Y-%m-%d')
-                if dt_str not in daily_forecast:
-                    daily_forecast[dt_str] = {
-                        'temp_min': forecast['main']['temp_min'],
-                        'temp_max': forecast['main']['temp_max'],
-                        'weather': forecast['weather'][0]['description']
-                    }
-                else:
-                    daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], forecast['main']['temp_min'])
-                    daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], forecast['main']['temp_max'])
-        
-        forecast_text = f"{city_info['name']}의 이번 주 날씨 예보 🌤️\n\n"
-        for date, info in daily_forecast.items():
-            forecast_text += f"{date}: {info['weather']}, 최저 {info['temp_min']}°C, 최고 {info['temp_max']}°C\n"
-        return forecast_text
-    
-    except Exception as e:
-        logger.error(f"주간 예보 처리 오류: {str(e)}")
-        return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
 
 def get_time_by_city(city_name="서울"):
     city_info = get_city_info(city_name)
@@ -312,7 +385,7 @@ def get_drug_info(drug_name):
 
 # 도시명 및 쿼리 추출 함수
 def extract_city_from_query(query):
-    time_keywords = ["오늘", "내일", "모레", "이번 주"]  # 시간 키워드 제외
+    time_keywords = ["오늘", "내일", "모레", "이번 주"]
     city_patterns = [
         r'(?:오늘|내일|모레|이번 주)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
         r'(?:오늘|내일|모레|이번 주)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
@@ -326,7 +399,7 @@ def extract_city_from_query(query):
             city = match.group(1).strip()
             if city not in time_keywords and city != "현재":
                 return city
-    return "서울"  # 기본값
+    return "서울"
 
 def extract_city_from_time_query(query):
     city_patterns = [
@@ -404,7 +477,6 @@ def get_conversational_response(query, chat_history):
 def needs_search(query):
     query_lower = query.strip().lower()
     
-    # 1. 인사말 및 감정 표현 필터링
     greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬롱", "하잇", "헤이요", "왓업", "왓썹", "에이요"]
     emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다", "화남", "열받음", "짜증남", "피곤함"]
     if any(greeting in query_lower for greeting in greeting_keywords) or \
@@ -412,18 +484,15 @@ def needs_search(query):
        len(query_lower) <= 3 and "?" not in query_lower:
         return "conversation"
     
-    # 2. 의도 키워드 체크
     intent_keywords = ["추천해줘", "뭐 먹을까", "메뉴", "뭐할까"]
     if any(kw in query_lower for kw in intent_keywords):
         return "conversation"
     
-    # 3. 시간 관련 질문
     time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
     if any(keyword in query_lower for keyword in time_keywords) and \
        any(timeword in query_lower for timeword in ["시간", "몇시", "몇 시", "시계"]):
         return "time"
     
-    # 4. 날씨 관련 질문
     weather_keywords = ["날씨", "온도", "기온"]
     if any(keyword in query_lower for keyword in weather_keywords) and "내일" in query_lower:
         return "tomorrow_weather"
@@ -434,13 +503,11 @@ def needs_search(query):
     elif any(keyword in query_lower for keyword in weather_keywords):
         return "weather"
     
-    # 5. 의약품 관련 질문
     drug_keywords = ["약", "의약품", "약품"]
     drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)$'
     if any(keyword in query_lower for keyword in drug_keywords) or re.match(drug_pattern, query_lower):
         return "drug"
     
-    # 6. 특수 요청
     if query_lower == "mbti 검사":
         return "mbti"
     if query_lower == "다중지능 검사":
@@ -508,19 +575,19 @@ def show_chat_dashboard():
                     final_response = f"{time_info}\n\n혹시 {city}의 다른 정보도 궁금하시면 말씀해주세요!😄"
                 elif query_type == "weather":
                     city = extract_city_from_query(user_prompt)
-                    weather_info = get_city_weather(city)
+                    weather_info = weather_api.get_city_weather(city)
                     final_response = f"{weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 내일 날씨나 주간 예보도 알려드릴 수 있어요!😄"
                 elif query_type == "tomorrow_weather":
                     city = extract_city_from_query(user_prompt)
-                    tomorrow_weather_info = get_forecast_by_day(city, days_from_today=1)
+                    tomorrow_weather_info = weather_api.get_forecast_by_day(city, days_from_today=1)
                     final_response = f"{tomorrow_weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 모레 날씨나 주간 예보도 알려드릴 수 있어요!😄"
                 elif query_type == "day_after_tomorrow_weather":
                     city = extract_city_from_query(user_prompt)
-                    day_after_tomorrow_info = get_forecast_by_day(city, days_from_today=2)
+                    day_after_tomorrow_info = weather_api.get_forecast_by_day(city, days_from_today=2)
                     final_response = f"{day_after_tomorrow_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 이번 주 예보도 알려드릴 수 있어요!😄"
                 elif query_type == "weekly_forecast":
                     city = extract_city_from_query(user_prompt)
-                    weekly_forecast_info = get_weekly_forecast(city)
+                    weekly_forecast_info = weather_api.get_weekly_forecast(city)
                     final_response = f"{weekly_forecast_info}\n\n{city} 날씨에 대해 더 궁금한 점 있으신가요?"
                 elif query_type == "drug":
                     drug_name = user_prompt.strip()
