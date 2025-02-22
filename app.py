@@ -1,4 +1,3 @@
-# 라이브러리 설정
 import streamlit as st
 import time
 import uuid
@@ -107,7 +106,7 @@ def get_city_info(city_name):
 def get_city_weather(city_name):
     city_info = get_city_info(city_name)
     if not city_info:
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
     url = "https://api.openweathermap.org/data/2.5/weather"
     params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
     session = requests.Session()
@@ -133,12 +132,12 @@ def get_city_weather(city_name):
         )
     except Exception as e:
         logger.error(f"날씨 처리 오류: {str(e)}")
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌"
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
 
 def get_time_by_city(city_name="서울"):
     city_info = get_city_info(city_name)
     if not city_info:
-        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
+        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 시간 알려줘'"
     tf = TimezoneFinder()
     try:
         timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
@@ -148,7 +147,7 @@ def get_time_by_city(city_name="서울"):
         return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일')} {am_pm} {city_time.strftime('%I:%M')} ⏰"
     except Exception as e:
         logger.error(f"시간 처리 실패 ({city_name}): {str(e)}")
-        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
+        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 시간 알려줘'"
 
 # 의약품 검색 함수
 def get_drug_info(drug_name):
@@ -182,8 +181,6 @@ def get_drug_info(drug_name):
             atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
             use_method_raw = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)
             atpn_raw = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', atpn_raw)
-            logger.info(f"원문 useMethodQesitm: {item.get('useMethodQesitm', '정보 없음')}")
-            logger.info(f"후처리 use_method_raw: {use_method_raw}")
             use_method = use_method_raw.replace('. ', '.\n')
             atpn = atpn_raw.replace('. ', '.\n')
             return (
@@ -217,21 +214,24 @@ def get_drug_info(drug_name):
         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
 
 # 도시명 및 쿼리 추출 함수
-def extract_city_from_query(query):
+def extract_city_from_query(query):  # "오늘 날씨" 처리 추가
     city_patterns = [
         r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
         r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
         r'날씨\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
         r'weather\s+in\s+([a-zA-Z\s]{2,20})',
-        r'([a-zA-Z\s]{2,20})\s+weather'
+        r'([a-zA-Z\s]{2,20})\s+weather',
+        r'오늘\s*날씨'  # "오늘 날씨" 기본값으로 서울
     ]
     for pattern in city_patterns:
         match = re.search(pattern, query, re.IGNORECASE)
-        if match:
+        if match and match.group(0) == "오늘 날씨":
+            return "서울"  # 기본 도시 설정
+        elif match:
             city = match.group(1).strip()
             if city != "현재":
                 return city
-    return "서울"
+    return "서울"  # 기본 도시 설정
 
 def extract_city_from_time_query(query):
     city_patterns = [
@@ -245,7 +245,7 @@ def extract_city_from_time_query(query):
             city = match.group(1).strip()
             if city != "현재":
                 return city
-    return "서울"
+    return "서울"  # 기본 도시 설정
 
 # 웹 검색 및 요약 함수
 def search_and_summarize(query, num_results=5):
@@ -290,12 +290,10 @@ def get_ai_summary(search_results):
 
 # 대화형 응답 생성 함수
 def get_conversational_response(query, chat_history):
-    # 대화 기록을 메시지 형식으로 변환
     messages = [{"role": "system", "content": "당신은 친절하고 상호작용적인 AI 챗봇입니다. 사용자의 질문에 답하고, 필요하면 추가 질문을 던져 대화를 이어가세요."}]
-    for msg in chat_history[-5:]:  # 최근 5개 메시지만 포함해 컨텍스트 유지
+    for msg in chat_history[-5:]:
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": query})
-    
     try:
         response = client.chat.completions.create(
             model="gpt-4",
@@ -306,29 +304,47 @@ def get_conversational_response(query, chat_history):
         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
         return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
 
-# 쿼리 타입 판단 함수
+# 쿼리 타입 판단 함수 (개선됨)
 def needs_search(query):
-    time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
-    weather_keywords = ["날씨", "온도", "기온"]
-    drug_keywords = ["약", "의약품", "약품"]
-    
     query_lower = query.strip().lower()
     
+    # 1. 인사말 및 감정 표현 필터링
+    greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬로", "반가웡", "앗뇽"]
+    emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다","기운없다"]
+    if any(greeting in query_lower for greeting in greeting_keywords) or \
+       any(emo in query_lower for emo in emotion_keywords) or \
+       len(query_lower) <= 3 and "?" not in query_lower:  # 짧고 질문 아닌 경우
+        return "conversation"
+    
+    # 2. 의도 키워드 체크 (추천, 메뉴 등 대화로 처리)
+    intent_keywords = ["추천해줘", "뭐 먹을까", "메뉴", "뭐할까"]
+    if any(kw in query_lower for kw in intent_keywords):
+        return "conversation"
+    
+    # 3. 시간 관련 질문
+    time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
+    if any(keyword in query_lower for keyword in time_keywords) and \
+       any(timeword in query_lower for timeword in ["시간", "몇시", "몇 시", "시계"]):
+        return "time"
+    
+    # 4. 날씨 관련 질문
+    weather_keywords = ["날씨", "온도", "기온"]
+    if any(keyword in query_lower for keyword in weather_keywords):
+        return "weather"
+    
+    # 5. 의약품 관련 질문 (조건 강화)
+    drug_keywords = ["약", "의약품", "약품"]
+    drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)$'  # 약 이름 패턴 엄격화
+    if any(keyword in query_lower for keyword in drug_keywords) or re.match(drug_pattern, query_lower):
+        return "drug"
+    
+    # 6. 특수 요청 (MBTI, 다중지능)
     if query_lower == "mbti 검사":
         return "mbti"
     if query_lower == "다중지능 검사":
         return "multi_iq"
-    if any(keyword in query_lower for keyword in time_keywords):
-        if any(timeword in query_lower for timeword in ["시간", "몇시", "몇 시", "시계"]):
-            return "time"
-    if any(keyword in query_lower for keyword in weather_keywords):
-        return "weather"
-    drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)?$'
-    if (any(keyword in query_lower for keyword in drug_keywords) or 
-        query_lower.endswith("약") or 
-        re.match(drug_pattern, query_lower)):
-        return "drug"
-    return "conversation"  # 기본적으로 대화형으로 처리
+    
+    return "conversation"  # 기본적으로 대화형 처리
 
 # 로그인 및 대시보드 함수
 def show_login_page():
