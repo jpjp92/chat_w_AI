@@ -561,6 +561,34 @@ def needs_search(query):
     
     return "search"  # 기본적으로 검색으로 처리
 
+
+# 대화형 응답 캐싱 추가
+@lru_cache(maxsize=128)
+def get_cached_conversational_response(query, chat_history_tuple):
+    chat_history = list(chat_history_tuple)  # 튜플을 리스트로 변환
+    messages = [{"role": "system", "content": "당신은 친절하고 상호작용적인 AI 챗봇입니다. 사용자의 질문에 답하고, 필요하면 추가 질문을 던져 대화를 이어가세요."}]
+    for msg in chat_history[-5:]:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({"role": "user", "content": query})
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=messages
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"대화 응답 생성 중 오류: {str(e)}")
+        return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
+
+# 단순 인사에 대한 미리 정의된 응답
+GREETING_RESPONSES = {
+    "안녕": "안녕하세요! 반갑습니다! 😊",
+    "안녕 반가워": "안녕하세요! 저도 반갑습니다! 오늘 기분이 어떠신가요? 😄",
+    "하이": "하이! 좋은 하루 보내세요! 😊",
+}
+
+
+
 # 로그인 및 대시보드 함수
 def show_login_page():
     st.title("로그인 🤗")
@@ -633,19 +661,33 @@ def show_chat_dashboard():
                     drug_name = user_prompt.strip()
                     base_response = get_drug_info(drug_name)
                 elif query_type == "conversation":
-                    base_response = get_conversational_response(user_prompt, st.session_state.chat_history)
-                elif query_type == "search":
-                    search_results = search_and_summarize(user_prompt)
+                    # 단순 인사면 미리 정의된 응답 사용
+                    if user_prompt.strip() in GREETING_RESPONSES:
+                        base_response = GREETING_RESPONSES[user_prompt.strip()]
+                    else:
+                        base_response = get_cached_conversational_response(user_prompt, tuple(st.session_state.chat_history))
+                elif query_type == "web_search":
+                    language = detect(user_prompt)
+                    if language == 'ko' and naver_request_count < NAVER_DAILY_LIMIT:
+                        search_results = get_naver_api_results(user_prompt)
+                    else:
+                        search_results = search_and_summarize(user_prompt)
                     base_response = get_ai_summary(search_results)
+                elif query_type == "general_query":
+                    base_response = get_cached_conversational_response(user_prompt, tuple(st.session_state.chat_history))
 
-                # 대화 맥락을 반영한 최종 응답 생성
-                final_response = get_conversational_response(
-                    f"다음 정보를 바탕으로 사용자와 대화를 이어가세요:\n\n{base_response}\n\n사용자 질문: {user_prompt}",
-                    st.session_state.chat_history
-                )
+                # 대화 맥락 반영 (conversation/general_query가 아닌 경우에만 추가 호출)
+                if query_type in ["conversation", "general_query"]:
+                    final_response = base_response
+                else:
+                    final_response = get_cached_conversational_response(
+                        f"다음 정보를 바탕으로 사용자와 대화를 이어가세요:\n\n{base_response}\n\n사용자 질문: {user_prompt}",
+                        tuple(st.session_state.chat_history)
+                    )
 
                 end_time = time.time()
                 time_taken = round(end_time - start_time, 2)
+                logger.info(f"응답 생성 완료: {user_prompt}, 소요 시간: {time_taken}초")
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": final_response})
                 message_placeholder.markdown(final_response, unsafe_allow_html=True)
@@ -655,7 +697,6 @@ def show_chat_dashboard():
                 logger.error(error_message)
                 message_placeholder.markdown(error_message)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_message})
-
 # 메인 실행
 def main():
     init_session_state()
