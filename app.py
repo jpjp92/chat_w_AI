@@ -16,6 +16,7 @@ import re
 from urllib.parse import quote
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+from functools import lru_cache  # 캐싱을 위해 추가
 
 # Supabase 및 API 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -214,24 +215,24 @@ def get_drug_info(drug_name):
         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
 
 # 도시명 및 쿼리 추출 함수
-def extract_city_from_query(query):  # "오늘 날씨" 처리 추가
+def extract_city_from_query(query):
     city_patterns = [
         r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
         r'([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
         r'날씨\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
         r'weather\s+in\s+([a-zA-Z\s]{2,20})',
         r'([a-zA-Z\s]{2,20})\s+weather',
-        r'오늘\s*날씨'  # "오늘 날씨" 기본값으로 서울
+        r'오늘\s*날씨'
     ]
     for pattern in city_patterns:
         match = re.search(pattern, query, re.IGNORECASE)
         if match and match.group(0) == "오늘 날씨":
-            return "서울"  # 기본 도시 설정
+            return "서울"
         elif match:
             city = match.group(1).strip()
             if city != "현재":
                 return city
-    return "서울"  # 기본 도시 설정
+    return "서울"
 
 def extract_city_from_time_query(query):
     city_patterns = [
@@ -245,7 +246,7 @@ def extract_city_from_time_query(query):
             city = match.group(1).strip()
             if city != "현재":
                 return city
-    return "서울"  # 기본 도시 설정
+    return "서울"
 
 # 웹 검색 및 요약 함수
 def search_and_summarize(query, num_results=5):
@@ -278,7 +279,7 @@ def get_ai_summary(search_results):
     context = "\n\n".join([f"출처: {row['title']}\n내용: {row['description']}" for _, row in search_results.iterrows()])
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[{"role": "user", "content": f"다음 검색 결과를 분석하고, 핵심 내용을 2~3문장으로 요약해주세요:\n\n{context}"}]
         )
         summary = response.choices[0].message.content
@@ -304,19 +305,20 @@ def get_conversational_response(query, chat_history):
         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
         return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
 
-# 쿼리 타입 판단 함수 (개선됨)
+# 쿼리 타입 판단 함수 (캐싱 적용)
+@lru_cache(maxsize=128)  # 캐싱 추가, 최대 128개 항목 저장
 def needs_search(query):
     query_lower = query.strip().lower()
     
     # 1. 인사말 및 감정 표현 필터링
-    greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬로", "반가웡", "앗뇽"]
-    emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다","기운없다"]
+    greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해","헬롱","하잇","헤이요","왓업","왓썹","에이요"]
+    emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다","화남","열받음","짜증남","피곤함"]
     if any(greeting in query_lower for greeting in greeting_keywords) or \
        any(emo in query_lower for emo in emotion_keywords) or \
-       len(query_lower) <= 3 and "?" not in query_lower:  # 짧고 질문 아닌 경우
+       len(query_lower) <= 3 and "?" not in query_lower:
         return "conversation"
     
-    # 2. 의도 키워드 체크 (추천, 메뉴 등 대화로 처리)
+    # 2. 의도 키워드 체크
     intent_keywords = ["추천해줘", "뭐 먹을까", "메뉴", "뭐할까"]
     if any(kw in query_lower for kw in intent_keywords):
         return "conversation"
@@ -332,19 +334,19 @@ def needs_search(query):
     if any(keyword in query_lower for keyword in weather_keywords):
         return "weather"
     
-    # 5. 의약품 관련 질문 (조건 강화)
+    # 5. 의약품 관련 질문
     drug_keywords = ["약", "의약품", "약품"]
-    drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)$'  # 약 이름 패턴 엄격화
+    drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)$'
     if any(keyword in query_lower for keyword in drug_keywords) or re.match(drug_pattern, query_lower):
         return "drug"
     
-    # 6. 특수 요청 (MBTI, 다중지능)
+    # 6. 특수 요청
     if query_lower == "mbti 검사":
         return "mbti"
     if query_lower == "다중지능 검사":
         return "multi_iq"
     
-    return "conversation"  # 기본적으로 대화형 처리
+    return "conversation"
 
 # 로그인 및 대시보드 함수
 def show_login_page():
@@ -403,11 +405,11 @@ def show_chat_dashboard():
                 elif query_type == "time":
                     city = extract_city_from_time_query(user_prompt)
                     time_info = get_time_by_city(city)
-                    final_response = f"{time_info}\n\n혹시 {city}의 다른 정보도 궁금하시면 말씀해주세요!"
+                    final_response = f"{time_info}\n\n혹시 {city}의 다른 정보도 궁금하시면 말씀해주세요!😄"
                 elif query_type == "weather":
                     city = extract_city_from_query(user_prompt)
                     weather_info = get_city_weather(city)
-                    final_response = f"{weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 주간 예보 같은 것도 알려드릴 수 있어요!"
+                    final_response = f"{weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 주간 예보 같은 것도 알려드릴 수 있어요!😄"
                 elif query_type == "drug":
                     drug_name = user_prompt.strip()
                     drug_info = get_drug_info(drug_name)
@@ -417,7 +419,7 @@ def show_chat_dashboard():
                 else:
                     search_results = search_and_summarize(user_prompt)
                     summary = get_ai_summary(search_results)
-                    final_response = f"{summary}\n\n이 주제에 대해 더 이야기하고 싶으신가요? 궁금한 점이 있으면 언제든 물어보세요!"
+                    final_response = f"{summary}\n\n이 주제에 대해 더 이야기하고 싶으신가요? 궁금한 점이 있으면 언제든 물어보세요!😄"
                 
                 end_time = time.time()
                 time_taken = round(end_time - start_time, 2)
