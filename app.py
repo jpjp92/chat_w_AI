@@ -22,6 +22,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from functools import lru_cache
 from typing import Dict, Any
+import threading
 
 # 캐시 클래스 정의
 class MemoryCache:
@@ -285,7 +286,12 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
         }).execute()
     except Exception as e:
         logger.error(f"채팅 기록 저장 중 오류 발생: {str(e)}")
-        st.error("채팅 기록 저장 중 오류가 발생했습니다.")
+
+def async_save_chat_history(user_id, session_id, question, answer, time_taken):
+    def save():
+        save_chat_history(user_id, session_id, question, answer, time_taken)
+    thread = threading.Thread(target=save)
+    thread.start()
 
 # OpenWeather Geocoding API로 도시 정보 가져오기
 def get_city_info(city_name):
@@ -502,8 +508,10 @@ def get_ai_summary(search_results):
         logger.error(f"AI 요약 중 오류 발생: {str(e)}")
         return "검색 결과 요약 중 오류가 발생했습니다. ❌"
 
-# 대화형 응답 생성 함수
-def get_conversational_response(query, chat_history):
+# 대화형 응답 생성 함수 (캐싱 적용)
+@lru_cache(maxsize=128)
+def get_cached_conversational_response(query, chat_history_tuple):
+    chat_history = list(chat_history_tuple)  # 튜플을 리스트로 변환
     messages = [{"role": "system", "content": "당신은 친절하고 상호작용적인 AI 챗봇입니다. 사용자의 질문에 답하고, 필요하면 추가 질문을 던져 대화를 이어가세요."}]
     for msg in chat_history[-5:]:
         messages.append({"role": msg["role"], "content": msg["content"]})
@@ -517,6 +525,13 @@ def get_conversational_response(query, chat_history):
     except Exception as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
         return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
+
+# 단순 인사에 대한 미리 정의된 응답
+GREETING_RESPONSES = {
+    "안녕": "안녕하세요! 반갑습니다! 😊",
+    "안녕 반가워": "안녕하세요! 저도 반갑습니다! 오늘 기분이 어떠신가요? 😄",
+    "하이": "하이! 좋은 하루 보내세요! 😊",
+}
 
 # 쿼리 타입 판단 함수
 @lru_cache(maxsize=128)
@@ -559,35 +574,11 @@ def needs_search(query):
     if query_lower == "다중지능 검사":
         return "multi_iq"
     
-    return "search"  # 기본적으로 검색으로 처리
-
-
-# 대화형 응답 캐싱 추가
-@lru_cache(maxsize=128)
-def get_cached_conversational_response(query, chat_history_tuple):
-    chat_history = list(chat_history_tuple)  # 튜플을 리스트로 변환
-    messages = [{"role": "system", "content": "당신은 친절하고 상호작용적인 AI 챗봇입니다. 사용자의 질문에 답하고, 필요하면 추가 질문을 던져 대화를 이어가세요."}]
-    for msg in chat_history[-5:]:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": query})
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=messages
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        logger.error(f"대화 응답 생성 중 오류: {str(e)}")
-        return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
-
-# 단순 인사에 대한 미리 정의된 응답
-GREETING_RESPONSES = {
-    "안녕": "안녕하세요! 반갑습니다! 😊",
-    "안녕 반가워": "안녕하세요! 저도 반갑습니다! 오늘 기분이 어떠신가요? 😄",
-    "하이": "하이! 좋은 하루 보내세요! 😊",
-}
-
-
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지"]
+    if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
+        return "web_search"
+    
+    return "general_query"  # 나머지는 일반 질문으로 처리
 
 # 로그인 및 대시보드 함수
 def show_login_page():
@@ -661,7 +652,6 @@ def show_chat_dashboard():
                     drug_name = user_prompt.strip()
                     base_response = get_drug_info(drug_name)
                 elif query_type == "conversation":
-                    # 단순 인사면 미리 정의된 응답 사용
                     if user_prompt.strip() in GREETING_RESPONSES:
                         base_response = GREETING_RESPONSES[user_prompt.strip()]
                     else:
@@ -691,12 +681,13 @@ def show_chat_dashboard():
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": final_response})
                 message_placeholder.markdown(final_response, unsafe_allow_html=True)
-                save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, final_response, time_taken)
+                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, final_response, time_taken)
             except Exception as e:
                 error_message = f"❌ 오류 발생: {str(e)}\n\n다시 물어보시면 최선을 다해 답변해드릴게요!"
                 logger.error(error_message)
                 message_placeholder.markdown(error_message)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_message})
+
 # 메인 실행
 def main():
     init_session_state()
