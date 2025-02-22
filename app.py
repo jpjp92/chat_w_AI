@@ -20,7 +20,6 @@ from langdetect import detect
 from urllib.parse import quote
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-from functools import lru_cache
 from typing import Dict, Any
 import threading
 
@@ -295,7 +294,7 @@ def async_save_chat_history(user_id, session_id, question, answer, time_taken):
 
 # OpenWeather Geocoding API로 도시 정보 가져오기
 def get_city_info(city_name):
-    url = "https://api.openweathermap.org/geo/1.0/direct"
+    url = "http://api.openweathermap.org/geo/1.0/direct"
     params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
     session = requests.Session()
     retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
@@ -509,9 +508,14 @@ def get_ai_summary(search_results):
         return "검색 결과 요약 중 오류가 발생했습니다. ❌"
 
 # 대화형 응답 생성 함수 (캐싱 적용)
-@lru_cache(maxsize=128)
-def get_cached_conversational_response(query, chat_history_tuple):
-    chat_history = list(chat_history_tuple)  # 튜플을 리스트로 변환
+conversation_cache = MemoryCache()
+def get_conversational_response(query, chat_history, ttl=600):
+    cache_key = f"conv:{query}:{hash(str(chat_history[-5:]))}"
+    cached_response = conversation_cache.get(cache_key)
+    if cached_response:
+        logger.info(f"Conversation cache hit for {cache_key}")
+        return cached_response
+    
     messages = [{"role": "system", "content": "당신은 친절하고 상호작용적인 AI 챗봇입니다. 사용자의 질문에 답하고, 필요하면 추가 질문을 던져 대화를 이어가세요."}]
     for msg in chat_history[-5:]:
         messages.append({"role": msg["role"], "content": msg["content"]})
@@ -521,7 +525,10 @@ def get_cached_conversational_response(query, chat_history_tuple):
             model="gpt-4",
             messages=messages
         )
-        return response.choices[0].message.content
+        result = response.choices[0].message.content
+        conversation_cache.setex(cache_key, ttl, result)
+        logger.info(f"Conversation cache set for {cache_key}")
+        return result
     except Exception as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
         return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
@@ -531,14 +538,17 @@ GREETING_RESPONSES = {
     "안녕": "안녕하세요! 반갑습니다! 😊",
     "안녕 반가워": "안녕하세요! 저도 반갑습니다! 오늘 기분이 어떠신가요? 😄",
     "하이": "하이! 좋은 하루 보내세요! 😊",
+    "헬로": "헬로! 반갑습니다! 😊",
+    "헤이": "헤이! 잘 지내세요? 😄",
+    "왓업": "왓업! 뭐하고 계신가요? 😊",
+    "왓썹": "왓썹! 오늘 기분이 어떠신가요? 😄",
 }
 
 # 쿼리 타입 판단 함수
-@lru_cache(maxsize=128)
 def needs_search(query):
     query_lower = query.strip().lower()
     
-    greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬롱", "하잇", "헤이요", "왓업", "왓썹", "에이요"]
+    greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬로", "헬롱", "하잇", "헤이", "헤이요", "왓업", "왓썹", "에이요"]
     emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다", "화남", "열받음", "짜증남", "피곤함"]
     if any(greeting in query_lower for greeting in greeting_keywords) or \
        any(emo in query_lower for emo in emotion_keywords) or \
@@ -619,6 +629,7 @@ def show_chat_dashboard():
             try:
                 start_time = time.time()
                 query_type = needs_search(user_prompt)
+                logger.info(f"질문 처리 시작: '{user_prompt}', 타입: {query_type}")
                 base_response = ""
 
                 if query_type == "mbti":
@@ -655,7 +666,7 @@ def show_chat_dashboard():
                     if user_prompt.strip() in GREETING_RESPONSES:
                         base_response = GREETING_RESPONSES[user_prompt.strip()]
                     else:
-                        base_response = get_cached_conversational_response(user_prompt, tuple(st.session_state.chat_history))
+                        base_response = get_conversational_response(user_prompt, st.session_state.chat_history)
                 elif query_type == "web_search":
                     language = detect(user_prompt)
                     if language == 'ko' and naver_request_count < NAVER_DAILY_LIMIT:
@@ -664,29 +675,30 @@ def show_chat_dashboard():
                         search_results = search_and_summarize(user_prompt)
                     base_response = get_ai_summary(search_results)
                 elif query_type == "general_query":
-                    base_response = get_cached_conversational_response(user_prompt, tuple(st.session_state.chat_history))
+                    base_response = get_conversational_response(user_prompt, st.session_state.chat_history)
 
                 # 대화 맥락 반영 (conversation/general_query가 아닌 경우에만 추가 호출)
                 if query_type in ["conversation", "general_query"]:
                     final_response = base_response
                 else:
-                    final_response = get_cached_conversational_response(
+                    final_response = get_conversational_response(
                         f"다음 정보를 바탕으로 사용자와 대화를 이어가세요:\n\n{base_response}\n\n사용자 질문: {user_prompt}",
-                        tuple(st.session_state.chat_history)
+                        st.session_state.chat_history
                     )
 
                 end_time = time.time()
                 time_taken = round(end_time - start_time, 2)
-                logger.info(f"응답 생성 완료: {user_prompt}, 소요 시간: {time_taken}초")
+                logger.info(f"응답 생성 완료: '{user_prompt}', 소요 시간: {time_taken}초")
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": final_response})
                 message_placeholder.markdown(final_response, unsafe_allow_html=True)
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, final_response, time_taken)
             except Exception as e:
-                error_message = f"❌ 오류 발생: {str(e)}\n\n다시 물어보시면 최선을 다해 답변해드릴게요!"
-                logger.error(error_message)
+                error_message = f"오류가 발생했어요. 다시 시도해 주세요! 😅"
+                logger.error(f"질문 '{user_prompt}' 처리 중 오류: {str(e)}")
                 message_placeholder.markdown(error_message)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_message})
+                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, error_message, 0)
 
 # 메인 실행
 def main():
