@@ -8,4 +8,4 @@ pandas
 uuid
 googlesearch-python
 timezonefinder
-
+langdetect
