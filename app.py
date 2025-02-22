@@ -16,7 +16,7 @@ import re
 from urllib.parse import quote
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-from functools import lru_cache  # 캐싱을 위해 추가
+from functools import lru_cache
 
 # Supabase 및 API 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -107,7 +107,7 @@ def get_city_info(city_name):
 def get_city_weather(city_name):
     city_info = get_city_info(city_name)
     if not city_info:
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"  # 마지막 문장 제거
     url = "https://api.openweathermap.org/data/2.5/weather"
     params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
     session = requests.Session()
@@ -133,7 +133,52 @@ def get_city_weather(city_name):
         )
     except Exception as e:
         logger.error(f"날씨 처리 오류: {str(e)}")
-        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"
+        return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 날씨 알려줘'"  # 마지막 문장 제거
+
+def get_weekly_forecast(city_name):
+    city_info = get_city_info(city_name)
+    if not city_info:
+        return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요. 예: '서울 주간 예보 알려줘'"
+    
+    url = "https://api.openweathermap.org/data/2.5/forecast"
+    params = {
+        'lat': city_info["lat"],
+        'lon': city_info["lon"],
+        'appid': WEATHER_API_KEY,
+        'units': 'metric',
+        'lang': 'kr'
+    }
+    session = requests.Session()
+    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    
+    try:
+        response = session.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        daily_forecast = {}
+        for forecast in data['list']:
+            dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
+            if dt not in daily_forecast:
+                daily_forecast[dt] = {
+                    'temp_min': forecast['main']['temp_min'],
+                    'temp_max': forecast['main']['temp_max'],
+                    'weather': forecast['weather'][0]['description']
+                }
+            else:
+                daily_forecast[dt]['temp_min'] = min(daily_forecast[dt]['temp_min'], forecast['main']['temp_min'])
+                daily_forecast[dt]['temp_max'] = max(daily_forecast[dt]['temp_max'], forecast['main']['temp_max'])
+        
+        forecast_text = f"{city_info['name']}의 5일 주간 예보 🌤️\n\n"
+        for date, info in list(daily_forecast.items())[:5]:
+            forecast_text += f"{date}: {info['weather']}, 최저 {info['temp_min']}°C, 최고 {info['temp_max']}°C\n"
+        return forecast_text
+    
+    except Exception as e:
+        logger.error(f"주간 예보 처리 오류: {str(e)}")
+        return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
 
 def get_time_by_city(city_name="서울"):
     city_info = get_city_info(city_name)
@@ -306,13 +351,13 @@ def get_conversational_response(query, chat_history):
         return "대화 중 오류가 발생했어요. 다시 시도해 볼까요? 😅"
 
 # 쿼리 타입 판단 함수 (캐싱 적용)
-@lru_cache(maxsize=128)  # 캐싱 추가, 최대 128개 항목 저장
+@lru_cache(maxsize=128)
 def needs_search(query):
     query_lower = query.strip().lower()
     
     # 1. 인사말 및 감정 표현 필터링
-    greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해","헬롱","하잇","헤이요","왓업","왓썹","에이요"]
-    emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다","화남","열받음","짜증남","피곤함"]
+    greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬롱", "하잇", "헤이요", "왓업", "왓썹", "에이요"]
+    emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다", "화남", "열받음", "짜증남", "피곤함"]
     if any(greeting in query_lower for greeting in greeting_keywords) or \
        any(emo in query_lower for emo in emotion_keywords) or \
        len(query_lower) <= 3 and "?" not in query_lower:
@@ -331,7 +376,10 @@ def needs_search(query):
     
     # 4. 날씨 관련 질문
     weather_keywords = ["날씨", "온도", "기온"]
-    if any(keyword in query_lower for keyword in weather_keywords):
+    if any(keyword in query_lower for keyword in weather_keywords) and \
+       any(forecast_word in query_lower for forecast_word in ["주간 예보", "일주일 날씨", "5일 예보"]):
+        return "forecast"
+    elif any(keyword in query_lower for keyword in weather_keywords):
         return "weather"
     
     # 5. 의약품 관련 질문
@@ -410,6 +458,10 @@ def show_chat_dashboard():
                     city = extract_city_from_query(user_prompt)
                     weather_info = get_city_weather(city)
                     final_response = f"{weather_info}\n\n{city} 날씨에 대해 더 알고 싶으신가요? 예를 들어, 주간 예보 같은 것도 알려드릴 수 있어요!😄"
+                elif query_type == "forecast":
+                    city = extract_city_from_query(user_prompt)
+                    forecast_info = get_weekly_forecast(city)
+                    final_response = f"{forecast_info}\n\n{city} 날씨에 대해 더 궁금한 점 있으신가요?"
                 elif query_type == "drug":
                     drug_name = user_prompt.strip()
                     drug_info = get_drug_info(drug_name)
