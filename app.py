@@ -394,7 +394,7 @@ def get_drug_info(drug_name):
             search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
             if not search_results.empty:
                 return (
-                    f"'{drug_name}'에 대한 공식 의약품 정보를 찾을 수 없습니다. 🩺\n"
+                    f"'{drug_name}'에 대한 의약품 정보를 찾을 수 없습니다. 🩺\n"
                     f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
                     f"{get_ai_summary(search_results)}"
                 )
@@ -507,11 +507,11 @@ def get_arxiv_papers(query, max_results=3):
         for paper in results:
             authors = ", ".join([str(author) for author in paper.authors])
             response += (
-                f"**제목**: {paper.title}\n"
-                f"**저자**: {authors}\n"
-                f"**초록**: {paper.summary[:200]}...\n"
-                f"**링크**: {paper.entry_id}\n"
-                f"**출판일**: {paper.published.strftime('%Y-%m-%d')}\n\n"
+                f"📄 **제목**: {paper.title}\n\n"
+                f"👥 **저자**: {authors}\n\n"
+                f"📝 **초록**: {paper.summary[:200]}...\n\n"
+                f"🔗 **링크**: {paper.entry_id}\n\n"
+                f"📅 **출판일**: {paper.published.strftime('%Y-%m-%d')}\n\n"
             )
         response += "더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
         return response
@@ -555,7 +555,7 @@ GREETING_RESPONSES = {
     "헬로": "안녕하세요! 반갑습니다! 😊",
     "헤이": "헤이! 잘 지내세요? 😄",
     "왓업": "왓업! 뭐하고 계신가요? 😊",
-    "왓썹": "안녕하세요요! 오늘 기분이 어떠신가요? 😄",
+    "왓썹": "안녕하세요! 오늘 기분이 어떠신가요? 😄",
 }
 
 def needs_search(query):
@@ -610,13 +610,13 @@ def needs_search(query):
         return "multi_iq"
     
     # Arxiv 논문 검색
-    arxiv_keywords = ["논문", "arxiv", "paper", "research"]
+    arxiv_keywords = ["논문검색:", "arxiv", "paper", "research"]
     if any(kw in query_lower for kw in arxiv_keywords) and len(query_lower) > 5:
         logger.info(f"분류 결과: arxiv_search")
         return "arxiv_search"
     
     # 웹 검색 필요 질문 (우선순위 높임)
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘"]
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "찾아서 정리해줘", "설명해줘", "알고싶어", "알려줄래"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         logger.info(f"분류 결과: web_search")
         return "web_search"
