@@ -22,7 +22,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from typing import Dict, Any
 import threading
-import arxiv  # Arxiv API 패키지 추가
+import arxiv
 
 # 캐시 클래스 정의
 class MemoryCache:
@@ -47,7 +47,7 @@ class MemoryCache:
 class WeatherAPI:
     def __init__(self, cache_ttl=600):
         self.cache = MemoryCache()
-        self.cache_ttl = cache_ttl
+        self.cache_ttl = cache_ttl  # 캐시 비활성화 테스트 시 0으로 설정 가능
 
     def get_city_weather(self, city_name):
         cache_key = f"weather:{city_name}"
@@ -67,9 +67,11 @@ class WeatherAPI:
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("https://", adapter)
         try:
+            logger.info(f"날씨 API 호출: {url}, params={params}")
             response = session.get(url, params=params, timeout=5)
             response.raise_for_status()
             data = response.json()
+            logger.info(f"날씨 API 응답 성공: {data}")
             weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
             weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
             display_name = f"{data['name']}, {data['sys']['country']}"
@@ -89,7 +91,7 @@ class WeatherAPI:
             return result
         except Exception as e:
             logger.error(f"날씨 처리 오류: {str(e)}")
-            return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
+            return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다: {str(e)}. ❌\n\n다시 시도해 보세요."
 
     def get_forecast_by_day(self, city_name, days_from_today=1):
         cache_key = f"forecast:{city_name}:{days_from_today}"
@@ -116,10 +118,11 @@ class WeatherAPI:
         session.mount("https://", adapter)
         
         try:
+            logger.info(f"날씨 예보 API 호출: {url}, params={params}")
             response = session.get(url, params=params, timeout=5)
             response.raise_for_status()
             data = response.json()
-            
+            logger.info(f"날씨 예보 API 응답 성공: {data}")
             target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
             forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
             weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
@@ -148,7 +151,7 @@ class WeatherAPI:
         
         except Exception as e:
             logger.error(f"날씨 예보 처리 오류: {str(e)}")
-            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다. ❌"
+            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다: {str(e)}. ❌\n\n다시 시도해 보세요."
 
     def get_weekly_forecast(self, city_name):
         cache_key = f"weekly_forecast:{city_name}"
@@ -175,10 +178,11 @@ class WeatherAPI:
         session.mount("https://", adapter)
         
         try:
+            logger.info(f"주간 날씨 API 호출: {url}, params={params}")
             response = session.get(url, params=params, timeout=5)
             response.raise_for_status()
             data = response.json()
-            
+            logger.info(f"주간 날씨 API 응답 성공: {data}")
             today = datetime.now().date()
             week_end = today + timedelta(days=6)
             daily_forecast = {}
@@ -220,7 +224,7 @@ class WeatherAPI:
         
         except Exception as e:
             logger.error(f"주간 예보 처리 오류: {str(e)}")
-            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다. ❌"
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다: {str(e)}. ❌\n\n다시 시도해 보세요."
 
 # Supabase 및 API 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -228,7 +232,11 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 DRUG_API_KEY = os.getenv("DRUG_API_KEY")
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
-NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")  
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+
+# API 키 로드 확인
+if not WEATHER_API_KEY:
+    logger.error("WEATHER_API_KEY가 환경 변수에 설정되지 않았습니다.")
 
 # Supabase 및 GPT 클라이언트 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -304,6 +312,7 @@ def get_city_info(city_name):
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("https://", adapter)
     try:
+        logger.info(f"Geocoding API 호출: {url}, params={params}")
         response = session.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
@@ -529,6 +538,8 @@ def get_conversational_response(query, chat_history, ttl=600):
             messages=messages
         )
         result = response.choices[0].message.content
+        # "search" 문자열 제거
+        result = re.sub(r"search\('.*'\)ko-KR", "", result).strip()
         conversation_cache.setex(cache_key, ttl, result)
         logger.info(f"Conversation cache set for {cache_key}")
         return result
@@ -584,9 +595,10 @@ def needs_search(query):
         logger.info(f"분류 결과: weather")
         return "weather"
     
+    # 의약품 관련 질문 (더 엄격한 조건 적용)
     drug_keywords = ["약", "의약품", "약품"]
     drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)$'
-    if any(keyword in query_lower for keyword in drug_keywords) or re.match(drug_pattern, query_lower):
+    if any(keyword in query_lower for keyword in drug_keywords) and re.match(drug_pattern, query_lower):
         logger.info(f"분류 결과: drug")
         return "drug"
     
@@ -603,6 +615,7 @@ def needs_search(query):
         logger.info(f"분류 결과: arxiv_search")
         return "arxiv_search"
     
+    # 웹 검색 필요 질문 (우선순위 높임)
     search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         logger.info(f"분류 결과: web_search")
@@ -725,7 +738,7 @@ def show_chat_dashboard():
                 message_placeholder.markdown(final_response, unsafe_allow_html=True)
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, final_response, time_taken)
             except Exception as e:
-                error_message = f"오류가 발생했어요. 다시 시도해 주세요! 😅"
+                error_message = f"오류가 발생했어요: {str(e)}. 다시 시도해 주세요! 😅"
                 logger.error(f"질문 '{user_prompt}' 처리 중 오류: {str(e)}")
                 message_placeholder.markdown(error_message)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_message})
