@@ -504,7 +504,9 @@ def get_ai_summary(search_results):
             messages=[{"role": "user", "content": f"다음 검색 결과를 분석하고, 핵심 내용을 2~3문장으로 요약해주세요:\n\n{context}"}]
         )
         summary = response.choices[0].message.content
-        sources = "\n\n📚 참고 출처:\n" + "\n".join([f"- [{row['title']}]({row['url'] if 'url' in row else row['link']})" for _, row in search_results.iterrows()])
+        sources = "\n\n📜 **출처 목록**\n" + "\n".join([
+            f"🌐 [{row['title']}]({row['url'] if 'url' in row else row['link']})" for _, row in search_results.iterrows()
+        ])
         return f"{summary}{sources}\n\n더 알고 싶으신가요? 추가로 물어보시면 더 알려드릴게요!"
     except Exception as e:
         logger.error(f"AI 요약 중 오류 발생: {str(e)}")
@@ -588,7 +590,7 @@ def needs_search(query):
         return "multi_iq"
     
     # 검색 필요 질문 강화
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "찾아줘", "설명해줘","검색해줘","찾아서 정리해줘"]
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
     
