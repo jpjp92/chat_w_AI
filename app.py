@@ -22,6 +22,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from typing import Dict, Any
 import threading
+import arxiv  # Arxiv API 패키지 추가
 
 # 캐시 클래스 정의
 class MemoryCache:
@@ -46,7 +47,7 @@ class MemoryCache:
 class WeatherAPI:
     def __init__(self, cache_ttl=600):
         self.cache = MemoryCache()
-        self.cache_ttl = cache_ttl  # 캐시 비활성화하려면 0으로 설정
+        self.cache_ttl = cache_ttl
 
     def get_city_weather(self, city_name):
         cache_key = f"weather:{city_name}"
@@ -400,38 +401,6 @@ def get_drug_info(drug_name):
             )
         return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
 
-# 도시명 및 쿼리 추출 함수
-def extract_city_from_query(query):
-    time_keywords = ["오늘", "내일", "모레", "이번 주", "주간"]
-    city_patterns = [
-        r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
-        r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
-        r'날씨\s*(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
-        r'weather\s*(?:today|tomorrow|day after tomorrow|this week|weekly)?\s*in\s+([a-zA-Z\s]{2,20})',
-        r'(?:오늘|내일|모레|이번 주|주간)?\s*([a-zA-Z\s]{2,20})\s+weather'
-    ]
-    for pattern in city_patterns:
-        match = re.search(pattern, query, re.IGNORECASE)
-        if match:
-            city = match.group(1).strip()
-            if city not in time_keywords and city != "현재":
-                return city
-    return "서울"
-
-def extract_city_from_time_query(query):
-    city_patterns = [
-        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간',
-        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)\s*시간',
-        r'시간\s*([가-힣a-zA-Z\s]{2,20}(?:시|군)?)',
-    ]
-    for pattern in city_patterns:
-        match = re.search(pattern, query)
-        if match:
-            city = match.group(1).strip()
-            if city != "현재":
-                return city
-    return "서울"
-
 # Naver API 검색 함수
 def get_naver_api_results(query):
     global naver_request_count
@@ -512,6 +481,35 @@ def get_ai_summary(search_results):
         logger.error(f"AI 요약 중 오류 발생: {str(e)}")
         return "검색 결과 요약 중 오류가 발생했습니다. ❌"
 
+# Arxiv 논문 검색 함수
+def get_arxiv_papers(query, max_results=3):
+    try:
+        search = arxiv.Search(
+            query=query,
+            max_results=max_results,
+            sort_by=arxiv.SortCriterion.SubmittedDate,
+            sort_order=arxiv.SortOrder.Descending
+        )
+        results = list(search.results())
+        if not results:
+            return "해당 키워드로 논문을 찾을 수 없습니다. ❌"
+        
+        response = "📚 **Arxiv 논문 검색 결과** 📚\n\n"
+        for paper in results:
+            authors = ", ".join([str(author) for author in paper.authors])
+            response += (
+                f"**제목**: {paper.title}\n"
+                f"**저자**: {authors}\n"
+                f"**초록**: {paper.summary[:200]}...\n"
+                f"**링크**: {paper.entry_id}\n"
+                f"**출판일**: {paper.published.strftime('%Y-%m-%d')}\n\n"
+            )
+        response += "더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
+        return response
+    except Exception as e:
+        logger.error(f"Arxiv 검색 오류: {str(e)}")
+        return "논문 검색 중 오류가 발생했습니다. 다시 시도해 주세요! 😅"
+
 # 대화형 응답 생성 함수 (캐싱 적용)
 conversation_cache = MemoryCache()
 def get_conversational_response(query, chat_history, ttl=600):
@@ -553,7 +551,6 @@ def needs_search(query):
     query_lower = query.strip().lower()
     logger.info(f"쿼리 분석: '{query_lower}'")
     
-    # 인사말 및 감정 표현
     greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬로", "헬롱", "하잇", "헤이", "헤이요", "왓업", "왓썹", "에이요"]
     emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다", "화남", "열받음", "짜증남", "피곤함"]
     if any(greeting in query_lower for greeting in greeting_keywords) or \
@@ -562,20 +559,17 @@ def needs_search(query):
         logger.info(f"분류 결과: conversation")
         return "conversation"
     
-    # 의도 기반 대화
     intent_keywords = ["추천해줘", "뭐 먹을까", "메뉴", "뭐할까"]
     if any(kw in query_lower for kw in intent_keywords):
         logger.info(f"분류 결과: conversation (intent)")
         return "conversation"
     
-    # 시간 관련 질문
     time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
     if any(keyword in query_lower for keyword in time_keywords) and \
        any(timeword in query_lower for timeword in ["시간", "몇시", "몇 시", "시계"]):
         logger.info(f"분류 결과: time")
         return "time"
     
-    # 날씨 관련 질문
     weather_keywords = ["날씨", "온도", "기온"]
     if any(keyword in query_lower for keyword in weather_keywords) and "내일" in query_lower:
         logger.info(f"분류 결과: tomorrow_weather")
@@ -590,14 +584,12 @@ def needs_search(query):
         logger.info(f"분류 결과: weather")
         return "weather"
     
-    # 의약품 관련 질문
     drug_keywords = ["약", "의약품", "약품"]
     drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)$'
     if any(keyword in query_lower for keyword in drug_keywords) or re.match(drug_pattern, query_lower):
         logger.info(f"분류 결과: drug")
         return "drug"
     
-    # MBTI 및 다중지능 검사
     if query_lower == "mbti 검사":
         logger.info(f"분류 결과: mbti")
         return "mbti"
@@ -605,13 +597,17 @@ def needs_search(query):
         logger.info(f"분류 결과: multi_iq")
         return "multi_iq"
     
-    # 웹 검색 필요 질문
+    # Arxiv 논문 검색
+    arxiv_keywords = ["논문", "arxiv", "paper", "research"]
+    if any(kw in query_lower for kw in arxiv_keywords) and len(query_lower) > 5:
+        logger.info(f"분류 결과: arxiv_search")
+        return "arxiv_search"
+    
     search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         logger.info(f"분류 결과: web_search")
         return "web_search"
     
-    # 기본 질문
     logger.info(f"분류 결과: general_query")
     return "general_query"
 
@@ -702,11 +698,13 @@ def show_chat_dashboard():
                         search_results = search_and_summarize(user_prompt)
                     base_response = get_ai_summary(search_results)
                     logger.info(f"검색 결과 요약 완료: '{user_prompt}'")
+                elif query_type == "arxiv_search":
+                    keywords = user_prompt.replace("논문", "").replace("arxiv", "").replace("paper", "").replace("research", "").strip()
+                    base_response = get_arxiv_papers(keywords)
                 elif query_type == "general_query":
                     base_response = get_conversational_response(user_prompt, st.session_state.chat_history)
 
-                # 대화 맥락 반영
-                if query_type in ["weather", "tomorrow_weather", "day_after_tomorrow_weather", "weekly_forecast", "time", "drug", "mbti", "multi_iq"]:
+                if query_type in ["weather", "tomorrow_weather", "day_after_tomorrow_weather", "weekly_forecast", "time", "drug", "mbti", "multi_iq", "arxiv_search"]:
                     final_response = base_response
                 elif query_type in ["conversation", "general_query"]:
                     final_response = base_response
