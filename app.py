@@ -543,57 +543,76 @@ GREETING_RESPONSES = {
     "안녕": "안녕하세요! 반갑습니다! 😊",
     "안녕 반가워": "안녕하세요! 저도 반갑습니다! 오늘 기분이 어떠신가요? 😄",
     "하이": "하이! 좋은 하루 보내세요! 😊",
-    "헬로": "헬로! 반갑습니다! 😊",
+    "헬로": "안녕하세요! 반갑습니다! 😊",
     "헤이": "헤이! 잘 지내세요? 😄",
     "왓업": "왓업! 뭐하고 계신가요? 😊",
-    "왓썹": "왓썹! 오늘 기분이 어떠신가요? 😄",
+    "왓썹": "안녕하세요요! 오늘 기분이 어떠신가요? 😄",
 }
 
-# 쿼리 타입 판단 함수
 def needs_search(query):
     query_lower = query.strip().lower()
+    logger.info(f"쿼리 분석: '{query_lower}'")
     
+    # 인사말 및 감정 표현
     greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬로", "헬롱", "하잇", "헤이", "헤이요", "왓업", "왓썹", "에이요"]
     emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다", "화남", "열받음", "짜증남", "피곤함"]
     if any(greeting in query_lower for greeting in greeting_keywords) or \
        any(emo in query_lower for emo in emotion_keywords) or \
        len(query_lower) <= 3 and "?" not in query_lower:
+        logger.info(f"분류 결과: conversation")
         return "conversation"
     
+    # 의도 기반 대화
     intent_keywords = ["추천해줘", "뭐 먹을까", "메뉴", "뭐할까"]
     if any(kw in query_lower for kw in intent_keywords):
+        logger.info(f"분류 결과: conversation (intent)")
         return "conversation"
     
+    # 시간 관련 질문
     time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
     if any(keyword in query_lower for keyword in time_keywords) and \
        any(timeword in query_lower for timeword in ["시간", "몇시", "몇 시", "시계"]):
+        logger.info(f"분류 결과: time")
         return "time"
     
+    # 날씨 관련 질문
     weather_keywords = ["날씨", "온도", "기온"]
     if any(keyword in query_lower for keyword in weather_keywords) and "내일" in query_lower:
+        logger.info(f"분류 결과: tomorrow_weather")
         return "tomorrow_weather"
     elif any(keyword in query_lower for keyword in weather_keywords) and "모레" in query_lower:
+        logger.info(f"분류 결과: day_after_tomorrow_weather")
         return "day_after_tomorrow_weather"
     elif any(keyword in query_lower for keyword in weather_keywords) and any(kw in query_lower for kw in ["이번 주", "주간 예보", "주간 날씨"]):
+        logger.info(f"분류 결과: weekly_forecast")
         return "weekly_forecast"
     elif any(keyword in query_lower for keyword in weather_keywords):
+        logger.info(f"분류 결과: weather")
         return "weather"
     
+    # 의약품 관련 질문
     drug_keywords = ["약", "의약품", "약품"]
     drug_pattern = r'^[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)$'
     if any(keyword in query_lower for keyword in drug_keywords) or re.match(drug_pattern, query_lower):
+        logger.info(f"분류 결과: drug")
         return "drug"
     
+    # MBTI 및 다중지능 검사
     if query_lower == "mbti 검사":
+        logger.info(f"분류 결과: mbti")
         return "mbti"
     if query_lower == "다중지능 검사":
+        logger.info(f"분류 결과: multi_iq")
         return "multi_iq"
     
-    # 검색 필요 질문 강화
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘"]
+    # 웹 검색 필요 질문
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "찾아서 정리해줘", "설명해줘", "찾아줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
+        logger.info(f"분류 결과: web_search")
         return "web_search"
     
+    # 기본 질문
+    logger.info(f"분류 결과: general_query")
     return "general_query"
 
 # 로그인 및 대시보드 함수
@@ -626,6 +645,7 @@ def show_chat_dashboard():
     
     user_prompt = st.chat_input("질문해 주세요!")
     if user_prompt:
+        logger.info(f"사용자 입력: '{user_prompt}'")
         st.chat_message("user").markdown(user_prompt)
         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
         
