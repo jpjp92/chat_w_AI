@@ -645,7 +645,7 @@ def needs_search(query):
         return "multi_iq"
     
     # Arxiv 논문 검색
-    arxiv_keywords = ["논문검색:", "arxiv", "paper", "research"]
+    arxiv_keywords = ["논문검색", "arxiv", "paper", "research"]
     if any(kw in query_lower for kw in arxiv_keywords) and len(query_lower) > 5:
         logger.info(f"분류 결과: arxiv_search")
         return "arxiv_search"
