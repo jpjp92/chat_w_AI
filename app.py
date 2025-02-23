@@ -46,7 +46,7 @@ class MemoryCache:
 class WeatherAPI:
     def __init__(self, cache_ttl=600):
         self.cache = MemoryCache()
-        self.cache_ttl = cache_ttl
+        self.cache_ttl = cache_ttl  # 캐시 비활성화하려면 0으로 설정
 
     def get_city_weather(self, city_name):
         cache_key = f"weather:{city_name}"
@@ -583,7 +583,7 @@ def needs_search(query):
     elif any(keyword in query_lower for keyword in weather_keywords) and "모레" in query_lower:
         logger.info(f"분류 결과: day_after_tomorrow_weather")
         return "day_after_tomorrow_weather"
-    elif any(keyword in query_lower for keyword in weather_keywords) and any(kw in query_lower for kw in ["이번 주", "주간 예보", "주간 날씨"]):
+    elif any(keyword in query_lower for keyword in weather_keywords) and ("주간" in query_lower or any(kw in query_lower for kw in ["이번 주", "주간 예보", "주간 날씨"])):
         logger.info(f"분류 결과: weekly_forecast")
         return "weekly_forecast"
     elif any(keyword in query_lower for keyword in weather_keywords):
@@ -606,7 +606,7 @@ def needs_search(query):
         return "multi_iq"
     
     # 웹 검색 필요 질문
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "찾아서 정리해줘", "설명해줘", "찾아줘"]
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         logger.info(f"분류 결과: web_search")
         return "web_search"
