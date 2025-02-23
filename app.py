@@ -269,6 +269,38 @@ def init_session_state():
 
 init_session_state()
 
+# 도시명 및 쿼리 추출 함수 추가
+def extract_city_from_query(query):
+    time_keywords = ["오늘", "내일", "모레", "이번 주", "주간"]
+    city_patterns = [
+        r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨',
+        r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨',
+        r'날씨\s*(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)',
+        r'weather\s*(?:today|tomorrow|day after tomorrow|this week|weekly)?\s*in\s+([a-zA-Z\s]{2,20})',
+        r'(?:오늘|내일|모레|이번 주|주간)?\s*([a-zA-Z\s]{2,20})\s+weather'
+    ]
+    for pattern in city_patterns:
+        match = re.search(pattern, query, re.IGNORECASE)
+        if match:
+            city = match.group(1).strip()
+            if city not in time_keywords and city != "현재":
+                return city
+    return "서울"
+
+def extract_city_from_time_query(query):
+    city_patterns = [
+        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간',
+        r'([가-힣a-zA-Z]{2,20}(?:시|군)?)\s*시간',
+        r'시간\s*([가-힣a-zA-Z\s]{2,20}(?:시|군)?)',
+    ]
+    for pattern in city_patterns:
+        match = re.search(pattern, query)
+        if match:
+            city = match.group(1).strip()
+            if city != "현재":
+                return city
+    return "서울"
+
 # 사용자 관리 및 채팅 기록 저장 함수
 def create_or_get_user(nickname):
     try:
@@ -302,113 +334,6 @@ def async_save_chat_history(user_id, session_id, question, answer, time_taken):
         save_chat_history(user_id, session_id, question, answer, time_taken)
     thread = threading.Thread(target=save)
     thread.start()
-
-# OpenWeather Geocoding API로 도시 정보 가져오기
-def get_city_info(city_name):
-    url = "http://api.openweathermap.org/geo/1.0/direct"
-    params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
-    session = requests.Session()
-    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("https://", adapter)
-    try:
-        logger.info(f"Geocoding API 호출: {url}, params={params}")
-        response = session.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        if data and len(data) > 0:
-            city_info = {
-                "name": data[0]["name"],
-                "country": data[0]["country"],
-                "lat": data[0]["lat"],
-                "lon": data[0]["lon"]
-            }
-            logger.info(f"Geocoding 성공: {city_info}")
-            return city_info
-        return None
-    except Exception as e:
-        logger.error(f"Geocoding 실패 ({city_name}): {str(e)}")
-        return None
-
-def get_time_by_city(city_name="서울"):
-    city_info = get_city_info(city_name)
-    if not city_info:
-        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌\n\n찾고 싶은 도시명을 말씀해 주세요."
-    tf = TimezoneFinder()
-    try:
-        timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
-        timezone = pytz.timezone(timezone_str)
-        city_time = datetime.now(timezone)
-        am_pm = "오전" if city_time.strftime("%p") == "AM" else "오후"
-        return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일')} {am_pm} {city_time.strftime('%I:%M')} ⏰\n\n더 궁금한 점 있으신가요? 😊"
-    except Exception as e:
-        logger.error(f"시간 처리 실패 ({city_name}): {str(e)}")
-        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
-
-# 의약품 검색 함수
-def get_drug_info(drug_name):
-    url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
-    params = {
-        'serviceKey': DRUG_API_KEY,
-        'pageNo': '1',
-        'numOfRows': '1',
-        'itemName': quote(drug_name),
-        'type': 'json'
-    }
-    try:
-        response = requests.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        if 'body' in data and 'items' in data['body'] and data['body']['items']:
-            item = data['body']['items'][0]
-            def cut_to_sentence(text, max_len=150):
-                if not text or len(text) <= max_len:
-                    return text
-                truncated = text[:max_len]
-                last_punctuation = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'), truncated.rfind(','))
-                if last_punctuation > 0:
-                    result = truncated[:last_punctuation + 1]
-                    if len(text) > max_len:
-                        result += " 등"
-                    return result
-                return truncated + "..."
-            efcy = cut_to_sentence(item.get('efcyQesitm', '정보 없음'))
-            use_method_raw = cut_to_sentence(item.get('useMethodQesitm', '정보 없음'))
-            atpn_raw = cut_to_sentence(item.get('atpnQesitm', '정보 없음'))
-            use_method_raw = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)
-            atpn_raw = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', atpn_raw)
-            use_method = use_method_raw.replace('. ', '.\n')
-            atpn = atpn_raw.replace('. ', '.\n')
-            return (
-                f"💊 **의약품 정보** 💊\n\n"
-                f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
-                f"✅ **제조사**: {item.get('entpName', '정보 없음')}\n\n"
-                f"✅ **효능**: {efcy}\n\n"
-                f"✅ **용법용량**: {use_method}\n\n"
-                f"✅ **주의사항**: {atpn}\n\n"
-                f"ℹ️ 자세한 정보는 <a href='https://www.health.kr/searchDrug/search_detail.asp'>약학정보원</a>에서 확인하세요! 🩺\n\n"
-                f"더 궁금한 점 있으신가요? 😊"
-            )
-        else:
-            logger.info(f"'{drug_name}' API 검색 실패, 구글 검색으로 대체")
-            search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
-            if not search_results.empty:
-                return (
-                    f"'{drug_name}'에 대한 의약품 정보를 찾을 수 없습니다. 🩺\n"
-                    f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
-                    f"{get_ai_summary(search_results)}"
-                )
-            return f"'{drug_name}'에 대한 의약품 정보를 찾을 수 없습니다. 🩺"
-    except Exception as e:
-        logger.error(f"의약품 API 오류: {str(e)}")
-        search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
-        if not search_results.empty:
-            return (
-                f"'{drug_name}' 의약품 정보를 API에서 가져오는 중 오류가 발생했습니다. ❌\n"
-                f"대신 웹에서 검색한 결과를 아래에 요약했어요:\n\n"
-                f"{get_ai_summary(search_results)}"
-            )
-        return f"'{drug_name}' 의약품 정보를 가져오는 중 오류가 발생했습니다. ❌"
 
 # Naver API 검색 함수
 def get_naver_api_results(query):
@@ -616,7 +541,7 @@ def needs_search(query):
         return "arxiv_search"
     
     # 웹 검색 필요 질문 (우선순위 높임)
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "찾아서 정리해줘", "설명해줘", "알고싶어", "알려줄래"]
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         logger.info(f"분류 결과: web_search")
         return "web_search"
