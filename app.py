@@ -80,7 +80,8 @@ class WeatherAPI:
                 f"최저 온도: {data['main']['temp_min']}°C ⬇️\n"
                 f"최고 온도: {data['main']['temp_max']}°C ⬆️\n"
                 f"습도: {data['main']['humidity']}% 💧\n"
-                f"풍속: {data['wind']['speed']}m/s 🌪️"
+                f"풍속: {data['wind']['speed']}m/s 🌪️\n\n"
+                f"혹시 더 궁금한 점 있으신가요? 😊"
             )
             self.cache.setex(cache_key, self.cache_ttl, result)
             logger.info(f"Cache set for {cache_key}")
@@ -138,7 +139,7 @@ class WeatherAPI:
             if not found:
                 result = f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다. ❌"
             else:
-                result = forecast_text.strip()
+                result = forecast_text.strip() + "\n\n더 궁금한 점 있으신가요? 😊"
             
             self.cache.setex(cache_key, self.cache_ttl, result)
             logger.info(f"Cache set for {cache_key}")
@@ -211,9 +212,10 @@ class WeatherAPI:
                     f"최저 {info['temp_min']}°C  최고 {info['temp_max']}°C\n\n"
                 )
             
-            self.cache.setex(cache_key, self.cache_ttl, forecast_text)
+            result = forecast_text.strip() + "\n\n더 궁금한 점 있으신가요? 😊"
+            self.cache.setex(cache_key, self.cache_ttl, result)
             logger.info(f"Cache set for {cache_key}")
-            return forecast_text
+            return result
         
         except Exception as e:
             logger.error(f"주간 예보 처리 오류: {str(e)}")
@@ -328,7 +330,7 @@ def get_time_by_city(city_name="서울"):
         timezone = pytz.timezone(timezone_str)
         city_time = datetime.now(timezone)
         am_pm = "오전" if city_time.strftime("%p") == "AM" else "오후"
-        return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일')} {am_pm} {city_time.strftime('%I:%M')} ⏰"
+        return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일')} {am_pm} {city_time.strftime('%I:%M')} ⏰\n\n더 궁금한 점 있으신가요? 😊"
     except Exception as e:
         logger.error(f"시간 처리 실패 ({city_name}): {str(e)}")
         return f"'{city_name}'의 시간 정보를 가져올 수 없습니다. ❌"
@@ -374,7 +376,8 @@ def get_drug_info(drug_name):
                 f"✅ **효능**: {efcy}\n\n"
                 f"✅ **용법용량**: {use_method}\n\n"
                 f"✅ **주의사항**: {atpn}\n\n"
-                f"ℹ️ 자세한 정보는 <a href='https://www.health.kr/searchDrug/search_detail.asp'>약학정보원</a>에서 확인하세요! 🩺"
+                f"ℹ️ 자세한 정보는 <a href='https://www.health.kr/searchDrug/search_detail.asp'>약학정보원</a>에서 확인하세요! 🩺\n\n"
+                f"더 궁금한 점 있으신가요? 😊"
             )
         else:
             logger.info(f"'{drug_name}' API 검색 실패, 구글 검색으로 대체")
@@ -510,7 +513,7 @@ def get_ai_summary(search_results):
 # 대화형 응답 생성 함수 (캐싱 적용)
 conversation_cache = MemoryCache()
 def get_conversational_response(query, chat_history, ttl=600):
-    cache_key = f"conv:{query}:{hash(str(chat_history[-5:]))}"
+    cache_key = f"conv:{needs_search(query)}:{query}:{hash(str(chat_history[-5:]))}"
     cached_response = conversation_cache.get(cache_key)
     if cached_response:
         logger.info(f"Conversation cache hit for {cache_key}")
@@ -584,11 +587,12 @@ def needs_search(query):
     if query_lower == "다중지능 검사":
         return "multi_iq"
     
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지"]
+    # 검색 필요 질문 강화
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "찾아줘", "설명해줘","검색해줘","찾아서 정리해줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
     
-    return "general_query"  # 나머지는 일반 질문으로 처리
+    return "general_query"
 
 # 로그인 및 대시보드 함수
 def show_login_page():
@@ -668,23 +672,30 @@ def show_chat_dashboard():
                     else:
                         base_response = get_conversational_response(user_prompt, st.session_state.chat_history)
                 elif query_type == "web_search":
+                    logger.info(f"Naver API 검색 시작: '{user_prompt}'")
                     language = detect(user_prompt)
                     if language == 'ko' and naver_request_count < NAVER_DAILY_LIMIT:
                         search_results = get_naver_api_results(user_prompt)
                     else:
                         search_results = search_and_summarize(user_prompt)
                     base_response = get_ai_summary(search_results)
+                    logger.info(f"검색 결과 요약 완료: '{user_prompt}'")
                 elif query_type == "general_query":
                     base_response = get_conversational_response(user_prompt, st.session_state.chat_history)
 
-                # 대화 맥락 반영 (conversation/general_query가 아닌 경우에만 추가 호출)
-                if query_type in ["conversation", "general_query"]:
+                # 대화 맥락 반영
+                if query_type in ["weather", "tomorrow_weather", "day_after_tomorrow_weather", "weekly_forecast", "time", "drug", "mbti", "multi_iq"]:
+                    final_response = base_response
+                elif query_type in ["conversation", "general_query"]:
                     final_response = base_response
                 else:
                     final_response = get_conversational_response(
-                        f"다음 정보를 바탕으로 사용자와 대화를 이어가세요:\n\n{base_response}\n\n사용자 질문: {user_prompt}",
+                        f"사용자가 '{user_prompt}'를 물어봤어요. 다음 정보를 자연스럽게 한국어로 설명하며 대화를 이어가세요:\n\n{base_response}",
                         st.session_state.chat_history
                     )
+
+                logger.info(f"Base response: {base_response}")
+                logger.info(f"Final response: {final_response}")
 
                 end_time = time.time()
                 time_taken = round(end_time - start_time, 2)
