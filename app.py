@@ -437,6 +437,7 @@ def get_arxiv_papers(query, max_results=3):
                 f"📝 **초록**: {paper.summary[:200]}...\n\n"
                 f"🔗 **링크**: {paper.entry_id}\n\n"
                 f"📅 **출판일**: {paper.published.strftime('%Y-%m-%d')}\n\n"
+                f"{'-' * 50}\n\n"  # 구분선 추가
             )
         response += "더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
         return response
