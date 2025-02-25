@@ -103,12 +103,12 @@ class WeatherAPI:
         weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
         weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
         result = (
-            f"현재 {data['name']}, {data['sys']['country']} 날씨 {weather_emoji}\n"
-            f"날씨: {data['weather'][0]['description']}\n"
-            f"온도: {data['main']['temp']}°C\n"
-            f"체감: {data['main']['feels_like']}°C\n"
-            f"습도: {data['main']['humidity']}%\n"
-            f"풍속: {data['wind']['speed']}m/s\n"
+            f"현재 {data['name']}, {data['sys']['country']} 날씨 {weather_emoji}\n\n"
+            f"날씨: {data['weather'][0]['description']}\n\n"
+            f"온도: {data['main']['temp']}°C\n\n"
+            f"체감: {data['main']['feels_like']}°C\n\n"
+            f"습도: {data['main']['humidity']}%\n\n"
+            f"풍속: {data['wind']['speed']}m/s\n\n"
             f"더 궁금한 점 있나요? 😊"
         )
         self.cache.setex(cache_key, self.cache_ttl, result)
@@ -291,13 +291,13 @@ def get_drug_info(drug_query):
             use_method = item.get('useMethodQesitm', '정보 없음')[:150] + ("..." if len(item.get('useMethodQesitm', '')) > 150 else "")
             atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
             result = (
-                f"💊 **의약품 정보** 💊\n"
-                f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n"
-                f"✅ **제조사**: {item.get('entpName', '정보 없음')}\n"
-                f"✅ **효능**: {efcy}\n"
-                f"✅ **용법용량**: {use_method}\n"
-                f"✅ **주의사항**: {atpn}\n"
-                f"ℹ️ 자세한 정보는 [약학정보원](https://www.health.kr/searchDrug/search_detail.asp)에서 확인하세요! 🩺\n"
+                f"💊 **의약품 정보** 💊\n\n"
+                f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
+                f"✅ **제조사**: {item.get('entpName', '정보 없음')}\n\n"
+                f"✅ **효능**: {efcy}\n\n"
+                f"✅ **용법용량**: {use_method}\n\n"
+                f"✅ **주의사항**: {atpn}\n\n"
+                f"ℹ️ 자세한 정보는 [약학정보원](https://www.health.kr/searchDrug/search_detail.asp)에서 확인하세요! 🩺\n\n"
                 f"더 궁금한 점 있으신가요? 😊"
             )
             cache_handler.setex(cache_key, 86400, result)
@@ -387,13 +387,13 @@ def get_arxiv_papers(query, max_results=3):
     if not results:
         return "해당 키워드로 논문을 찾을 수 없습니다."
     response = "📚 **Arxiv 논문 검색 결과** 📚\n" + "\n".join(
-        [f"**논문 {i}**\n"
-         f"📄 **제목**: {r['title']}\n"
-         f"👥 **저자**: {r['authors']}\n"
-         f"📝 **초록**: {r['summary']}...\n"
-         f"🔗 **논문 페이지**: {r['entry_id']}\n"
-         f"📥 **PDF 다운로드**: [{r['pdf_url'].split('/')[-1]}]({r['pdf_url']})\n"
-         f"📅 **출판일**: {r['published']}\n"
+        [f"**논문 {i}**\n\n"
+         f"📄 **제목**: {r['title']}\n\n"
+         f"👥 **저자**: {r['authors']}\n\n"
+         f"📝 **초록**: {r['summary']}...\n\n"
+         f"🔗 **논문 페이지**: {r['entry_id']}\n\n"
+         f"📥 **PDF 다운로드**: [{r['pdf_url'].split('/')[-1]}]({r['pdf_url']})\n\n"
+         f"📅 **출판일**: {r['published']}\n\n"
          f"{'-' * 50}"
          for i, r in enumerate(results, 1)]
     ) + "\n더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
