@@ -16,6 +16,7 @@ import re
 import json
 import urllib.request
 import urllib.parse
+import threading  
 from langdetect import detect
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
