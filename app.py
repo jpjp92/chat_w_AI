@@ -490,25 +490,41 @@ def needs_search(query):
     arxiv_keywords = ["논문검색", "arxiv", "paper", "research"]
     if any(kw in query_lower for kw in arxiv_keywords) and len(query_lower) > 5:
         return "arxiv_search"
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래"]
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
     return "general_query"
 
 # UI 함수
+
+
 def show_login_page():
     st.title("로그인 🤗")
     with st.form("login_form"):
         nickname = st.text_input("닉네임", placeholder="예: 후안")
-        if st.form_submit_button("시작하기 🚀") and nickname:
-            user_id, is_existing = create_or_get_user(nickname)
-            st.session_state.user_id = user_id
-            st.session_state.is_logged_in = True
-            st.session_state.chat_history = []  # 로그인 시 chat_history 초기화
-            st.session_state.session_id = str(uuid.uuid4())
-            st.toast(f"환영합니다, {nickname}님! 🎉")
-            time.sleep(1)
-            st.rerun()
+        submit_button = st.form_submit_button("시작하기 🚀")
+        
+        if submit_button:
+            if nickname:  # 닉네임 입력 여부 확인
+                try:
+                    user_id, is_existing = create_or_get_user(nickname)
+                    st.session_state.user_id = user_id
+                    st.session_state.is_logged_in = True
+                    st.session_state.chat_history = []  # 로그인 시 chat_history 초기화
+                    st.session_state.session_id = str(uuid.uuid4())
+                    
+                    if is_existing:
+                        st.toast(f"환영합니다, {nickname}님! 🎉")
+                    else:
+                        st.toast(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님! 🎉")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.toast(f"로그인 중 오류가 발생했습니다: {str(e)}", icon="❌")
+            else:
+                st.toast("닉네임을 입력해주세요.", icon="⚠️")
+
+
 
 @st.cache_data(ttl=600)
 def get_cached_response(query):
