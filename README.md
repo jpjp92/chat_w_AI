@@ -26,7 +26,7 @@
 
 📝 **Project description**<br>
 ```bash
-An AI chatbot service that utilizes various external APIs to provide information retrieval and data analysis capabilities.
+AI chatbot leveraging external APIs for information retrieval and analysis.
 ```
 
 🚀 **Installation**<br>
