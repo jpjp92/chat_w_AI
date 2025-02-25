@@ -206,12 +206,16 @@ naver_request_count = 0
 NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
-# 세션 상태 초기화
-if "is_logged_in" not in st.session_state:
-    st.session_state.is_logged_in = False
-    st.session_state.user_id = None
-    st.session_state.chat_history = []
-    st.session_state.session_id = str(uuid.uuid4())
+# 세션 상태 초기화 함수
+def init_session_state():
+    if "is_logged_in" not in st.session_state:
+        st.session_state.is_logged_in = False
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = None
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
 
 # 도시 추출
 CITY_PATTERNS = [
@@ -288,8 +292,12 @@ def get_drug_info(drug_query):
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
             item = data['body']['items'][0]
             efcy = item.get('efcyQesitm', '정보 없음')[:150] + ("..." if len(item.get('efcyQesitm', '')) > 150 else "")
-            use_method = item.get('useMethodQesitm', '정보 없음')[:150] + ("..." if len(item.get('useMethodQesitm', '')) > 150 else "")
+            use_method_raw = item.get('useMethodQesitm', '정보 없음')
             atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
+            
+            # ~를 -로 변환
+            use_method = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)[:150] + ("..." if len(use_method_raw) > 150 else "")
+            
             result = (
                 f"💊 **의약품 정보** 💊\n\n"
                 f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
@@ -372,7 +380,7 @@ def fetch_arxiv_paper(paper):
         "authors": ", ".join(str(a) for a in paper.authors),
         "summary": paper.summary[:200],
         "entry_id": paper.entry_id,
-        "pdf_url": paper.pdf_url,  # 수정된 부분
+        "pdf_url": paper.pdf_url,
         "published": paper.published.strftime('%Y-%m-%d')
     }
 
@@ -386,7 +394,9 @@ def get_arxiv_papers(query, max_results=3):
         results = list(executor.map(fetch_arxiv_paper, search.results()))
     if not results:
         return "해당 키워드로 논문을 찾을 수 없습니다."
-    response = "📚 **Arxiv 논문 검색 결과** 📚\n\n" + "\n\n".join(
+    
+    response = "📚 **Arxiv 논문 검색 결과** 📚\n\n"
+    response += "\n\n".join(
         [f"**논문 {i}**\n\n"
          f"📄 **제목**: {r['title']}\n\n"
          f"👥 **저자**: {r['authors']}\n\n"
@@ -396,7 +406,7 @@ def get_arxiv_papers(query, max_results=3):
          f"📅 **출판일**: {r['published']}\n\n"
          f"{'-' * 50}"
          for i, r in enumerate(results, 1)]
-    ) + "\n더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
+    ) + "\n\n더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
 
@@ -408,7 +418,6 @@ def get_conversational_response(query, chat_history):
     if cached:
         return cached
     
-    # 이모지 목록 정의
     emoji_list = (
         "체크리스트 이모지:\n"
         "✅ 완료된 항목 | ☑️ 체크 상자 (체크됨) | ✓ 체크 표시 | ✔️ 굵은 체크 표시 | ❌ 취소/실패 항목 | ⬜ 빈 상자 | ⚪ 빈 원 | 🔘 라디오 버튼 | 📌 핀으로 고정된 항목 | 🚀 시작/출시 항목\n\n"
@@ -495,6 +504,8 @@ def show_login_page():
             user_id, is_existing = create_or_get_user(nickname)
             st.session_state.user_id = user_id
             st.session_state.is_logged_in = True
+            st.session_state.chat_history = []  # 로그인 시 chat_history 초기화
+            st.session_state.session_id = str(uuid.uuid4())
             st.toast(f"환영합니다, {nickname}님! 🎉")
             time.sleep(1)
             st.rerun()
@@ -504,6 +515,7 @@ def get_cached_response(query):
     return process_query(query)
 
 def process_query(query):
+    init_session_state()  # 쿼리 처리 전에 세션 상태 확인 및 초기화
     query_type = needs_search(query)
     if query_type == "mbti":
         return (
@@ -553,6 +565,9 @@ def process_query(query):
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     
+    # 세션 상태 초기화 확인
+    init_session_state()
+    
     # 도움말 버튼 추가
     if st.button("도움말 ℹ️"):
         st.info(
@@ -586,6 +601,7 @@ def show_chat_dashboard():
 
 # 메인 실행
 def main():
+    init_session_state()  # 메인 실행 시 항상 초기화
     if not st.session_state.is_logged_in:
         show_login_page()
     else:
