@@ -1,3 +1,4 @@
+# 라이브러리 설정
 import streamlit as st
 import time
 import uuid
