@@ -103,12 +103,12 @@ class WeatherAPI:
         weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
         weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
         result = (
-            f"현재 {data['name']}, {data['sys']['country']} 날씨 {weather_emoji}\n\n"
-            f"날씨: {data['weather'][0]['description']}\n\n"
-            f"온도: {data['main']['temp']}°C\n\n"
-            f"체감: {data['main']['feels_like']}°C\n\n"
-            f"습도: {data['main']['humidity']}%\n\n"
-            f"풍속: {data['wind']['speed']}m/s\n\n"
+            f"현재 {data['name']}, {data['sys']['country']} 날씨 {weather_emoji}\n"
+            f"날씨: {data['weather'][0]['description']}\n"
+            f"온도: {data['main']['temp']}°C\n"
+            f"체감: {data['main']['feels_like']}°C\n"
+            f"습도: {data['main']['humidity']}%\n"
+            f"풍속: {data['wind']['speed']}m/s\n"
             f"더 궁금한 점 있나요? 😊"
         )
         self.cache.setex(cache_key, self.cache_ttl, result)
@@ -386,7 +386,7 @@ def get_arxiv_papers(query, max_results=3):
         results = list(executor.map(fetch_arxiv_paper, search.results()))
     if not results:
         return "해당 키워드로 논문을 찾을 수 없습니다."
-    response = "📚 **Arxiv 논문 검색 결과** 📚\n" + "\n".join(
+    response = "📚 **Arxiv 논문 검색 결과** 📚\n" + "\n\n".join(
         [f"**논문 {i}**\n\n"
          f"📄 **제목**: {r['title']}\n\n"
          f"👥 **저자**: {r['authors']}\n\n"
