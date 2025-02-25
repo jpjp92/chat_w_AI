@@ -386,7 +386,7 @@ def get_arxiv_papers(query, max_results=3):
         results = list(executor.map(fetch_arxiv_paper, search.results()))
     if not results:
         return "해당 키워드로 논문을 찾을 수 없습니다."
-    response = "📚 **Arxiv 논문 검색 결과** 📚\n" + "\n\n".join(
+    response = "📚 **Arxiv 논문 검색 결과** 📚\n\n" + "\n\n".join(
         [f"**논문 {i}**\n\n"
          f"📄 **제목**: {r['title']}\n\n"
          f"👥 **저자**: {r['authors']}\n\n"
