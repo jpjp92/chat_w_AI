@@ -10,3 +10,4 @@ googlesearch-python
 timezonefinder
 langdetect
 arxiv
+diskcache
