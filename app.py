@@ -371,8 +371,8 @@ def get_ai_summary(search_results):
         messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
     )
     summary = response.choices[0].message.content
-    sources = "\n📜 **출처**\n" + "\n".join([f"🌐 [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
-    return f"{summary}{sources}\n더 궁금한 점 있나요? 😊"
+    sources = "\n\n📜 **출처**\n" + "\n".join([f"🌐 [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
+    return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
 
 # 논문 검색
 def fetch_arxiv_paper(paper):
