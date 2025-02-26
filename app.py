@@ -299,7 +299,9 @@ def get_drug_info(drug_query):
             atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
             
             # ~를 -로 변환
-            use_method = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)[:150] + ("..." if len(use_method_raw) > 150 else "")
+            # use_method = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)[:150] + ("..." if len(use_method_raw) > 150 else "")
+            # ~나 -를 그대로 유지하고 길이만 제한
+            use_method = use_method_raw[:150] + ("..." if len(use_method_raw) > 150 else "")
             
             result = (
                 f"💊 **의약품 정보** 💊\n\n"
