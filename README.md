@@ -14,13 +14,12 @@
   🏥 Public API : medicine data 
   ☁️ Weatehr : openweather API 
   🔍 Search : Naver API, googlesearch
-  📚 Paper Search : arxiv API
+  📚 Paper Search : arxiv, pubmed
 ```
 🔄 **In-progress** <br>
 ```
   🚇 Public API : subway data 
   🦠 Public API : disease data
-  📚 Paper Search : PubMed API 
   🔍 Search : Kakao API 
 ```
 
