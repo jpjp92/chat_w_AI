@@ -25,6 +25,7 @@ import threading
 import arxiv
 from diskcache import Cache
 from functools import lru_cache
+import xml.etree.ElementTree as ET  # PubMed XML 파싱용
 
 # 환경 변수 로드
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -33,6 +34,7 @@ WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 DRUG_API_KEY = os.getenv("DRUG_API_KEY")
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+NCBI_KEY = os.getenv("NCBI_KEY")  
 
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
@@ -58,7 +60,7 @@ class MemoryCache:
 
 cache_handler = MemoryCache()
 
-# WeatherAPI 클래스
+# WeatherAPI 클래스 (기존 로직 유지)
 class WeatherAPI:
     def __init__(self, cache_ttl=600):
         self.cache = cache_handler
@@ -374,7 +376,7 @@ def get_ai_summary(search_results):
     sources = "\n\n📜 **출처**\n" + "\n".join([f"🌐 [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
     return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
 
-# 논문 검색
+# 논문 검색 (ArXiv)
 def fetch_arxiv_paper(paper):
     return {
         "title": paper.title,
@@ -408,6 +410,97 @@ def get_arxiv_papers(query, max_results=3):
          f"{'-' * 50}"
          for i, r in enumerate(results, 1)]
     ) + "\n\n더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
+    cache_handler.setex(cache_key, 3600, response)
+    return response
+
+# PubMed 논문 검색 추가
+base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+
+def search_pubmed(query, max_results=5):
+    search_url = f"{base_url}esearch.fcgi"
+    params = {
+        "db": "pubmed",
+        "term": query,
+        "retmode": "json",
+        "retmax": max_results,
+        "api_key": NCBI_KEY
+    }
+    response = requests.get(search_url, params=params)
+    return response.json()
+
+def get_pubmed_summaries(id_list):
+    summary_url = f"{base_url}esummary.fcgi"
+    ids = ",".join(id_list)
+    params = {
+        "db": "pubmed",
+        "id": ids,
+        "retmode": "json",
+        "api_key": NCBI_KEY
+    }
+    response = requests.get(summary_url, params=params)
+    return response.json()
+
+def get_pubmed_abstract(id_list):
+    fetch_url = f"{base_url}efetch.fcgi"
+    ids = ",".join(id_list)
+    params = {
+        "db": "pubmed",
+        "id": ids,
+        "retmode": "xml",
+        "rettype": "abstract",
+        "api_key": NCBI_KEY
+    }
+    response = requests.get(fetch_url, params=params)
+    return response.text
+
+def extract_first_two_sentences(abstract_text):
+    if not abstract_text or abstract_text.isspace():
+        return "No abstract available"
+    sentences = [s.strip() for s in abstract_text.split('.') if s.strip()]
+    return " ".join(sentences[:2]) + "." if sentences else "No abstract available"
+
+def parse_abstracts(xml_text):
+    abstract_dict = {}
+    try:
+        root = ET.fromstring(xml_text)
+        for article in root.findall(".//PubmedArticle"):
+            pmid_elem = article.find(".//MedlineCitation/PMID")
+            abstract_elem = article.find(".//Abstract/AbstractText")
+            pmid = pmid_elem.text if pmid_elem is not None else None
+            abstract = abstract_elem.text if abstract_elem is not None else "No abstract available"
+            if pmid:
+                abstract_dict[pmid] = extract_first_two_sentences(abstract)
+    except ET.ParseError as e:
+        print(f"XML 파싱 오류 발생: {e}")
+    return abstract_dict
+
+def get_pubmed_papers(query, max_results=5):
+    cache_key = f"pubmed:{query}:{max_results}"
+    cached = cache_handler.get(cache_key)
+    if cached:
+        return cached
+    
+    search_results = search_pubmed(query, max_results)
+    pubmed_ids = search_results["esearchresult"]["idlist"]
+    if not pubmed_ids:
+        return "해당 키워드로 의학 논문을 찾을 수 없습니다."
+    
+    summaries = get_pubmed_summaries(pubmed_ids)
+    abstracts_xml = get_pubmed_abstract(pubmed_ids)
+    abstract_dict = parse_abstracts(abstracts_xml)
+    
+    response = "📚 **PubMed 의학 논문 검색 결과** 📚\n\n"
+    response += "\n\n".join(
+        [f"**논문 {i}**\n\n"
+         f"🆔 **PMID**: {pmid}\n\n"
+         f"📖 **제목**: {summaries['result'][pmid].get('title', 'No title available')}\n\n"
+         f"📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date available')}\n\n"
+         f"✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n"
+         f"🔗 **링크**: {'https://doi.org/' + next((aid['value'] for aid in summaries['result'][pmid].get('articleids', []) if aid['idtype'] == 'doi'), None) if next((aid['value'] for aid in summaries['result'][pmid].get('articleids', []) if aid['idtype'] == 'doi'), None) else f'https://pubmed.ncbi.nlm.nih.gov/{pmid}/'}\n\n"
+         f"📝 **초록**: {abstract_dict.get(pmid, 'No abstract available')}\n\n"
+         f"{'-' * 50}"
+         for i, pmid in enumerate(pubmed_ids, 1)]
+    ) + "\n\n더 많은 의학 논문을 보고 싶다면 말씀해 주세요! 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
 
@@ -491,14 +584,15 @@ def needs_search(query):
     arxiv_keywords = ["논문검색", "arxiv", "paper", "research"]
     if any(kw in query_lower for kw in arxiv_keywords) and len(query_lower) > 5:
         return "arxiv_search"
+    pubmed_keywords = ["의학논문"]
+    if any(kw in query_lower for kw in pubmed_keywords) and len(query_lower) > 5:
+        return "pubmed_search"
     search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐", "알려줘", "찾아줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
     return "general_query"
 
 # UI 함수
-
-
 def show_login_page():
     st.title("로그인 🤗")
     with st.form("login_form"):
@@ -524,8 +618,6 @@ def show_login_page():
                     st.toast(f"로그인 중 오류가 발생했습니다: {str(e)}", icon="❌")
             else:
                 st.toast("닉네임을 입력해주세요.", icon="⚠️")
-
-
 
 @st.cache_data(ttl=600)
 def get_cached_response(query):
@@ -575,6 +667,9 @@ def process_query(query):
     elif query_type == "arxiv_search":
         keywords = query.replace("논문검색", "").replace("arxiv", "").replace("paper", "").replace("research", "").strip()
         return get_arxiv_papers(keywords)
+    elif query_type == "pubmed_search":
+        keywords = query.replace("의학논문", "").strip()
+        return get_pubmed_papers(keywords)
     elif query_type == "general_query":
         return get_conversational_response(query, st.session_state.chat_history)
     return "아직 지원하지 않는 기능이에요. 😅"
@@ -590,9 +685,10 @@ def show_chat_dashboard():
         st.info(
             "챗봇을 더 잘 활용하려면 아래 형식을 참고하세요:\n\n"
             "1. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀정)\n"
-            "2. **논문검색** 📚: '논문검색 [키워드]' (예: 논문검색 machine learning)\n"
-            "3. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n\n"
-            "4. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n\n"
+            "2. **논문검색 (ArXiv)** 📚: '논문검색 [키워드]' (예: 논문검색 machine learning)\n"
+            "3. **의학논문검색 (PubMed)** 🩺: '의학논문 [키워드]' (예: 의학논문 ipsc therapy)\n"
+            "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
+            "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n\n"
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
     
