@@ -448,7 +448,7 @@ def get_conversational_response(query, chat_history):
 GREETING_RESPONSES = {
     "안녕": "안녕하세요! 반갑습니다! 😊",
     "안녕 반가워": "안녕하세요! 저도 반갑습니다! 오늘 기분이 어떠신가요? 😄",
-    "하이": "하이! 좋은 하루 보내세요! 😊",
+    "하이": "하이! 무엇을 도와드릴까요? 😊",
     "헬로": "안녕하세요! 반갑습니다! 😊",
     "헤이": "헤이! 잘 지내세요? 😄",
     "왓업": "왓업! 뭐하고 계신가요? 😊",
@@ -491,7 +491,7 @@ def needs_search(query):
     arxiv_keywords = ["논문검색", "arxiv", "paper", "research"]
     if any(kw in query_lower for kw in arxiv_keywords) and len(query_lower) > 5:
         return "arxiv_search"
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐"]
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐", "알려줘", "찾아줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
     return "general_query"
@@ -589,9 +589,9 @@ def show_chat_dashboard():
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇을 더 잘 활용하려면 아래 형식을 참고하세요:\n\n"
-            "1. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀)\n"
+            "1. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀정)\n"
             "2. **논문검색** 📚: '논문검색 [키워드]' (예: 논문검색 machine learning)\n"
-            "3. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 부산 날씨)\n\n"
+            "3. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서 날씨)\n\n"
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
     
