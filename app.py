@@ -366,6 +366,18 @@ def search_and_summarize(query, num_results=5):
                 continue
     return pd.DataFrame(data)
 
+# def get_ai_summary(search_results):
+#     if search_results.empty:
+#         return "검색 결과를 찾을 수 없습니다."
+#     context = "\n".join([f"출처: {row['title']}\n내용: {row['contents']}" for _, row in search_results.iterrows()])
+#     response = client.chat.completions.create(
+#         model="gpt-4o",
+#         messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
+#     )
+#     summary = response.choices[0].message.content
+#     sources = "\n\n📜 **출처**\n" + "\n".join([f"🌐 [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
+#     return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
+
 def get_ai_summary(search_results):
     if search_results.empty:
         return "검색 결과를 찾을 수 없습니다."
@@ -375,7 +387,11 @@ def get_ai_summary(search_results):
         messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
     )
     summary = response.choices[0].message.content
-    sources = "\n\n📜 **출처**\n" + "\n".join([f"🌐 [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
+    # 'link' 키가 없을 경우를 대비한 예외 처리
+    sources = "\n\n📜 **출처**\n" + "\n".join(
+        [f"🌐 [{row['title']}]({row.get('link', '링크 없음')})" 
+         for _, row in search_results.iterrows()]
+    )
     return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
 
 # 논문 검색 (ArXiv)
