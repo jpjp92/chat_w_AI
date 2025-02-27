@@ -646,6 +646,11 @@ def process_query(query):
         return get_conversational_response(query, st.session_state.chat_history)
     return "아직 지원하지 않는 기능이에요. 😅"
 
+
+def handle_error(e, context="작업 중", user_friendly_msg="알 수 없는 오류가 발생했어요. 😅 다시 시도해 주세요!"):
+    logger.error(f"{context} 오류 발생: {str(e)}", exc_info=True)
+    return f"{user_friendly_msg}\n\n⚠️ 오류 내용: {str(e)}"
+
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     
@@ -674,16 +679,64 @@ def show_chat_dashboard():
         st.chat_message("user").markdown(user_prompt)
         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
         with st.chat_message("assistant"):
-            placeholder = st.empty()
-            placeholder.markdown("⏳ 응답 생성 중...")
-            start_time = time.time()
-            with ThreadPoolExecutor() as executor:
-                future = executor.submit(get_cached_response, user_prompt)
-                response = future.result()
-            time_taken = round(time.time() - start_time, 2)
-            placeholder.markdown(response, unsafe_allow_html=True)
-            st.session_state.chat_history.append({"role": "assistant", "content": response})
-            async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
+            try:
+                # st.spinner로 "응답 준비 중" 표시
+                with st.spinner("응답을 준비 중이에요.. ⏳"):
+                    start_time = time.time()
+                    with ThreadPoolExecutor() as executor:
+                        future = executor.submit(get_cached_response, user_prompt)
+                        response = future.result()
+                    time_taken = round(time.time() - start_time, 2)
+                
+                # 응답 표시
+                st.markdown(response, unsafe_allow_html=True)
+                st.session_state.chat_history.append({"role": "assistant", "content": response})
+                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
+            
+            except Exception as e:
+                # 에러 처리
+                error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
+                st.markdown(error_msg, unsafe_allow_html=True)
+                st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+
+# def show_chat_dashboard():
+#     st.title("AI 챗봇 🤖")
+    
+#     # 세션 상태 초기화 확인
+#     init_session_state()
+    
+#     # 도움말 버튼 추가
+#     if st.button("도움말 ℹ️"):
+#         st.info(
+#             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
+#             "1. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀정)\n"
+#             "2. **논문검색 (ArXiv)** 📚: '논문검색 [키워드]' (예: 논문검색 machine learning)\n"
+#             "3. **의학논문검색 (PubMed)** 🩺: '의학논문 [키워드]' (예: 의학논문 gene therapy)\n"
+#             "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
+#             "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n\n"
+#             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
+#         )
+    
+#     # 채팅 기록 표시
+#     for msg in st.session_state.chat_history:
+#         with st.chat_message(msg['role']):
+#             st.markdown(msg['content'], unsafe_allow_html=True)
+    
+#     # 사용자 입력 처리
+#     if user_prompt := st.chat_input("질문해 주세요!"):
+#         st.chat_message("user").markdown(user_prompt)
+#         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
+#         with st.chat_message("assistant"):
+#             placeholder = st.empty()
+#             placeholder.markdown("⏳ 응답을 준비 중이에요..")
+#             start_time = time.time()
+#             with ThreadPoolExecutor() as executor:
+#                 future = executor.submit(get_cached_response, user_prompt)
+#                 response = future.result()
+#             time_taken = round(time.time() - start_time, 2)
+#             placeholder.markdown(response, unsafe_allow_html=True)
+#             st.session_state.chat_history.append({"role": "assistant", "content": response})
+#             async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
 
 # 메인 실행
 def main():
