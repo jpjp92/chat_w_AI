@@ -313,6 +313,21 @@ def get_naver_api_results(query):
         return search_and_summarize(query, num_results=5)
     return pd.DataFrame(results)
 
+# def search_and_summarize(query, num_results=5):
+#     data = []
+#     with ThreadPoolExecutor() as executor:
+#         futures = [executor.submit(requests.get, link, timeout=5) for link in search(query, num_results=num_results)]
+#         for future in futures:
+#             try:
+#                 response = future.result()
+#                 soup = BeautifulSoup(response.text, 'html.parser')
+#                 title = soup.title.get_text() if soup.title else "No title"
+#                 description = ' '.join([p.get_text() for p in soup.find_all('p')[:3]])
+#                 data.append({"title": title, "contents": description[:500], "link": response.url})
+#             except Exception:
+#                 continue
+#     return pd.DataFrame(data)
+
 def search_and_summarize(query, num_results=5):
     data = []
     with ThreadPoolExecutor() as executor:
@@ -323,10 +338,17 @@ def search_and_summarize(query, num_results=5):
                 soup = BeautifulSoup(response.text, 'html.parser')
                 title = soup.title.get_text() if soup.title else "No title"
                 description = ' '.join([p.get_text() for p in soup.find_all('p')[:3]])
-                data.append({"title": title, "contents": description[:500], "link": response.url})
-            except Exception:
+                link = response.url if response.url else None  # 링크가 없으면 None으로 설정
+                if not link:
+                    logger.warning(f"링크 누락 발생: query={query}, title={title}, url=없음")
+                data.append({"title": title, "contents": description[:500], "link": link})
+            except Exception as e:
+                logger.error(f"검색 요청 실패: query={query}, error={str(e)}")
                 continue
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    if df.empty or 'link' not in df.columns or df['link'].isnull().all():
+        logger.warning(f"검색 결과 비어있음 또는 모든 링크 누락: query={query}, data={data}")
+    return df
 
 def get_ai_summary(search_results):
     if search_results.empty:
@@ -342,6 +364,21 @@ def get_ai_summary(search_results):
          for _, row in search_results.iterrows()]
     )
     return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
+
+# def get_ai_summary(search_results):
+#     if search_results.empty:
+#         return "검색 결과를 찾을 수 없습니다."
+#     context = "\n".join([f"출처: {row['title']}\n내용: {row['contents']}" for _, row in search_results.iterrows()])
+#     response = client.chat.completions.create(
+#         model="gpt-4o",
+#         messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
+#     )
+#     summary = response.choices[0].message.content
+#     sources = "\n\n📜 **출처**\n" + "\n".join(
+#         [f"🌐 [{row['title']}]({row.get('link', '링크 없음')})" 
+#          for _, row in search_results.iterrows()]
+#     )
+#     return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
 
 # 논문 검색 (ArXiv)
 def fetch_arxiv_paper(paper):
