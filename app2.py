@@ -1,9 +1,5 @@
 # app2.py
-
-from config.imports import (st, time, uuid, create_client, os, datetime, timedelta, pytz, logging,
-                           requests, BeautifulSoup, pd, search, Client, TimezoneFinder, re, json,
-                           urllib, detect, HTTPAdapter, Retry, ThreadPoolExecutor, threading, queue,
-                           arxiv, Cache, lru_cache, ET,multiprocessing)
+from config.imports import *
 from config.env import *
 
 # 로깅 설정
