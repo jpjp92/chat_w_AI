@@ -1,4 +1,5 @@
-# 라이브러리 설정
+# config/imports.py
+
 import streamlit as st
 import time
 import uuid
@@ -20,9 +21,11 @@ import urllib.parse
 from langdetect import detect
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import threading
+import queue
+import multiprocessing
 import arxiv
 from diskcache import Cache
 from functools import lru_cache
-import xml.etree.ElementTree as ET  
+import xml.etree.ElementTree as ET
