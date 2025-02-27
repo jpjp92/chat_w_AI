@@ -115,39 +115,6 @@ class WeatherAPI:
         result = forecast_text + "더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
-        
-    # def get_forecast_by_day(self, city_name, days_from_today=1):
-    #     cache_key = f"forecast:{city_name}:{days_from_today}"
-    #     cached_data = self.cache.get(cache_key)
-    #     if cached_data:
-    #         return cached_data
-        
-    #     city_info = self.get_city_info(city_name)
-    #     if not city_info:
-    #         return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다."
-        
-    #     url = "https://api.openweathermap.org/data/2.5/forecast"
-    #     params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-    #     data = self.fetch_weather(url, params)
-    #     target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
-    #     forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n"
-    #     weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-        
-    #     found = False
-    #     for forecast in data['list']:
-    #         dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
-    #         if dt == target_date:
-    #             found = True
-    #             time_only = datetime.fromtimestamp(forecast['dt']).strftime('%H:%M')
-    #             weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
-    #             forecast_text += (
-    #                 f"⏰ {time_only} {forecast['weather'][0]['description']} {weather_emoji} "
-    #                 f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s\n"
-    #             )
-        
-    #     result = forecast_text + "\n더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
-    #     self.cache.setex(cache_key, self.cache_ttl, result)
-    #     return result
 
     def get_weekly_forecast(self, city_name):
         cache_key = f"weekly_forecast:{city_name}"
@@ -192,8 +159,8 @@ class WeatherAPI:
         for date, info in daily_forecast.items():
             weather_emoji = weather_emojis.get(info['weather'].split()[0], '🌤️')
             forecast_text += (
-                f"{info['weekday']}: {info['weather']} {weather_emoji} "
-                f"최저 {info['temp_min']}°C 최고 {info['temp_max']}°C\n"
+                f"\n{info['weekday']}: {info['weather']} {weather_emoji} "
+                f"최저 {info['temp_min']}°C 최고 {info['temp_max']}°C\n\n"
             )
         
         result = forecast_text + "\n더 궁금한 점 있나요? 😊"
