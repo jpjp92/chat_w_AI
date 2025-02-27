@@ -1,19 +1,44 @@
-# app.py
+# 라이브러리 설정
+import streamlit as st
+import time
+import uuid
+from supabase import create_client
+import os
+from datetime import datetime, timedelta
+import pytz
+import logging
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+from googlesearch import search
+from g4f.client import Client
+from timezonefinder import TimezoneFinder
+import re
+import json
+import urllib.request
+import urllib.parse
+from langdetect import detect
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import arxiv
+from diskcache import Cache
+from functools import lru_cache
+import xml.etree.ElementTree as ET  # PubMed XML 파싱용
 
-from config.imports import *
-from config.env import *
+# 환경 변수 로드
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+DRUG_API_KEY = os.getenv("DRUG_API_KEY")
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+NCBI_KEY = os.getenv("NCBI_KEY")  
 
 # 로깅 설정
-logging.basicConfig(
-    level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO,
-    filename="chatbot_errors.log",
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
 logger = logging.getLogger("HybridChat")
-
-# 병렬 처리 설정 (Streamlit Cloud 무료 티어 기준)
-MAX_WORKERS = min(multiprocessing.cpu_count() * 2, 8)
-MAX_PROCESS_WORKERS = min(multiprocessing.cpu_count(), 2)
 
 # 캐시 설정
 cache = Cache("cache_directory")
@@ -35,28 +60,20 @@ class MemoryCache:
 
 cache_handler = MemoryCache()
 
-# 공통 에러 처리 함수
-def handle_error(e, context="작업 중", user_friendly_msg="알 수 없는 오류가 발생했어요. 😅 다시 시도해 주세요!"):
-    logger.error(f"{context} 오류 발생: {str(e)}", exc_info=True)
-    return f"{user_friendly_msg}\n\n⚠️ 오류 내용: {str(e)}"
-
-# WeatherAPI 클래스
+# WeatherAPI 클래스 (기존 로직 유지)
 class WeatherAPI:
     def __init__(self, cache_ttl=600):
         self.cache = cache_handler
         self.cache_ttl = cache_ttl
 
     def fetch_weather(self, url, params):
-        try:
-            session = requests.Session()
-            retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-            adapter = HTTPAdapter(max_retries=retry_strategy)
-            session.mount("https://", adapter)
-            response = session.get(url, params=params, timeout=3)
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            return handle_error(e, "날씨 API 호출 중", f"'{params.get('q', '알 수 없는 도시')}' 날씨 정보를 가져오지 못했어요. 🌧️")
+        session = requests.Session()
+        retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        response = session.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        return response.json()
 
     @lru_cache(maxsize=100)
     def get_city_info(self, city_name):
@@ -64,21 +81,14 @@ class WeatherAPI:
         cached = self.cache.get(cache_key)
         if cached:
             return cached
-        try:
-            url = "http://api.openweathermap.org/geo/1.0/direct"
-            params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self.fetch_weather, url, params)
-                data = future.result()
-            if isinstance(data, str):
-                return data
-            if data and len(data) > 0:
-                city_info = {"name": data[0]["name"], "lat": data[0]["lat"], "lon": data[0]["lon"]}
-                self.cache.setex(cache_key, 86400, city_info)
-                return city_info
-            return None
-        except Exception as e:
-            return handle_error(e, "도시 정보 조회 중", f"'{city_name}' 위치 정보를 찾지 못했어요. 🗺️")
+        url = "http://api.openweathermap.org/geo/1.0/direct"
+        params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
+        data = self.fetch_weather(url, params)
+        if data and len(data) > 0:
+            city_info = {"name": data[0]["name"], "lat": data[0]["lat"], "lon": data[0]["lon"]}
+            self.cache.setex(cache_key, 86400, city_info)
+            return city_info
+        return None
 
     def get_city_weather(self, city_name):
         cache_key = f"weather:{city_name}"
@@ -87,32 +97,25 @@ class WeatherAPI:
             return cached_data
         
         city_info = self.get_city_info(city_name)
-        if not city_info or isinstance(city_info, str):
-            return city_info if isinstance(city_info, str) else f"'{city_name}'의 날씨 정보를 가져올 수 없습니다."
+        if not city_info:
+            return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다."
         
-        try:
-            url = "https://api.openweathermap.org/data/2.5/weather"
-            params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self.fetch_weather, url, params)
-                data = future.result()
-            if isinstance(data, str):
-                return data
-            weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-            weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
-            result = (
-                f"현재 {data['name']}, {data['sys']['country']} 날씨 {weather_emoji}\n"
-                f"날씨: {data['weather'][0]['description']}\n"
-                f"온도: {data['main']['temp']}°C\n"
-                f"체감: {data['main']['feels_like']}°C\n"
-                f"습도: {data['main']['humidity']}%\n"
-                f"풍속: {data['wind']['speed']}m/s\n"
-                f"더 궁금한 점 있나요? 😊"
-            )
-            self.cache.setex(cache_key, self.cache_ttl, result)
-            return result
-        except Exception as e:
-            return handle_error(e, "현재 날씨 조회 중", f"'{city_name}' 날씨 정보를 가져오지 못했어요. 🌦️")
+        url = "https://api.openweathermap.org/data/2.5/weather"
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+        data = self.fetch_weather(url, params)
+        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+        weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
+        result = (
+            f"현재 {data['name']}, {data['sys']['country']} 날씨 {weather_emoji}\n"
+            f"날씨: {data['weather'][0]['description']}\n"
+            f"온도: {data['main']['temp']}°C\n"
+            f"체감: {data['main']['feels_like']}°C\n"
+            f"습도: {data['main']['humidity']}%\n"
+            f"풍속: {data['wind']['speed']}m/s\n"
+            f"더 궁금한 점 있나요? 😊"
+        )
+        self.cache.setex(cache_key, self.cache_ttl, result)
+        return result
 
     def get_forecast_by_day(self, city_name, days_from_today=1):
         cache_key = f"forecast:{city_name}:{days_from_today}"
@@ -121,40 +124,31 @@ class WeatherAPI:
             return cached_data
         
         city_info = self.get_city_info(city_name)
-        if not city_info or isinstance(city_info, str):
-            return city_info if isinstance(city_info, str) else f"'{city_name}'의 날씨 예보를 가져올 수 없습니다."
+        if not city_info:
+            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다."
         
-        try:
-            url = "https://api.openweathermap.org/data/2.5/forecast"
-            params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self.fetch_weather, url, params)
-                data = future.result()
-            if isinstance(data, str):
-                return data
-            target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
-            forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
-            weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-            found = False
-
-            forecast_lines = []
-            for forecast in data['list']:
-                dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
-                if dt == target_date:
-                    time_only = datetime.fromtimestamp(forecast['dt']).strftime('%H:%M')
-                    weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
-                    forecast_lines.append(
-                        f"⏰ {time_only} {forecast['weather'][0]['description']} {weather_emoji} "
-                        f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s"
-                    )
-                    found = True
-            
-            forecast_text += "\n\n".join(forecast_lines)
-            result = forecast_text + "\n\n더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
-            self.cache.setex(cache_key, self.cache_ttl, result)
-            return result
-        except Exception as e:
-            return handle_error(e, "날씨 예보 조회 중", f"'{city_name}' 예보를 가져오지 못했어요. ⛅")
+        url = "https://api.openweathermap.org/data/2.5/forecast"
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+        data = self.fetch_weather(url, params)
+        target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
+        forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n"
+        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+        
+        found = False
+        for forecast in data['list']:
+            dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
+            if dt == target_date:
+                found = True
+                time_only = datetime.fromtimestamp(forecast['dt']).strftime('%H:%M')
+                weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
+                forecast_text += (
+                    f"⏰ {time_only} {forecast['weather'][0]['description']} {weather_emoji} "
+                    f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s\n"
+                )
+        
+        result = forecast_text + "\n더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
+        self.cache.setex(cache_key, self.cache_ttl, result)
+        return result
 
     def get_weekly_forecast(self, city_name):
         cache_key = f"weekly_forecast:{city_name}"
@@ -163,58 +157,49 @@ class WeatherAPI:
             return cached_data
         
         city_info = self.get_city_info(city_name)
-        if not city_info or isinstance(city_info, str):
-            return city_info if isinstance(city_info, str) else f"'{city_name}'의 주간 예보를 가져올 수 없습니다."
+        if not city_info:
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다."
         
-        try:
-            url = "https://api.openweathermap.org/data/2.5/forecast"
-            params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self.fetch_weather, url, params)
-                data = future.result()
-            if isinstance(data, str):
-                return data
-            
-            today = datetime.now().date()
-            week_end = today + timedelta(days=6)
-            daily_forecast = {}
-            weekdays_kr = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
-            today_weekday = today.weekday()
-
-            for forecast in data['list']:
-                dt = datetime.fromtimestamp(forecast['dt']).date()
-                if today <= dt <= week_end:
-                    dt_str = dt.strftime('%Y-%m-%d')
+        url = "https://api.openweathermap.org/data/2.5/forecast"
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+        data = self.fetch_weather(url, params)
+        today = datetime.now().date()
+        week_end = today + timedelta(days=6)
+        daily_forecast = {}
+        weekdays_kr = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+        today_weekday = today.weekday()
+        
+        for forecast in data['list']:
+            dt = datetime.fromtimestamp(forecast['dt']).date()
+            if today <= dt <= week_end:
+                dt_str = dt.strftime('%Y-%m-%d')
+                if dt_str not in daily_forecast:
                     weekday_idx = (today_weekday + (dt - today).days) % 7
-                    info = {
+                    daily_forecast[dt_str] = {
                         'weekday': weekdays_kr[weekday_idx],
                         'temp_min': forecast['main']['temp_min'],
                         'temp_max': forecast['main']['temp_max'],
                         'weather': forecast['weather'][0]['description']
                     }
-                    if dt_str not in daily_forecast:
-                        daily_forecast[dt_str] = info
-                    else:
-                        daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], info['temp_min'])
-                        daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], info['temp_max'])
-            
-            today_str = today.strftime('%Y-%m-%d')
-            today_weekday_str = weekdays_kr[today_weekday]
-            forecast_text = f"{today_str}({today_weekday_str}) 기준 {city_info['name']}의 주간 날씨 예보 🌤️\n"
-            weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-            
-            for date, info in daily_forecast.items():
-                weather_emoji = weather_emojis.get(info['weather'].split()[0], '🌤️')
-                forecast_text += (
-                    f"{info['weekday']}: {info['weather']} {weather_emoji} "
-                    f"최저 {info['temp_min']}°C 최고 {info['temp_max']}°C\n"
-                )
-            
-            result = forecast_text + "\n더 궁금한 점 있나요? 😊"
-            self.cache.setex(cache_key, self.cache_ttl, result)
-            return result
-        except Exception as e:
-            return handle_error(e, "주간 날씨 예보 조회 중", f"'{city_name}' 주간 예보를 가져오지 못했어요. ☔")
+                else:
+                    daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], forecast['main']['temp_min'])
+                    daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], forecast['main']['temp_max'])
+        
+        today_str = today.strftime('%Y-%m-%d')
+        today_weekday_str = weekdays_kr[today_weekday]
+        forecast_text = f"{today_str}({today_weekday_str}) 기준 {city_info['name']}의 주간 날씨 예보 🌤️\n"
+        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+        
+        for date, info in daily_forecast.items():
+            weather_emoji = weather_emojis.get(info['weather'].split()[0], '🌤️')
+            forecast_text += (
+                f"{info['weekday']}: {info['weather']} {weather_emoji} "
+                f"최저 {info['temp_min']}°C 최고 {info['temp_max']}°C\n"
+            )
+        
+        result = forecast_text + "\n더 궁금한 점 있나요? 😊"
+        self.cache.setex(cache_key, self.cache_ttl, result)
+        return result
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -266,38 +251,29 @@ def extract_city_from_time_query(query):
 
 # 시간 정보
 def get_time_by_city(city_name="서울"):
-    try:
-        city_info = weather_api.get_city_info(city_name)
-        if not city_info or isinstance(city_info, str):
-            return city_info if isinstance(city_info, str) else f"'{city_name}'의 시간 정보를 가져올 수 없습니다."
-        tf = TimezoneFinder()
-        timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
-        timezone = pytz.timezone(timezone_str)
-        city_time = datetime.now(timezone)
-        am_pm = "오전" if city_time.strftime("%p") == "AM" else "오후"
-        return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일 %p %I:%M')} ⏰\n더 궁금한 점 있나요? 😊"
-    except Exception as e:
-        return handle_error(e, "시간 정보 조회 중", f"'{city_name}'의 시간을 가져오지 못했어요. ⏱️")
+    city_info = weather_api.get_city_info(city_name)
+    if not city_info:
+        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다."
+    tf = TimezoneFinder()
+    timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
+    timezone = pytz.timezone(timezone_str)
+    city_time = datetime.now(timezone)
+    am_pm = "오전" if city_time.strftime("%p") == "AM" else "오후"
+    return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일 %p %I:%M')} ⏰\n더 궁금한 점 있나요? 😊"
 
 # 사용자 및 채팅 기록 관리
 def create_or_get_user(nickname):
-    try:
-        user = supabase.table("users").select("*").eq("nickname", nickname).execute()
-        if user.data:
-            return user.data[0]["id"], True
-        new_user = supabase.table("users").insert({"nickname": nickname, "created_at": datetime.now().isoformat()}).execute()
-        return new_user.data[0]["id"], False
-    except Exception as e:
-        return handle_error(e, "사용자 생성/조회 중", "사용자 정보를 처리하지 못했어요. 😓"), False
+    user = supabase.table("users").select("*").eq("nickname", nickname).execute()
+    if user.data:
+        return user.data[0]["id"], True
+    new_user = supabase.table("users").insert({"nickname": nickname, "created_at": datetime.now().isoformat()}).execute()
+    return new_user.data[0]["id"], False
 
 def save_chat_history(user_id, session_id, question, answer, time_taken):
-    try:
-        supabase.table("chat_history").insert({
-            "user_id": user_id, "session_id": session_id, "question": question,
-            "answer": answer, "time_taken": time_taken, "created_at": datetime.now().isoformat()
-        }).execute()
-    except Exception as e:
-        logger.error(f"채팅 기록 저장 실패: {str(e)}")
+    supabase.table("chat_history").insert({
+        "user_id": user_id, "session_id": session_id, "question": question,
+        "answer": answer, "time_taken": time_taken, "created_at": datetime.now().isoformat()
+    }).execute()
 
 def async_save_chat_history(user_id, session_id, question, answer, time_taken):
     threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
@@ -312,11 +288,8 @@ def get_drug_info(drug_query):
     
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
     params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'json'}
-    
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, url, params=params, timeout=3)
-            response = future.result()
+        response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
@@ -324,7 +297,12 @@ def get_drug_info(drug_query):
             efcy = item.get('efcyQesitm', '정보 없음')[:150] + ("..." if len(item.get('efcyQesitm', '')) > 150 else "")
             use_method_raw = item.get('useMethodQesitm', '정보 없음')
             atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
+            
+            # ~를 -로 변환
+            # use_method = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)[:150] + ("..." if len(use_method_raw) > 150 else "")
+            # ~나 -를 그대로 유지하고 길이만 제한
             use_method = use_method_raw[:150] + ("..." if len(use_method_raw) > 150 else "")
+            
             result = (
                 f"💊 **의약품 정보** 💊\n\n"
                 f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
@@ -339,38 +317,29 @@ def get_drug_info(drug_query):
             return result
         else:
             return search_and_summarize_drug(drug_name)
-    except requests.RequestException as e:
-        logger.warning(f"약품 API 호출 실패, 웹 검색으로 전환: {drug_name}")
-        return search_and_summarize_drug(drug_name)
     except Exception as e:
-        return handle_error(e, "약품 정보 조회 중", f"'{drug_name}' 정보를 가져오는 데 실패했어요. 💊")
+        logger.error(f"약품 API 오류: {str(e)}")
+        return search_and_summarize_drug(drug_name)
 
 def search_and_summarize_drug(drug_name):
-    try:
-        search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
-        if not search_results.empty:
-            return f"'{drug_name}' 공식 정보 없음. 웹 검색 요약:\n{get_ai_summary(search_results)}"
-        return f"'{drug_name}' 의약품 정보를 찾을 수 없습니다."
-    except Exception as e:
-        return handle_error(e, "약품 웹 검색 중", f"'{drug_name}' 검색에 실패했어요. 🔍")
+    search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
+    if not search_results.empty:
+        return f"'{drug_name}' 공식 정보 없음. 웹 검색 요약:\n{get_ai_summary(search_results)}"
+    return f"'{drug_name}' 의약품 정보를 찾을 수 없습니다."
 
 # Naver API 및 웹 검색
 def get_naver_api_results(query):
     global naver_request_count
     if naver_request_count >= NAVER_DAILY_LIMIT:
         return search_and_summarize(query, num_results=5)
-    
     enc_text = urllib.parse.quote(query)
     url = f"https://openapi.naver.com/v1/search/webkr?query={enc_text}&display=10&sort=date"
     request = urllib.request.Request(url)
     request.add_header("X-Naver-Client-Id", NAVER_CLIENT_ID)
     request.add_header("X-Naver-Client-Secret", NAVER_CLIENT_SECRET)
     results = []
-    
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(urllib.request.urlopen, request)
-            response = future.result()
+        response = urllib.request.urlopen(request)
         naver_request_count += 1
         if response.getcode() == 200:
             data = json.loads(response.read().decode('utf-8'))
@@ -379,14 +348,13 @@ def get_naver_api_results(query):
                 contents = re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100] + "..."
                 results.append({"title": title, "contents": contents, "url": item.get('link', ''), "date": item.get('pubDate', '')})
     except Exception:
-        logger.warning(f"Naver API 호출 실패, 웹 검색으로 전환: {query}")
         return search_and_summarize(query, num_results=5)
     return pd.DataFrame(results)
 
 def search_and_summarize(query, num_results=5):
     data = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [executor.submit(requests.get, link, timeout=3) for link in search(query, num_results=num_results)]
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(requests.get, link, timeout=5) for link in search(query, num_results=num_results)]
         for future in futures:
             try:
                 response = future.result()
@@ -398,112 +366,110 @@ def search_and_summarize(query, num_results=5):
                 continue
     return pd.DataFrame(data)
 
-def process_search_result(row):
-    try:
-        return f"출처: {row['title']}\n내용: {row['contents']}"
-    except Exception:
-        return ""
+# def get_ai_summary(search_results):
+#     if search_results.empty:
+#         return "검색 결과를 찾을 수 없습니다."
+#     context = "\n".join([f"출처: {row['title']}\n내용: {row['contents']}" for _, row in search_results.iterrows()])
+#     response = client.chat.completions.create(
+#         model="gpt-4o",
+#         messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
+#     )
+#     summary = response.choices[0].message.content
+#     sources = "\n\n📜 **출처**\n" + "\n".join([f"🌐 [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
+#     return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
 
 def get_ai_summary(search_results):
-    try:
-        if search_results.empty:
-            return "검색 결과를 찾을 수 없습니다."
-        context = "\n".join(process_search_result(row) for _, row in search_results.iterrows())
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(client.chat.completions.create, model="gpt-4o", messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}])
-            response = future.result()
-        summary = response.choices[0].message.content
-        sources = "\n\n📜 **출처**\n" + "\n".join(
-            [f"🌐 [{row['title']}]({row.get('link', '링크 없음')})" for _, row in search_results.iterrows()]
-        )
-        return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
-    except Exception as e:
-        return handle_error(e, "검색 결과 요약 중", "검색 결과를 요약하지 못했어요. 😓")
+    if search_results.empty:
+        return "검색 결과를 찾을 수 없습니다."
+    context = "\n".join([f"출처: {row['title']}\n내용: {row['contents']}" for _, row in search_results.iterrows()])
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
+    )
+    summary = response.choices[0].message.content
+    # 'link' 키가 없을 경우를 대비한 예외 처리
+    sources = "\n\n📜 **출처**\n" + "\n".join(
+        [f"🌐 [{row['title']}]({row.get('link', '링크 없음')})" 
+         for _, row in search_results.iterrows()]
+    )
+    return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
 
 # 논문 검색 (ArXiv)
 def fetch_arxiv_paper(paper):
-    try:
-        return {
-            "title": paper.title,
-            "authors": ", ".join(str(a) for a in paper.authors),
-            "summary": paper.summary[:200],
-            "entry_id": paper.entry_id,
-            "pdf_url": paper.pdf_url,
-            "published": paper.published.strftime('%Y-%m-%d')
-        }
-    except Exception as e:
-        return handle_error(e, "ArXiv 논문 처리 중", "논문 정보를 가져오지 못했어요. 📄")
+    return {
+        "title": paper.title,
+        "authors": ", ".join(str(a) for a in paper.authors),
+        "summary": paper.summary[:200],
+        "entry_id": paper.entry_id,
+        "pdf_url": paper.pdf_url,
+        "published": paper.published.strftime('%Y-%m-%d')
+    }
 
 def get_arxiv_papers(query, max_results=3):
     cache_key = f"arxiv:{query}:{max_results}"
     cached = cache_handler.get(cache_key)
     if cached:
         return cached
+    search = arxiv.Search(query=query, max_results=max_results, sort_by=arxiv.SortCriterion.SubmittedDate)
+    with ThreadPoolExecutor() as executor:
+        results = list(executor.map(fetch_arxiv_paper, search.results()))
+    if not results:
+        return "해당 키워드로 논문을 찾을 수 없습니다."
     
-    try:
-        search_obj = arxiv.Search(query=query, max_results=max_results, sort_by=arxiv.SortCriterion.SubmittedDate)
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            results = list(executor.map(fetch_arxiv_paper, search_obj.results()))
-        if not results:
-            return "해당 키워드로 논문을 찾을 수 없습니다."
-        
-        response = "📚 **Arxiv 논문 검색 결과** 📚\n\n"
-        response += "\n\n".join(
-            [f"**논문 {i}**\n\n"
-             f"📄 **제목**: {r['title']}\n\n"
-             f"👥 **저자**: {r['authors']}\n\n"
-             f"📝 **초록**: {r['summary']}...\n\n"
-             f"🔗 **논문 페이지**: {r['entry_id']}\n\n"
-             f"📥 **PDF 다운로드**: [{r['pdf_url'].split('/')[-1]}]({r['pdf_url']})\n\n"
-             f"📅 **출판일**: {r['published']}\n\n"
-             f"{'-' * 50}"
-             for i, r in enumerate(results, 1) if not isinstance(r, str)]
-        ) + "\n\n더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
-        cache_handler.setex(cache_key, 3600, response)
-        return response
-    except Exception as e:
-        return handle_error(e, "ArXiv 논문 검색 중", "논문 검색에 실패했어요. 📚")
+    response = "📚 **Arxiv 논문 검색 결과** 📚\n\n"
+    response += "\n\n".join(
+        [f"**논문 {i}**\n\n"
+         f"📄 **제목**: {r['title']}\n\n"
+         f"👥 **저자**: {r['authors']}\n\n"
+         f"📝 **초록**: {r['summary']}...\n\n"
+         f"🔗 **논문 페이지**: {r['entry_id']}\n\n"
+         f"📥 **PDF 다운로드**: [{r['pdf_url'].split('/')[-1]}]({r['pdf_url']})\n\n"
+         f"📅 **출판일**: {r['published']}\n\n"
+         f"{'-' * 50}"
+         for i, r in enumerate(results, 1)]
+    ) + "\n\n더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
+    cache_handler.setex(cache_key, 3600, response)
+    return response
 
-# PubMed 논문 검색
+# PubMed 논문 검색 추가
 base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
 def search_pubmed(query, max_results=5):
     search_url = f"{base_url}esearch.fcgi"
-    params = {"db": "pubmed", "term": query, "retmode": "json", "retmax": max_results, "api_key": NCBI_KEY}
-    try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, search_url, params=params)
-            response = future.result()
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        return handle_error(e, "PubMed 검색 중", "의학 논문 검색에 실패했어요. 🩺")
+    params = {
+        "db": "pubmed",
+        "term": query,
+        "retmode": "json",
+        "retmax": max_results,
+        "api_key": NCBI_KEY
+    }
+    response = requests.get(search_url, params=params)
+    return response.json()
 
 def get_pubmed_summaries(id_list):
     summary_url = f"{base_url}esummary.fcgi"
     ids = ",".join(id_list)
-    params = {"db": "pubmed", "id": ids, "retmode": "json", "api_key": NCBI_KEY}
-    try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, summary_url, params=params)
-            response = future.result()
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        return handle_error(e, "PubMed 요약 조회 중", "논문 요약을 가져오지 못했어요. 📖")
+    params = {
+        "db": "pubmed",
+        "id": ids,
+        "retmode": "json",
+        "api_key": NCBI_KEY
+    }
+    response = requests.get(summary_url, params=params)
+    return response.json()
 
 def get_pubmed_abstract(id_list):
     fetch_url = f"{base_url}efetch.fcgi"
     ids = ",".join(id_list)
-    params = {"db": "pubmed", "id": ids, "retmode": "xml", "rettype": "abstract", "api_key": NCBI_KEY}
-    try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, fetch_url, params=params)
-            response = future.result()
-        response.raise_for_status()
-        return response.text
-    except requests.RequestException as e:
-        return handle_error(e, "PubMed 초록 조회 중", "논문 초록을 가져오지 못했어요. 📝")
+    params = {
+        "db": "pubmed",
+        "id": ids,
+        "retmode": "xml",
+        "rettype": "abstract",
+        "api_key": NCBI_KEY
+    }
+    response = requests.get(fetch_url, params=params)
+    return response.text
 
 def extract_first_two_sentences(abstract_text):
     if not abstract_text or abstract_text.isspace():
@@ -523,68 +489,38 @@ def parse_abstracts(xml_text):
             if pmid:
                 abstract_dict[pmid] = extract_first_two_sentences(abstract)
     except ET.ParseError as e:
-        logger.error(f"PubMed XML 파싱 오류: {e}")
-        return {}
+        print(f"XML 파싱 오류 발생: {e}")
     return abstract_dict
 
 def get_pubmed_papers(query, max_results=5):
-    # 오타 보정
-    if "tissuge" in query.lower():
-        query = query.replace("tissuge", "tissue")
-        logger.info(f"오타 보정: {query}")
-    
     cache_key = f"pubmed:{query}:{max_results}"
     cached = cache_handler.get(cache_key)
     if cached:
         return cached
     
-    try:
-        # PubMed 검색
-        search_results = search_pubmed(query, max_results)
-        if isinstance(search_results, str):
-            return search_results
-        pubmed_ids = search_results["esearchresult"]["idlist"]
-        if not pubmed_ids:
-            return f"'{query}'로 의학 논문을 찾을 수 없습니다. 철자를 확인해 주세요."
-
-        # 요약 정보 가져오기
-        summaries = get_pubmed_summaries(pubmed_ids)
-        if isinstance(summaries, str):
-            return summaries
-        
-        # 초록 가져오기
-        abstracts_xml = get_pubmed_abstract(pubmed_ids)
-        if isinstance(abstracts_xml, str):
-            return abstracts_xml
-        abstract_dict = parse_abstracts(abstracts_xml)
-
-        # 결과 포맷팅
-        response = "📚 **PubMed 의학 논문 검색 결과** 📚\n\n"
-        for i, pmid in enumerate(pubmed_ids, 1):
-            summary = summaries['result'].get(pmid, {})
-            title = summary.get('title', 'No title available')
-            pubdate = summary.get('pubdate', 'No date available')
-            authors = ", ".join(author.get('name', '') for author in summary.get('authors', [])) or "No authors available"
-            doi = next((aid['value'] for aid in summary.get('articleids', []) if aid['idtype'] == 'doi'), None)
-            link = f"https://doi.org/{doi}" if doi else f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
-            abstract = abstract_dict.get(pmid, "No abstract available")
-
-            response += (
-                f"**논문 {i}**\n\n"
-                f"🆔 **PMID**: {pmid}\n\n"
-                f"📖 **제목**: {title}\n\n"
-                f"📅 **출판일**: {pubdate}\n\n"
-                f"✍️ **저자**: {authors}\n\n"
-                f"🔗 **링크**: {link}\n\n"
-                f"📝 **초록**: {abstract}\n\n"
-                f"{'-' * 50}\n\n"
-            )
-        
-        response += "더 많은 의학 논문을 보고 싶다면 말씀해 주세요! 😊"
-        cache_handler.setex(cache_key, 3600, response)
-        return response
-    except Exception as e:
-        return handle_error(e, "PubMed 논문 검색 중", "의학 논문 검색에 실패했어요. 🩺")
+    search_results = search_pubmed(query, max_results)
+    pubmed_ids = search_results["esearchresult"]["idlist"]
+    if not pubmed_ids:
+        return "해당 키워드로 의학 논문을 찾을 수 없습니다."
+    
+    summaries = get_pubmed_summaries(pubmed_ids)
+    abstracts_xml = get_pubmed_abstract(pubmed_ids)
+    abstract_dict = parse_abstracts(abstracts_xml)
+    
+    response = "📚 **PubMed 의학 논문 검색 결과** 📚\n\n"
+    response += "\n\n".join(
+        [f"**논문 {i}**\n\n"
+         f"🆔 **PMID**: {pmid}\n\n"
+         f"📖 **제목**: {summaries['result'][pmid].get('title', 'No title available')}\n\n"
+         f"📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date available')}\n\n"
+         f"✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n"
+         f"🔗 **링크**: {'https://doi.org/' + next((aid['value'] for aid in summaries['result'][pmid].get('articleids', []) if aid['idtype'] == 'doi'), None) if next((aid['value'] for aid in summaries['result'][pmid].get('articleids', []) if aid['idtype'] == 'doi'), None) else f'https://pubmed.ncbi.nlm.nih.gov/{pmid}/'}\n\n"
+         f"📝 **초록**: {abstract_dict.get(pmid, 'No abstract available')}\n\n"
+         f"{'-' * 50}"
+         for i, pmid in enumerate(pubmed_ids, 1)]
+    ) + "\n\n더 많은 의학 논문을 보고 싶다면 말씀해 주세요! 😊"
+    cache_handler.setex(cache_key, 3600, response)
+    return response
 
 # 대화형 응답
 conversation_cache = MemoryCache()
@@ -595,11 +531,16 @@ def get_conversational_response(query, chat_history):
         return cached
     
     emoji_list = (
-        "체크리스트 이모지:\n✅ 완료된 항목 | ☑️ 체크 상자 (체크됨) | ✓ 체크 표시 | ✔️ 굵은 체크 표시 | ❌ 취소/실패 항목 | ⬜ 빈 상자 | ⚪ 빈 원 | 🔘 라디오 버튼 | 📌 핀으로 고정된 항목 | 🚀 시작/출시 항목\n\n"
-        "상태 표시 이모지:\n🟢 녹색 원 (성공/활성) | 🔴 빨간 원 (실패/중요) | 🟡 노란 원 (주의/진행 중) | 🔄 업데이트/진행 중 | ⏱️ 대기 중/시간 관련 | 🔍 검토 중/검색\n\n"
-        "개발 관련 이모지:\n💻 코드/프로그래밍 | 🔧 도구/설정 | 🐛 버그 | 📦 패키지/모듈 | 📝 문서/노트 | 🗂️ 폴더/분류 | ⚙️ 설정/구성 | 🔒 보안/잠금 | 📊 데이터/통계 | 📈 성장/증가\n\n"
-        "섹션 구분 이모지:\n📋 목록/체크리스트 | 📚 책/문서 | 💡 아이디어/팁 | ⚠️ 주의/경고 | 🎯 목표/타겟 | 🔗 링크/연결 | 👥 사용자/팀 | 📅 일정/캘린더\n\n"
-        "기타 유용한 이모지:\n🌟 하이라이트/중요 항목 | ✨ 특별/개선 항목 | 📱 모바일 | 🖥️ 데스크톱 | 🏗️ 아키텍처 | 🚧 작업 중 | 💬 의견/코멘트 | 🌐 웹/글로벌 | 📤 배포/업로드 | 📥 다운로드/수신"
+        "체크리스트 이모지:\n"
+        "✅ 완료된 항목 | ☑️ 체크 상자 (체크됨) | ✓ 체크 표시 | ✔️ 굵은 체크 표시 | ❌ 취소/실패 항목 | ⬜ 빈 상자 | ⚪ 빈 원 | 🔘 라디오 버튼 | 📌 핀으로 고정된 항목 | 🚀 시작/출시 항목\n\n"
+        "상태 표시 이모지:\n"
+        "🟢 녹색 원 (성공/활성) | 🔴 빨간 원 (실패/중요) | 🟡 노란 원 (주의/진행 중) | 🔄 업데이트/진행 중 | ⏱️ 대기 중/시간 관련 | 🔍 검토 중/검색\n\n"
+        "개발 관련 이모지:\n"
+        "💻 코드/프로그래밍 | 🔧 도구/설정 | 🐛 버그 | 📦 패키지/모듈 | 📝 문서/노트 | 🗂️ 폴더/분류 | ⚙️ 설정/구성 | 🔒 보안/잠금 | 📊 데이터/통계 | 📈 성장/증가\n\n"
+        "섹션 구분 이모지:\n"
+        "📋 목록/체크리스트 | 📚 책/문서 | 💡 아이디어/팁 | ⚠️ 주의/경고 | 🎯 목표/타겟 | 🔗 링크/연결 | 👥 사용자/팀 | 📅 일정/캘린더\n\n"
+        "기타 유용한 이모지:\n"
+        "🌟 하이라이트/중요 항목 | ✨ 특별/개선 항목 | 📱 모바일 | 🖥️ 데스크톱 | 🏗️ 아키텍처 | 🚧 작업 중 | 💬 의견/코멘트 | 🌐 웹/글로벌 | 📤 배포/업로드 | 📥 다운로드/수신"
     )
     
     messages = [
@@ -610,13 +551,10 @@ def get_conversational_response(query, chat_history):
         {"role": msg["role"], "content": msg["content"]} for msg in chat_history[-5:]
     ] + [{"role": "user", "content": query}]
     
-    try:
-        response = client.chat.completions.create(model="gpt-4", messages=messages)
-        result = response.choices[0].message.content
-        conversation_cache.setex(cache_key, 3600, result)
-        return result
-    except Exception as e:
-        return handle_error(e, "GPT 대화 생성 중", "대화를 생성하는 데 문제가 생겼어요. 😓 잠시 후 다시 물어보세요!")
+    response = client.chat.completions.create(model="gpt-4", messages=messages)
+    result = response.choices[0].message.content
+    conversation_cache.setex(cache_key, 600, result)
+    return result
 
 GREETING_RESPONSES = {
     "안녕": "안녕하세요! 반갑습니다! 😊",
@@ -667,7 +605,7 @@ def needs_search(query):
     pubmed_keywords = ["의학논문"]
     if any(kw in query_lower for kw in pubmed_keywords) and len(query_lower) > 5:
         return "pubmed_search"
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래", "알아", "뭐냐", "알려줘", "찾아줘"]
+    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐", "알려줘", "찾아줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
     return "general_query"
@@ -680,15 +618,12 @@ def show_login_page():
         submit_button = st.form_submit_button("시작하기 🚀")
         
         if submit_button:
-            if nickname:
+            if nickname:  # 닉네임 입력 여부 확인
                 try:
                     user_id, is_existing = create_or_get_user(nickname)
-                    if isinstance(user_id, str):
-                        st.toast(user_id, icon="❌")
-                        return
                     st.session_state.user_id = user_id
                     st.session_state.is_logged_in = True
-                    st.session_state.chat_history = []
+                    st.session_state.chat_history = []  # 로그인 시 chat_history 초기화
                     st.session_state.session_id = str(uuid.uuid4())
                     
                     if is_existing:
@@ -698,95 +633,72 @@ def show_login_page():
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
-                    st.toast(handle_error(e, "로그인 처리 중", "로그인에 실패했어요. 😓"), icon="❌")
+                    st.toast(f"로그인 중 오류가 발생했습니다: {str(e)}", icon="❌")
             else:
                 st.toast("닉네임을 입력해주세요.", icon="⚠️")
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=600)
 def get_cached_response(query):
     return process_query(query)
 
-def fetch_city_weather(city, weather_api):
-    return weather_api.get_city_weather(city)
-
 def process_query(query):
-    init_session_state()
+    init_session_state()  # 쿼리 처리 전에 세션 상태 확인 및 초기화
     query_type = needs_search(query)
-    
-    try:
-        if query_type == "mbti":
-            return (
-                "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
-                "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
-                "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡"
-            )
-        elif query_type == "multi_iq":
-            return (
-                "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
-                "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
-                "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
-            )
-        elif query_type == "time":
-            city = extract_city_from_time_query(query)
-            return get_time_by_city(city)
-        elif query_type == "weather":
-            cities = [city.strip() for city in query.split("와") if "날씨" in city] or [extract_city_from_query(query)]
-            results = []
-            q = queue.Queue()
-            for city in cities:
-                q.put(city)
-            
-            def worker():
-                while not q.empty():
-                    try:
-                        city = q.get()
-                        result = fetch_city_weather(city, weather_api)
-                        results.append(result)
-                        q.task_done()
-                    except Exception as e:
-                        results.append(handle_error(e, f"{city} 날씨 조회 중", f"'{city}' 날씨를 가져오지 못했어요. 🌧️"))
-            
-            with ThreadPoolExecutor(max_workers=min(len(cities), MAX_WORKERS)) as executor:
-                for _ in range(min(len(cities), MAX_WORKERS)):
-                    executor.submit(worker)
-            q.join()
-            return "\n\n".join(results)
-        elif query_type == "tomorrow_weather":
-            city = extract_city_from_query(query)
-            return weather_api.get_forecast_by_day(city, days_from_today=1)
-        elif query_type == "day_after_tomorrow_weather":
-            city = extract_city_from_query(query)
-            return weather_api.get_forecast_by_day(city, days_from_today=2)
-        elif query_type == "weekly_forecast":
-            city = extract_city_from_query(query)
-            return weather_api.get_weekly_forecast(city)
-        elif query_type == "drug":
-            return get_drug_info(query)
-        elif query_type == "conversation":
-            if query.strip() in GREETING_RESPONSES:
-                return GREETING_RESPONSES[query.strip()]
-            return get_conversational_response(query, st.session_state.chat_history)
-        elif query_type == "web_search":
-            language = detect(query)
-            if language == 'ko' and naver_request_count < NAVER_DAILY_LIMIT:
-                return get_ai_summary(get_naver_api_results(query))
-            return get_ai_summary(search_and_summarize(query))
-        elif query_type == "arxiv_search":
-            keywords = query.replace("논문검색", "").replace("arxiv", "").replace("paper", "").replace("research", "").strip()
-            return get_arxiv_papers(keywords)
-        elif query_type == "pubmed_search":
-            keywords = query.replace("의학논문", "").strip()
-            return get_pubmed_papers(keywords)
-        elif query_type == "general_query":
-            return get_conversational_response(query, st.session_state.chat_history)
-        return "아직 지원하지 않는 기능이에요. 😅"
-    except Exception as e:
-        return handle_error(e, "쿼리 처리 중", "질문을 처리하는 중 문제가 생겼어요. 😥 다시 시도해 주세요!")
+    if query_type == "mbti":
+        return (
+            "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
+            "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
+            "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡"
+        )
+    elif query_type == "multi_iq":
+        return (
+            "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
+            "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
+            "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
+        )
+    elif query_type == "time":
+        city = extract_city_from_time_query(query)
+        return get_time_by_city(city)
+    elif query_type == "weather":
+        city = extract_city_from_query(query)
+        return weather_api.get_city_weather(city)
+    elif query_type == "tomorrow_weather":
+        city = extract_city_from_query(query)
+        return weather_api.get_forecast_by_day(city, days_from_today=1)
+    elif query_type == "day_after_tomorrow_weather":
+        city = extract_city_from_query(query)
+        return weather_api.get_forecast_by_day(city, days_from_today=2)
+    elif query_type == "weekly_forecast":
+        city = extract_city_from_query(query)
+        return weather_api.get_weekly_forecast(city)
+    elif query_type == "drug":
+        return get_drug_info(query)
+    elif query_type == "conversation":
+        if query.strip() in GREETING_RESPONSES:
+            return GREETING_RESPONSES[query.strip()]
+        return get_conversational_response(query, st.session_state.chat_history)
+    elif query_type == "web_search":
+        language = detect(query)
+        if language == 'ko' and naver_request_count < NAVER_DAILY_LIMIT:
+            return get_ai_summary(get_naver_api_results(query))
+        return get_ai_summary(search_and_summarize(query))
+    elif query_type == "arxiv_search":
+        keywords = query.replace("논문검색", "").replace("arxiv", "").replace("paper", "").replace("research", "").strip()
+        return get_arxiv_papers(keywords)
+    elif query_type == "pubmed_search":
+        keywords = query.replace("의학논문", "").strip()
+        return get_pubmed_papers(keywords)
+    elif query_type == "general_query":
+        return get_conversational_response(query, st.session_state.chat_history)
+    return "아직 지원하지 않는 기능이에요. 😅"
 
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
+    
+    # 세션 상태 초기화 확인
     init_session_state()
     
+    # 도움말 버튼 추가
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
@@ -798,30 +710,30 @@ def show_chat_dashboard():
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
     
-    for msg in st.session_state.chat_history[-10:]:
+    # 채팅 기록 표시
+    for msg in st.session_state.chat_history:
         with st.chat_message(msg['role']):
             st.markdown(msg['content'], unsafe_allow_html=True)
     
+    # 사용자 입력 처리
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.chat_message("user").markdown(user_prompt)
         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
         with st.chat_message("assistant"):
-            with st.spinner("응답을 준비 중이에요..."):
-                start_time = time.time()
-                try:
-                    response = get_cached_response(user_prompt)
-                    time_taken = round(time.time() - start_time, 2)
-                    st.markdown(response, unsafe_allow_html=True)
-                    st.session_state.chat_history.append({"role": "assistant", "content": response})
-                    async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
-                except Exception as e:
-                    error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
-                    st.markdown(error_msg, unsafe_allow_html=True)
-                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+            placeholder = st.empty()
+            placeholder.markdown("⏳ 응답 생성 중...")
+            start_time = time.time()
+            with ThreadPoolExecutor() as executor:
+                future = executor.submit(get_cached_response, user_prompt)
+                response = future.result()
+            time_taken = round(time.time() - start_time, 2)
+            placeholder.markdown(response, unsafe_allow_html=True)
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
+            async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
 
 # 메인 실행
 def main():
-    init_session_state()
+    init_session_state()  # 메인 실행 시 항상 초기화
     if not st.session_state.is_logged_in:
         show_login_page()
     else:
