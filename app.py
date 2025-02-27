@@ -1,40 +1,44 @@
 # 라이브러리 설정
-import streamlit as st
-import time
-import uuid
-from supabase import create_client
-import os
-from datetime import datetime, timedelta
-import pytz
-import logging
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-from googlesearch import search
-from g4f.client import Client
-from timezonefinder import TimezoneFinder
-import re
-import json
-import urllib.request
-import urllib.parse
-from langdetect import detect
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
-from concurrent.futures import ThreadPoolExecutor
-import threading
-import arxiv
-from diskcache import Cache
-from functools import lru_cache
-import xml.etree.ElementTree as ET  # PubMed XML 파싱용
+from config.imports import *
+from config.env import *
 
-# 환경 변수 로드
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
-DRUG_API_KEY = os.getenv("DRUG_API_KEY")
-NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
-NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
-NCBI_KEY = os.getenv("NCBI_KEY")  
+# # 라이브러리 설정
+# import streamlit as st
+# import time
+# import uuid
+# from supabase import create_client
+# import os
+# from datetime import datetime, timedelta
+# import pytz
+# import logging
+# import requests
+# from bs4 import BeautifulSoup
+# import pandas as pd
+# from googlesearch import search
+# from g4f.client import Client
+# from timezonefinder import TimezoneFinder
+# import re
+# import json
+# import urllib.request
+# import urllib.parse
+# from langdetect import detect
+# from requests.adapters import HTTPAdapter
+# from requests.packages.urllib3.util.retry import Retry
+# from concurrent.futures import ThreadPoolExecutor
+# import threading
+# import arxiv
+# from diskcache import Cache
+# from functools import lru_cache
+# import xml.etree.ElementTree as ET  # PubMed XML 파싱용
+
+# # 환경 변수 로드
+# SUPABASE_URL = os.getenv("SUPABASE_URL")
+# SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+# DRUG_API_KEY = os.getenv("DRUG_API_KEY")
+# NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+# NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+# NCBI_KEY = os.getenv("NCBI_KEY")  
 
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
