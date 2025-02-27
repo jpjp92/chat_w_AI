@@ -2,44 +2,6 @@
 from config.imports import *
 from config.env import *
 
-# # 라이브러리 설정
-# import streamlit as st
-# import time
-# import uuid
-# from supabase import create_client
-# import os
-# from datetime import datetime, timedelta
-# import pytz
-# import logging
-# import requests
-# from bs4 import BeautifulSoup
-# import pandas as pd
-# from googlesearch import search
-# from g4f.client import Client
-# from timezonefinder import TimezoneFinder
-# import re
-# import json
-# import urllib.request
-# import urllib.parse
-# from langdetect import detect
-# from requests.adapters import HTTPAdapter
-# from requests.packages.urllib3.util.retry import Retry
-# from concurrent.futures import ThreadPoolExecutor
-# import threading
-# import arxiv
-# from diskcache import Cache
-# from functools import lru_cache
-# import xml.etree.ElementTree as ET  # PubMed XML 파싱용
-
-# # 환경 변수 로드
-# SUPABASE_URL = os.getenv("SUPABASE_URL")
-# SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-# WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
-# DRUG_API_KEY = os.getenv("DRUG_API_KEY")
-# NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
-# NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
-# NCBI_KEY = os.getenv("NCBI_KEY")  
-
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
 logger = logging.getLogger("HybridChat")
@@ -369,18 +331,6 @@ def search_and_summarize(query, num_results=5):
             except Exception:
                 continue
     return pd.DataFrame(data)
-
-# def get_ai_summary(search_results):
-#     if search_results.empty:
-#         return "검색 결과를 찾을 수 없습니다."
-#     context = "\n".join([f"출처: {row['title']}\n내용: {row['contents']}" for _, row in search_results.iterrows()])
-#     response = client.chat.completions.create(
-#         model="gpt-4o",
-#         messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
-#     )
-#     summary = response.choices[0].message.content
-#     sources = "\n\n📜 **출처**\n" + "\n".join([f"🌐 [{row['title']}]({row['link']})" for _, row in search_results.iterrows()])
-#     return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
 
 def get_ai_summary(search_results):
     if search_results.empty:
