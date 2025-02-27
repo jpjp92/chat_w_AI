@@ -1,6 +1,40 @@
-# app.py
-from config.imports import *
-from config.env import *
+# 라이브러리 설정
+import streamlit as st
+import time
+import uuid
+from supabase import create_client
+import os
+from datetime import datetime, timedelta
+import pytz
+import logging
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+from googlesearch import search
+from g4f.client import Client
+from timezonefinder import TimezoneFinder
+import re
+import json
+import urllib.request
+import urllib.parse
+from langdetect import detect
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import arxiv
+from diskcache import Cache
+from functools import lru_cache
+import xml.etree.ElementTree as ET  # PubMed XML 파싱용
+
+# 환경 변수 로드
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+DRUG_API_KEY = os.getenv("DRUG_API_KEY")
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+NCBI_KEY = os.getenv("NCBI_KEY")
 
 # 로깅 설정
 logging.basicConfig(
@@ -9,10 +43,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("HybridChat")
-
-# 병렬 처리 설정 (Streamlit Cloud 무료 티어 기준)
-MAX_WORKERS = min(multiprocessing.cpu_count() * 2, 8)  # I/O-bound: 최대 8개 스레드
-MAX_PROCESS_WORKERS = min(multiprocessing.cpu_count(), 2)  # CPU-bound: 최대 2개 프로세스
 
 # 캐시 설정
 cache = Cache("cache_directory")
@@ -51,7 +81,7 @@ class WeatherAPI:
             retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
             adapter = HTTPAdapter(max_retries=retry_strategy)
             session.mount("https://", adapter)
-            response = session.get(url, params=params, timeout=3)  # 타임아웃 3초로 조정
+            response = session.get(url, params=params, timeout=5)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
@@ -66,10 +96,8 @@ class WeatherAPI:
         try:
             url = "http://api.openweathermap.org/geo/1.0/direct"
             params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self.fetch_weather, url, params)
-                data = future.result()
-            if isinstance(data, str):
+            data = self.fetch_weather(url, params)
+            if isinstance(data, str):  # 에러 메시지일 경우
                 return data
             if data and len(data) > 0:
                 city_info = {"name": data[0]["name"], "lat": data[0]["lat"], "lon": data[0]["lon"]}
@@ -92,10 +120,8 @@ class WeatherAPI:
         try:
             url = "https://api.openweathermap.org/data/2.5/weather"
             params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self.fetch_weather, url, params)
-                data = future.result()
-            if isinstance(data, str):
+            data = self.fetch_weather(url, params)
+            if isinstance(data, str):  # 에러 메시지일 경우
                 return data
             weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
             weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
@@ -126,31 +152,24 @@ class WeatherAPI:
         try:
             url = "https://api.openweathermap.org/data/2.5/forecast"
             params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self.fetch_weather, url, params)
-                data = future.result()
+            data = self.fetch_weather(url, params)
             if isinstance(data, str):
                 return data
             target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
-            forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
+            forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n"
             weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
             found = False
-
-            # 순차 처리 및 시간별 \n\n 추가
-            forecast_lines = []
             for forecast in data['list']:
                 dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
                 if dt == target_date:
+                    found = True
                     time_only = datetime.fromtimestamp(forecast['dt']).strftime('%H:%M')
                     weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
-                    forecast_lines.append(
+                    forecast_text += (
                         f"⏰ {time_only} {forecast['weather'][0]['description']} {weather_emoji} "
-                        f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s"
+                        f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s\n"
                     )
-                    found = True
-            
-            forecast_text += "\n\n".join(forecast_lines)  # 시간별로 두 줄 띄움
-            result = forecast_text + "\n\n더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
+            result = forecast_text + "\n더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
             self.cache.setex(cache_key, self.cache_ttl, result)
             return result
         except Exception as e:
@@ -169,35 +188,30 @@ class WeatherAPI:
         try:
             url = "https://api.openweathermap.org/data/2.5/forecast"
             params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self.fetch_weather, url, params)
-                data = future.result()
+            data = self.fetch_weather(url, params)
             if isinstance(data, str):
                 return data
-            
             today = datetime.now().date()
             week_end = today + timedelta(days=6)
             daily_forecast = {}
             weekdays_kr = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
             today_weekday = today.weekday()
-
-            # 순차 처리
+            
             for forecast in data['list']:
                 dt = datetime.fromtimestamp(forecast['dt']).date()
                 if today <= dt <= week_end:
                     dt_str = dt.strftime('%Y-%m-%d')
-                    weekday_idx = (today_weekday + (dt - today).days) % 7
-                    info = {
-                        'weekday': weekdays_kr[weekday_idx],
-                        'temp_min': forecast['main']['temp_min'],
-                        'temp_max': forecast['main']['temp_max'],
-                        'weather': forecast['weather'][0]['description']
-                    }
                     if dt_str not in daily_forecast:
-                        daily_forecast[dt_str] = info
+                        weekday_idx = (today_weekday + (dt - today).days) % 7
+                        daily_forecast[dt_str] = {
+                            'weekday': weekdays_kr[weekday_idx],
+                            'temp_min': forecast['main']['temp_min'],
+                            'temp_max': forecast['main']['temp_max'],
+                            'weather': forecast['weather'][0]['description']
+                        }
                     else:
-                        daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], info['temp_min'])
-                        daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], info['temp_max'])
+                        daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], forecast['main']['temp_min'])
+                        daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], forecast['main']['temp_max'])
             
             today_str = today.strftime('%Y-%m-%d')
             today_weekday_str = weekdays_kr[today_weekday]
@@ -315,9 +329,7 @@ def get_drug_info(drug_query):
     params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'json'}
     
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, url, params=params, timeout=3)
-            response = future.result()
+        response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
@@ -369,9 +381,7 @@ def get_naver_api_results(query):
     results = []
     
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(urllib.request.urlopen, request)
-            response = future.result()
+        response = urllib.request.urlopen(request)
         naver_request_count += 1
         if response.getcode() == 200:
             data = json.loads(response.read().decode('utf-8'))
@@ -379,15 +389,15 @@ def get_naver_api_results(query):
                 title = re.sub(r'<b>|</b>', '', item['title'])
                 contents = re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100] + "..."
                 results.append({"title": title, "contents": contents, "url": item.get('link', ''), "date": item.get('pubDate', '')})
-    except Exception:
+    except Exception as e:
         logger.warning(f"Naver API 호출 실패, 웹 검색으로 전환: {query}")
         return search_and_summarize(query, num_results=5)
     return pd.DataFrame(results)
 
 def search_and_summarize(query, num_results=5):
     data = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [executor.submit(requests.get, link, timeout=3) for link in search(query, num_results=num_results)]
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(requests.get, link, timeout=5) for link in search(query, num_results=num_results)]
         for future in futures:
             try:
                 response = future.result()
@@ -399,20 +409,15 @@ def search_and_summarize(query, num_results=5):
                 continue
     return pd.DataFrame(data)
 
-def process_search_result(row):
-    try:
-        return f"출처: {row['title']}\n내용: {row['contents']}"
-    except Exception:
-        return ""
-
 def get_ai_summary(search_results):
     try:
         if search_results.empty:
             return "검색 결과를 찾을 수 없습니다."
-        context = "\n".join(process_search_result(row) for _, row in search_results.iterrows())
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(client.chat.completions.create, model="gpt-4o", messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}])
-            response = future.result()
+        context = "\n".join([f"출처: {row['title']}\n내용: {row['contents']}" for _, row in search_results.iterrows()])
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
+        )
         summary = response.choices[0].message.content
         sources = "\n\n📜 **출처**\n" + "\n".join(
             [f"🌐 [{row['title']}]({row.get('link', '링크 없음')})" for _, row in search_results.iterrows()]
@@ -442,9 +447,9 @@ def get_arxiv_papers(query, max_results=3):
         return cached
     
     try:
-        search_obj = arxiv.Search(query=query, max_results=max_results, sort_by=arxiv.SortCriterion.SubmittedDate)
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            results = list(executor.map(fetch_arxiv_paper, search_obj.results()))
+        search = arxiv.Search(query=query, max_results=max_results, sort_by=arxiv.SortCriterion.SubmittedDate)
+        with ThreadPoolExecutor() as executor:
+            results = list(executor.map(fetch_arxiv_paper, search.results()))
         if not results:
             return "해당 키워드로 논문을 찾을 수 없습니다."
         
@@ -472,9 +477,7 @@ def search_pubmed(query, max_results=5):
     search_url = f"{base_url}esearch.fcgi"
     params = {"db": "pubmed", "term": query, "retmode": "json", "retmax": max_results, "api_key": NCBI_KEY}
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, search_url, params=params)
-            response = future.result()
+        response = requests.get(search_url, params=params)
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
@@ -485,9 +488,7 @@ def get_pubmed_summaries(id_list):
     ids = ",".join(id_list)
     params = {"db": "pubmed", "id": ids, "retmode": "json", "api_key": NCBI_KEY}
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, summary_url, params=params)
-            response = future.result()
+        response = requests.get(summary_url, params=params)
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
@@ -498,9 +499,7 @@ def get_pubmed_abstract(id_list):
     ids = ",".join(id_list)
     params = {"db": "pubmed", "id": ids, "retmode": "xml", "rettype": "abstract", "api_key": NCBI_KEY}
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, fetch_url, params=params)
-            response = future.result()
+        response = requests.get(fetch_url, params=params)
         response.raise_for_status()
         return response.text
     except requests.RequestException as e:
@@ -528,10 +527,6 @@ def parse_abstracts(xml_text):
     return abstract_dict
 
 def get_pubmed_papers(query, max_results=5):
-    if "tissuge" in query.lower():
-        query = query.replace("tissuge", "tissue")
-        logger.info(f"오타 보정: {query}")
-    
     cache_key = f"pubmed:{query}:{max_results}"
     cached = cache_handler.get(cache_key)
     if cached:
@@ -543,7 +538,8 @@ def get_pubmed_papers(query, max_results=5):
             return search_results
         pubmed_ids = search_results["esearchresult"]["idlist"]
         if not pubmed_ids:
-            return f"'{query}'로 의학 논문을 찾을 수 없습니다. 철자를 확인해 주세요."
+            return "해당 키워드로 의학 논문을 찾을 수 없습니다."
+        
         summaries = get_pubmed_summaries(pubmed_ids)
         if isinstance(summaries, str):
             return summaries
@@ -594,9 +590,9 @@ def get_conversational_response(query, chat_history):
     ] + [{"role": "user", "content": query}]
     
     try:
-        response = client.chat.completions.create(model="gpt-4", messages=messages)  # 순차 처리
+        response = client.chat.completions.create(model="gpt-4", messages=messages)
         result = response.choices[0].message.content
-        conversation_cache.setex(cache_key, 3600, result)
+        conversation_cache.setex(cache_key, 600, result)
         return result
     except Exception as e:
         return handle_error(e, "GPT 대화 생성 중", "대화를 생성하는 데 문제가 생겼어요. 😓 잠시 후 다시 물어보세요!")
@@ -666,7 +662,7 @@ def show_login_page():
             if nickname:
                 try:
                     user_id, is_existing = create_or_get_user(nickname)
-                    if isinstance(user_id, str):
+                    if isinstance(user_id, str):  # 에러 메시지일 경우
                         st.toast(user_id, icon="❌")
                         return
                     st.session_state.user_id = user_id
@@ -685,12 +681,9 @@ def show_login_page():
             else:
                 st.toast("닉네임을 입력해주세요.", icon="⚠️")
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=600)
 def get_cached_response(query):
     return process_query(query)
-
-def fetch_city_weather(city, weather_api):
-    return weather_api.get_city_weather(city)
 
 def process_query(query):
     init_session_state()
@@ -713,27 +706,8 @@ def process_query(query):
             city = extract_city_from_time_query(query)
             return get_time_by_city(city)
         elif query_type == "weather":
-            cities = [city.strip() for city in query.split("와") if "날씨" in city] or [extract_city_from_query(query)]
-            results = []
-            q = queue.Queue()
-            for city in cities:
-                q.put(city)
-            
-            def worker():
-                while not q.empty():
-                    try:
-                        city = q.get()
-                        result = fetch_city_weather(city, weather_api)
-                        results.append(result)
-                        q.task_done()
-                    except Exception as e:
-                        results.append(handle_error(e, f"{city} 날씨 조회 중", f"'{city}' 날씨를 가져오지 못했어요. 🌧️"))
-            
-            with ThreadPoolExecutor(max_workers=min(len(cities), MAX_WORKERS)) as executor:
-                for _ in range(min(len(cities), MAX_WORKERS)):
-                    executor.submit(worker)
-            q.join()
-            return "\n\n".join(results)
+            city = extract_city_from_query(query)
+            return weather_api.get_city_weather(city)
         elif query_type == "tomorrow_weather":
             city = extract_city_from_query(query)
             return weather_api.get_forecast_by_day(city, days_from_today=1)
@@ -781,26 +755,27 @@ def show_chat_dashboard():
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
     
-    for msg in st.session_state.chat_history[-10:]:  # 최근 10개만 표시
+    for msg in st.session_state.chat_history:
         with st.chat_message(msg['role']):
             st.markdown(msg['content'], unsafe_allow_html=True)
     
-    if user_prompt := st.chat_input("질문해 주세요!🤔"):
+    if user_prompt := st.chat_input("질문해 주세요!"):
         st.chat_message("user").markdown(user_prompt)
         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
         with st.chat_message("assistant"):
-            with st.spinner("⏳응답을 준비 중이에요."):
-                start_time = time.time()
-                try:
-                    response = get_cached_response(user_prompt)
-                    time_taken = round(time.time() - start_time, 2)
-                    st.markdown(response, unsafe_allow_html=True)
-                    st.session_state.chat_history.append({"role": "assistant", "content": response})
-                    async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
-                except Exception as e:
-                    error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
-                    st.markdown(error_msg, unsafe_allow_html=True)
-                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+            placeholder = st.empty()
+            placeholder.markdown("⏳ 응답 생성 중...")
+            start_time = time.time()
+            try:
+                response = get_cached_response(user_prompt)
+                time_taken = round(time.time() - start_time, 2)
+                placeholder.markdown(response, unsafe_allow_html=True)
+                st.session_state.chat_history.append({"role": "assistant", "content": response})
+                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
+            except Exception as e:
+                error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
+                placeholder.markdown(error_msg, unsafe_allow_html=True)
+                st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
 # 메인 실행
 def main():
