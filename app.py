@@ -82,7 +82,7 @@ class WeatherAPI:
         )
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
-
+        
     def get_forecast_by_day(self, city_name, days_from_today=1):
         cache_key = f"forecast:{city_name}:{days_from_today}"
         cached_data = self.cache.get(cache_key)
@@ -97,7 +97,7 @@ class WeatherAPI:
         params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
         data = self.fetch_weather(url, params)
         target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
-        forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n"
+        forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
         weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
         
         found = False
@@ -109,12 +109,45 @@ class WeatherAPI:
                 weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
                 forecast_text += (
                     f"⏰ {time_only} {forecast['weather'][0]['description']} {weather_emoji} "
-                    f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s\n"
+                    f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s\n\n"
                 )
         
-        result = forecast_text + "\n더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
+        result = forecast_text + "더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
+        
+    # def get_forecast_by_day(self, city_name, days_from_today=1):
+    #     cache_key = f"forecast:{city_name}:{days_from_today}"
+    #     cached_data = self.cache.get(cache_key)
+    #     if cached_data:
+    #         return cached_data
+        
+    #     city_info = self.get_city_info(city_name)
+    #     if not city_info:
+    #         return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다."
+        
+    #     url = "https://api.openweathermap.org/data/2.5/forecast"
+    #     params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+    #     data = self.fetch_weather(url, params)
+    #     target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
+    #     forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n"
+    #     weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+        
+    #     found = False
+    #     for forecast in data['list']:
+    #         dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
+    #         if dt == target_date:
+    #             found = True
+    #             time_only = datetime.fromtimestamp(forecast['dt']).strftime('%H:%M')
+    #             weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
+    #             forecast_text += (
+    #                 f"⏰ {time_only} {forecast['weather'][0]['description']} {weather_emoji} "
+    #                 f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s\n"
+    #             )
+        
+    #     result = forecast_text + "\n더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
+    #     self.cache.setex(cache_key, self.cache_ttl, result)
+    #     return result
 
     def get_weekly_forecast(self, city_name):
         cache_key = f"weekly_forecast:{city_name}"
@@ -263,10 +296,6 @@ def get_drug_info(drug_query):
             efcy = item.get('efcyQesitm', '정보 없음')[:150] + ("..." if len(item.get('efcyQesitm', '')) > 150 else "")
             use_method_raw = item.get('useMethodQesitm', '정보 없음')
             atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
-            
-            # ~를 -로 변환
-            # use_method = re.sub(r'(\d+)~(\d+)(세|정|mg)', r'\1-\2\3', use_method_raw)[:150] + ("..." if len(use_method_raw) > 150 else "")
-            # ~나 -를 그대로 유지하고 길이만 제한
             use_method = use_method_raw[:150] + ("..." if len(use_method_raw) > 150 else "")
             
             result = (
@@ -341,7 +370,6 @@ def get_ai_summary(search_results):
         messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
     )
     summary = response.choices[0].message.content
-    # 'link' 키가 없을 경우를 대비한 예외 처리
     sources = "\n\n📜 **출처**\n" + "\n".join(
         [f"🌐 [{row['title']}]({row.get('link', '링크 없음')})" 
          for _, row in search_results.iterrows()]
@@ -385,7 +413,7 @@ def get_arxiv_papers(query, max_results=3):
     cache_handler.setex(cache_key, 3600, response)
     return response
 
-# PubMed 논문 검색 추가
+# PubMed 논문 검색
 base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
 def search_pubmed(query, max_results=5):
@@ -443,7 +471,7 @@ def parse_abstracts(xml_text):
             if pmid:
                 abstract_dict[pmid] = extract_first_two_sentences(abstract)
     except ET.ParseError as e:
-        print(f"XML 파싱 오류 발생: {e}")
+        logger.error(f"XML 파싱 오류 발생: {e}")
     return abstract_dict
 
 def get_pubmed_papers(query, max_results=5):
@@ -572,12 +600,12 @@ def show_login_page():
         submit_button = st.form_submit_button("시작하기 🚀")
         
         if submit_button:
-            if nickname:  # 닉네임 입력 여부 확인
+            if nickname:
                 try:
                     user_id, is_existing = create_or_get_user(nickname)
                     st.session_state.user_id = user_id
                     st.session_state.is_logged_in = True
-                    st.session_state.chat_history = []  # 로그인 시 chat_history 초기화
+                    st.session_state.chat_history = []
                     st.session_state.session_id = str(uuid.uuid4())
                     
                     if is_existing:
@@ -587,7 +615,7 @@ def show_login_page():
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
-                    st.toast(f"로그인 중 오류가 발생했습니다: {str(e)}", icon="❌")
+                    st.toast(f"로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
             else:
                 st.toast("닉네임을 입력해주세요.", icon="⚠️")
 
@@ -596,7 +624,7 @@ def get_cached_response(query):
     return process_query(query)
 
 def process_query(query):
-    init_session_state()  # 쿼리 처리 전에 세션 상태 확인 및 초기화
+    init_session_state()
     query_type = needs_search(query)
     if query_type == "mbti":
         return (
@@ -646,18 +674,15 @@ def process_query(query):
         return get_conversational_response(query, st.session_state.chat_history)
     return "아직 지원하지 않는 기능이에요. 😅"
 
-
-def handle_error(e, context="작업 중", user_friendly_msg="알 수 없는 오류가 발생했어요. 😅 다시 시도해 주세요!"):
+def handle_error(e, context="작업 중", user_friendly_msg="응답을 준비하다 문제가 생겼어요. 😓"):
     logger.error(f"{context} 오류 발생: {str(e)}", exc_info=True)
-    return f"{user_friendly_msg}\n\n⚠️ 오류 내용: {str(e)}"
+    return user_friendly_msg
 
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     
-    # 세션 상태 초기화 확인
     init_session_state()
     
-    # 도움말 버튼 추가
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
@@ -669,18 +694,15 @@ def show_chat_dashboard():
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
     
-    # 채팅 기록 표시
     for msg in st.session_state.chat_history:
         with st.chat_message(msg['role']):
             st.markdown(msg['content'], unsafe_allow_html=True)
     
-    # 사용자 입력 처리
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.chat_message("user").markdown(user_prompt)
         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
         with st.chat_message("assistant"):
             try:
-                # st.spinner로 "응답 준비 중" 표시
                 with st.spinner("응답을 준비 중이에요.. ⏳"):
                     start_time = time.time()
                     with ThreadPoolExecutor() as executor:
@@ -688,59 +710,18 @@ def show_chat_dashboard():
                         response = future.result()
                     time_taken = round(time.time() - start_time, 2)
                 
-                # 응답 표시
                 st.markdown(response, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
             
             except Exception as e:
-                # 에러 처리
                 error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
-# def show_chat_dashboard():
-#     st.title("AI 챗봇 🤖")
-    
-#     # 세션 상태 초기화 확인
-#     init_session_state()
-    
-#     # 도움말 버튼 추가
-#     if st.button("도움말 ℹ️"):
-#         st.info(
-#             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
-#             "1. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀정)\n"
-#             "2. **논문검색 (ArXiv)** 📚: '논문검색 [키워드]' (예: 논문검색 machine learning)\n"
-#             "3. **의학논문검색 (PubMed)** 🩺: '의학논문 [키워드]' (예: 의학논문 gene therapy)\n"
-#             "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
-#             "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n\n"
-#             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
-#         )
-    
-#     # 채팅 기록 표시
-#     for msg in st.session_state.chat_history:
-#         with st.chat_message(msg['role']):
-#             st.markdown(msg['content'], unsafe_allow_html=True)
-    
-#     # 사용자 입력 처리
-#     if user_prompt := st.chat_input("질문해 주세요!"):
-#         st.chat_message("user").markdown(user_prompt)
-#         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
-#         with st.chat_message("assistant"):
-#             placeholder = st.empty()
-#             placeholder.markdown("⏳ 응답을 준비 중이에요..")
-#             start_time = time.time()
-#             with ThreadPoolExecutor() as executor:
-#                 future = executor.submit(get_cached_response, user_prompt)
-#                 response = future.result()
-#             time_taken = round(time.time() - start_time, 2)
-#             placeholder.markdown(response, unsafe_allow_html=True)
-#             st.session_state.chat_history.append({"role": "assistant", "content": response})
-#             async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
-
 # 메인 실행
 def main():
-    init_session_state()  # 메인 실행 시 항상 초기화
+    init_session_state()
     if not st.session_state.is_logged_in:
         show_login_page()
     else:
