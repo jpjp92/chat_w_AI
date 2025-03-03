@@ -170,129 +170,20 @@ class WeatherAPI:
 
 # SportsAPI 클래스
 class SportsAPI:
-    def __init__(self, api_key, cache_ttl=86400):
-        self.cache = cache_handler
-        self.cache_ttl = cache_ttl
-        self.base_url = "https://www.thesportsdb.com/api/v1/json"
-        self.api_key = api_key
-
-    def fetch_data(self, url, params):
-        """API 요청에 재시도 로직 적용"""
-        session = requests.Session()
-        retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("https://", adapter)
-        try:
-            response = session.get(url, params=params, timeout=5)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"API 요청 실패: {str(e)}")
-            raise
-
-    def fetch_team_id(self, team_name):
-        """팀 이름을 통해 팀 ID를 조회"""
-        cache_key = f"team_id:{team_name}"
-        cached_team_id = self.cache.get(cache_key)
-        if cached_team_id:
-            return cached_team_id
-
-        url = f"{self.base_url}/{self.api_key}/searchteams.php"
-        params = {'t': team_name.replace(' ', '%20')}
-        try:
-            data = self.fetch_data(url, params)
-            if data['teams']:
-                team_id = data['teams'][0]['idTeam']
-                self.cache.setex(cache_key, self.cache_ttl, team_id)
-                return team_id
-            else:
-                logger.warning(f"팀 {team_name}을 찾을 수 없습니다.")
-                return None
-        except Exception as e:
-            logger.error(f"팀 ID 조회 중 오류: {str(e)}")
-            return None
-
-    def fetch_team_schedule(self, team_name, month):
-        """팀의 경기 일정을 조회하고 지정된 월에 해당하는 경기만 필터링"""
-        cache_key = f"sports_schedule:{team_name}:{month}"
-        cached_data = self.cache.get(cache_key)
-        if cached_data:
-            return cached_data
-
-        team_id = self.fetch_team_id(team_name)
-        if not team_id:
-            return f"'{team_name}'의 경기 일정을 찾을 수 없습니다. 😓"
-
-        url = f"{self.base_url}/{self.api_key}/eventsnext.php"
-        params = {'id': team_id}
-        try:
-            data = self.fetch_data(url, params)
-            if not data or 'events' not in data:
-                return f"'{team_name}'의 데이터를 가져올 수 없습니다. 😓\n\n더 궁금한 점 있나요? 😊"
-            if not data['events']:
-                return f"'{team_name}'의 예정된 경기가 없습니다. 😓"
-
-            league_color = {
-                "UEFA Champions League": "color: #FFD700;",
-                "LaLiga": "color: #FF4500;",
-                "Copa del Rey": "color: #4169E1;",
-            }
-
-            result = f"**⚽ {team_name}의 {month}월 경기 일정 ⚽**\n\n"
-            result += "-" * 75 + "\n\n"
-            found = False
-            today = datetime.now().date()
-            for event in data['events']:
-                event_date_str = event['dateEvent']
-                event_date = datetime.strptime(event_date_str, '%Y-%m-%d')
-                if event_date.month == month and event_date.year == 2025:
-                    found = True
-                    event_time = event['strTime'] if event['strTime'] else "시간 미정"
-                    timezone_info = "(CET)"
-
-                    event_date_only = datetime.strptime(event_date_str, '%Y-%m-%d').date()
-                    if event_date_only == today:
-                        date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (오늘! 🔥)"
-                    elif event_date_only == today + timedelta(days=1):
-                        date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (내일! 🔥)"
-                    else:
-                        date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info}"
-
-                    league_style = league_color.get(event['strLeague'], "color: #000000;")
-                    league_display = f"<span style='{league_style}'>🏆 리그: {event['strLeague']}</span>"
-
-                    result += (
-                        f"{date_label}\n\n"
-                        f"🏟️ 팀: {event['strEvent']} (홈: {event['strHomeTeam']} vs 원정: {event['strAwayTeam']})\n\n"
-                        f"{league_display}\n\n"
-                        f"📍 장소: {event.get('strVenue', '미정')}\n\n"
-                        f"{'-' * 75}\n\n"
-                    )
-
-            if not found:
-                result = f"'{team_name}'의 {month}월 경기 일정이 없습니다. 😓\n\n"
-            result += "더 궁금한 점 있나요? 😊"
-            self.cache.setex(cache_key, self.cache_ttl, result)
-            return result
-
-        except Exception as e:
-            logger.error(f"경기 일정 조회 중 오류: {str(e)}")
-            return f"경기 일정을 가져오는 중 문제가 발생했습니다. 😓\n\n더 궁금한 점 있나요? 😊"
-
     def fetch_league_schedule(self, league_key, month):
         """리그의 경기 일정을 조회하고 모든 이벤트를 반환"""
         cache_key = f"league_schedule:{league_key}:{month}"
         cached_data = self.cache.get(cache_key)
         if cached_data:
             return cached_data
-    
+
         if league_key not in LEAGUE_MAPPING:
             return f"'{league_key}' 리그를 찾을 수 없습니다. 😓"
-    
+
         league_info = LEAGUE_MAPPING[league_key]
         league_id = league_info['id']
         league_name = league_info['name']
-    
+
         url = f"{self.base_url}/{self.api_key}/eventsnextleague.php"
         params = {'id': league_id}
         try:
@@ -301,7 +192,7 @@ class SportsAPI:
                 return f"'{league_name}'의 데이터를 가져올 수 없습니다. 😓\n\n더 궁금한 점 있나요? 😊"
             if not data['events']:
                 return f"'{league_name}'의 예정된 경기가 없습니다. 😓"
-    
+
             league_color = {
                 "English Premier League": "color: #800080;",
                 "German Bundesliga": "color: #FF0000;",
@@ -312,42 +203,40 @@ class SportsAPI:
                 "AFC Champions League Elite": "color: #00CED1;",
                 "Spanish La Liga": "color: #FF4500;"
             }
-    
+
             events = sorted(data['events'], key=lambda x: x['dateEvent'])
             filtered_events = [
                 event for event in events 
                 if datetime.strptime(event['dateEvent'], '%Y-%m-%d').month == month 
                 and datetime.strptime(event['dateEvent'], '%Y-%m-%d').year == 2025
             ]
-    
+
             if not filtered_events:
                 return f"'{league_name}'의 {month}월 경기 일정이 없습니다. 😓\n\n더 궁금한 점 있나요? 😊"
-    
+
             result = f"**⚽ {league_name}의 {month}월 경기 일정 ⚽**\n\n"
             result += "-" * 75 + "\n\n"
             today = datetime.now().date()
             
-            # 모든 이벤트를 포맷팅하여 추가
             for event in filtered_events:
                 event_date_str = event['dateEvent']
-                event_date = datetime.strptime(event_date_str, '%Y-%-m-%d')
                 event_time = event['strTime'] if event['strTime'] else "시간 미정"
-    
+
                 timezone_info = "(CET)"
                 if league_key in ["k league 1", "kleague1", "afc champions league elite", "afcchampionsleagueelite"]:
                     timezone_info = "(KST)"
-    
-                event_date_only = datetime.strptime(event_date_str, '%Y-%-m-%d').date()
+
+                event_date_only = datetime.strptime(event_date_str, '%Y-%m-%d').date()
                 if event_date_only == today:
                     date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (오늘! 🔥)"
                 elif event_date_only == today + timedelta(days=1):
                     date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (내일! 🔥)"
                 else:
                     date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info}"
-    
+
                 league_style = league_color.get(league_name, "color: #000000;")
                 league_display = f"<span style='{league_style}'>🏆 리그: {league_name}</span>"
-    
+
                 result += (
                     f"{date_label}\n\n"
                     f"🏟️ 팀: {event['strEvent']} (홈: {event['strHomeTeam']} vs 원정: {event['strAwayTeam']})\n\n"
@@ -355,11 +244,11 @@ class SportsAPI:
                     f"📍 장소: {event.get('strVenue', '미정')}\n\n"
                     f"{'-' * 75}\n\n"
                 )
-    
+
             result += "더 궁금한 점 있나요? 😊"
             self.cache.setex(cache_key, self.cache_ttl, result)
             return result
-    
+
         except Exception as e:
             logger.error(f"리그 경기 일정 조회 중 오류: {str(e)}")
             return f"리그 경기 일정을 가져오는 중 문제가 발생했습니다. 😓\n\n더 궁금한 점 있나요? 😊"
@@ -1066,20 +955,17 @@ def show_chat_dashboard():
                     response = get_cached_response(user_prompt)
                     time_taken = round(time.time() - start_time, 2)
                 
-                # 리그 일정 응답 처리
-                if "경기 일정" in user_prompt.lower() and any(league in user_prompt.lower() for league in LEAGUE_MAPPING.keys()):
+                # 리그 일정 처리
+                if "league_schedule" in needs_search(user_prompt):
                     initial_limit = 5
-                    # 응답을 줄 단위로 분리
                     lines = response.split("\n\n")
                     header = lines[0]  # 제목
-                    events = [line for line in lines[1:] if "📅 날짜" in line]  # 경기 이벤트 추출
-                    footer = lines[-1]  # 마지막 줄 ("더 궁금한 점 있나요?")
+                    events = [line for line in lines[1:] if "📅 날짜" in line]  # 경기 이벤트
+                    footer = lines[-1]  # 꼬리말
                     
-                    # 초기 이벤트와 나머지 이벤트 분리
                     initial_events = events[:initial_limit]
                     remaining_events = events[initial_limit:]
                     
-                    # 초기 응답 구성
                     initial_response = f"{header}\n\n" + "\n\n".join(initial_events)
                     if remaining_events:
                         initial_response += "\n\n더 많은 경기를 보려면 아래 버튼을 클릭하세요:"
@@ -1087,7 +973,6 @@ def show_chat_dashboard():
                     
                     st.markdown(initial_response, unsafe_allow_html=True)
                     
-                    # "더 보기" 버튼 추가
                     if remaining_events:
                         league_key = extract_league_from_query(user_prompt)
                         month = extract_month_from_query(user_prompt)
@@ -1100,9 +985,7 @@ def show_chat_dashboard():
                         
                         if st.session_state[button_key]:
                             st.markdown("\n\n".join(remaining_events), unsafe_allow_html=True)
-                
                 else:
-                    # 리그 일정 외의 응답은 그대로 표시
                     st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
