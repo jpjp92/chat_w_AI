@@ -169,7 +169,7 @@ class WeatherAPI:
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
-# SportsAPI 클래스 추가
+# SportsAPI 클래스
 class SportsAPI:
     def __init__(self, api_key, cache_ttl=86400):
         self.cache = cache_handler
@@ -298,7 +298,8 @@ class SportsAPI:
                 "French Ligue 1": "color: #0000FF;",
                 "UEFA Europa League": "color: #FFA500;",
                 "South Korean K League 1": "color: #FFD700;",
-                "AFC Champions League Elite": "color: #00CED1;"
+                "AFC Champions League Elite": "color: #00CED1;",
+                "Spanish La Liga": "color: #FF4500;"  # LaLiga 색상 추가
             }
 
             events = sorted(data['events'], key=lambda x: x['dateEvent'])
@@ -441,6 +442,7 @@ LEAGUE_MAPPING = {
     "kleague1": {"name": "South Korean K League 1", "id": 4356},
     "afc champions league elite": {"name": "AFC Champions League Elite", "id": 4517},
     "afcchampionsleagueelite": {"name": "AFC Champions League Elite", "id": 4517},
+    "laliga": {"name": "Spanish La Liga", "id": 4335},  # LaLiga 추가
 }
 
 def extract_team_from_query(query):
@@ -949,7 +951,7 @@ def show_chat_dashboard():
             "6. **경기일정 검색** ⚽: \n"
             "   - 팀별 일정: '[팀 이름] [월] 경기일정' (예: AT 마드리드 3월 경기일정)\n"
             "   - 리그별 일정: '[리그 이름] [월] 경기일정' (예: EPL 3월 경기일정)\n"
-            "   - 지원 리그: EPL, Bundesliga, Serie A, Ligue 1, Europa League, K League 1, AFC Champions League Elite\n\n"
+            "   - 지원 리그: EPL, Bundesliga, Serie A, Ligue 1, LaLiga, Europa League, K League 1, AFC Champions League Elite\n\n"
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
     
@@ -988,7 +990,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 # from config.imports import *
 # from config.env import *
 
