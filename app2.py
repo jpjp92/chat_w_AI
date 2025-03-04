@@ -178,14 +178,14 @@ class WeatherAPI:
 class FootballAPI:
     def __init__(self, api_key, cache_ttl=600):
         self.api_key = api_key
-        self.base_url = "https://api.football-data.org/v4/competitions"  # HTTP -> HTTPS로 변경
+        self.base_url = "https://api.football-data.org/v4/competitions"
         self.cache = cache_handler
         self.cache_ttl = cache_ttl
 
     def fetch_league_standings(self, league_code, league_name):
         cache_key = f"league_standings:{league_code}"
         cached_data = self.cache.get(cache_key)
-        if cached_data:
+        if cached_data is not None:
             return cached_data
 
         url = f"{self.base_url}/{league_code}/standings"
@@ -194,7 +194,7 @@ class FootballAPI:
         }
         
         try:
-            time.sleep(1)  # 요청 간 1초 지연 추가
+            time.sleep(1)  # 요청 간 1초 지연
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
@@ -202,7 +202,7 @@ class FootballAPI:
             # standings는 보통 첫 번째 타입의 테이블을 사용
             standings = data['standings'][0]['table']
             
-            # standings를 DataFrame으로 변환
+            # DataFrame으로 변환
             df = pd.DataFrame([
                 {
                     '순위': team['position'],
@@ -218,14 +218,15 @@ class FootballAPI:
                 } for team in standings
             ])
             
-            result = f"{league_name} 리그 순위:\n\n{df.to_string(index=False)}\n\n더 궁금한 점 있나요? 😊"
+            # DataFrame과 리그 이름을 함께 캐시에 저장
+            result = {"league_name": league_name, "data": df}
             self.cache.setex(cache_key, self.cache_ttl, result)
             return result
         
         except requests.exceptions.RequestException as e:
             error_detail = e.response.text if e.response else "응답 없음"
             logger.error(f"{league_name} standings API 요청 중 오류 발생: {e}, 응답 내용: {error_detail}")
-            return f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다. 😓\n\n더 궁금한 점 있나요? 😊"
+            return {"league_name": league_name, "error": f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다. 😓"}
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -716,7 +717,16 @@ def process_query(query):
         league_key = extract_league_from_query(query)
         if league_key:
             league_info = LEAGUE_MAPPING[league_key]
-            return football_api.fetch_league_standings(league_info["code"], league_info["name"])
+            result = football_api.fetch_league_standings(league_info["code"], league_info["name"])
+            if "error" in result:
+                return result["error"] + "\n\n더 궁금한 점 있나요? 😊"
+            else:
+                # 리그 이름과 DataFrame 출력
+                return {
+                    "header": f"{result['league_name']} 리그 순위",
+                    "table": result["data"],
+                    "footer": "더 궁금한 점 있나요? 😊"
+                }
         return "지원하지 않는 리그입니다. 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1 😓\n\n더 궁금한 점 있나요? 😊"
     elif query_type == "conversation":
         if query.strip() in GREETING_RESPONSES:
@@ -761,7 +771,12 @@ def show_chat_dashboard():
     
     for msg in st.session_state.chat_history:
         with st.chat_message(msg['role']):
-            st.markdown(msg['content'], unsafe_allow_html=True)
+            if isinstance(msg['content'], dict) and "table" in msg['content']:
+                st.markdown(f"### {msg['content']['header']}")
+                st.dataframe(msg['content']['table'], use_container_width=True)
+                st.markdown(msg['content']['footer'])
+            else:
+                st.markdown(msg['content'], unsafe_allow_html=True)
     
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.chat_message("user").markdown(user_prompt)
@@ -773,7 +788,13 @@ def show_chat_dashboard():
                     response = get_cached_response(user_prompt)
                     time_taken = round(time.time() - start_time, 2)
                 
-                st.markdown(response, unsafe_allow_html=True)
+                # 응답이 딕셔너리 형태일 경우 (리그 순위)
+                if isinstance(response, dict) and "table" in response:
+                    st.markdown(f"### {response['header']}")
+                    st.dataframe(response['table'], use_container_width=True)
+                    st.markdown(response['footer'])
+                else:
+                    st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
                 asyncio.run(async_save_chat_history(
