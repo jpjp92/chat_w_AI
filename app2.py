@@ -11,7 +11,9 @@ print(f"SPORTS_API_KEY: {SPORTS_API_KEY}")
 
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # httpx 로깅 비활성화
 logger = logging.getLogger("HybridChat")
+
 
 # 캐시 설정
 cache = Cache("cache_directory")
