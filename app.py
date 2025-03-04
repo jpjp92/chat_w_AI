@@ -1,6 +1,6 @@
 # 라이브러리 설정
 from config.imports import *
-from config.env *
+from config.env import *
 
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
