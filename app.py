@@ -221,6 +221,41 @@ class FootballAPI:
             logger.error(f"{league_name} standings API 요청 중 오류 발생: {e}, 응답 내용: {error_detail}")
             return {"league_name": league_name, "error": f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다. 😓"}
 
+    def fetch_league_scorers(self, league_code, league_name):
+        cache_key = f"league_scorers:{league_code}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+
+        url = f"{self.base_url}/{league_code}/scorers"
+        headers = {
+            'X-Auth-Token': self.api_key
+        }
+        
+        try:
+            time.sleep(1)
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            
+            scorers = []
+            for scorer in data['scorers'][:10]:  # 상위 10명
+                scorers.append({
+                    '선수': scorer['player']['name'],
+                    '팀': scorer['team']['name'],
+                    '득점': scorer['goals']
+                })
+            
+            df = pd.DataFrame(scorers)
+            result = {"league_name": league_name, "data": df}
+            self.cache.setex(cache_key, self.cache_ttl, result)
+            return result
+        
+        except requests.exceptions.RequestException as e:
+            error_detail = e.response.text if e.response else "응답 없음"
+            logger.error(f"{league_name} scorers API 요청 중 오류 발생: {e}, 응답 내용: {error_detail}")
+            return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다. 😓"}
+
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = Client()
@@ -647,10 +682,14 @@ def needs_search(query):
     if any(kw in query_lower for kw in pubmed_keywords) and len(query_lower) > 5:
         return "pubmed_search"
     league_keywords = list(LEAGUE_MAPPING.keys())
-    if any(kw in query_lower for kw in ["리그 순위", "순위"]):
+    if any(kw in query_lower for kw in ["리그 순위", "순위"]) and not "득점" in query_lower:
         for league in league_keywords:
             if league in query_lower:
                 return "league_standings"
+    if any(kw in query_lower for kw in ["리그 득점순위", "득점순위"]):
+        for league in league_keywords:
+            if league in query_lower:
+                return "league_scorers"
     search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐", "알려줘", "찾아줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
@@ -733,6 +772,20 @@ def process_query(query):
                     "footer": "더 궁금한 점 있나요? 😊"
                 }
         return "지원하지 않는 리그입니다. 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1 😓\n\n더 궁금한 점 있나요? 😊"
+    elif query_type == "league_scorers":
+        league_key = extract_league_from_query(query)
+        if league_key:
+            league_info = LEAGUE_MAPPING[league_key]
+            result = football_api.fetch_league_scorers(league_info["code"], league_info["name"])
+            if "error" in result:
+                return result["error"] + "\n\n더 궁금한 점 있나요? 😊"
+            else:
+                return {
+                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
+                    "table": result["data"],
+                    "footer": "더 궁금한 점 있나요? 😊"
+                }
+        return "지원하지 않는 리그입니다. 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1 😓\n\n더 궁금한 점 있나요? 😊"
     elif query_type == "conversation":
         if query.strip() in GREETING_RESPONSES:
             return GREETING_RESPONSES[query.strip()]
@@ -770,6 +823,7 @@ def show_chat_dashboard():
             "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
             "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n"
             "6. **리그 순위 검색** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
+            "7. **리그 득점순위 검색** ⚽: '[리그 이름] 리그 득점순위' (예: EPL 리그 득점순위)\n"
             "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1\n\n"
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
