@@ -2,7 +2,7 @@
 from config.imports import *
 from config.env import *
 import asyncio
-import pandas as pd  # FootballAPI에서 사용
+
 
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
