@@ -854,7 +854,7 @@ def show_chat_dashboard():
                 
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(f"### {response['header']}")
-                    st.dataframe(response['table'], use_container_width=True, hide_index=True)
+                    st.dataframe(response['table'], use_container_width=True)
                     st.markdown(response['footer'])
                 else:
                     st.markdown(response, unsafe_allow_html=True)
