@@ -1,19 +1,13 @@
 # 라이브러리 설정
 from config.imports import *
 from config.env import *
-import asyncio
-import pandas as pd
-import logging
-import time
-
-# API 키 확인
-print(f"SPORTS_API_KEY: {SPORTS_API_KEY}")
 
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
-logging.getLogger("httpx").setLevel(logging.WARNING)  # httpx 로깅 비활성화
 logger = logging.getLogger("HybridChat")
-
+# Streamlit과 httpx의 디버그 로그 비활성화
+logging.getLogger("streamlit").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # 캐시 설정
 cache = Cache("cache_directory")
@@ -35,7 +29,7 @@ class MemoryCache:
 
 cache_handler = MemoryCache()
 
-# WeatherAPI 클래스 (변경 없음)
+# WeatherAPI 클래스
 class WeatherAPI:
     def __init__(self, cache_ttl=600):
         self.cache = cache_handler
@@ -176,7 +170,7 @@ class WeatherAPI:
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
-# FootballAPI 클래스 (http://api.football-data.org 사용)
+# FootballAPI 클래스
 class FootballAPI:
     def __init__(self, api_key, cache_ttl=600):
         self.api_key = api_key
@@ -196,15 +190,13 @@ class FootballAPI:
         }
         
         try:
-            time.sleep(1)  # 요청 간 1초 지연
+            time.sleep(1)
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
             
-            # standings는 보통 첫 번째 타입의 테이블을 사용
             standings = data['standings'][0]['table']
             
-            # DataFrame으로 변환
             df = pd.DataFrame([
                 {
                     '순위': team['position'],
@@ -220,7 +212,6 @@ class FootballAPI:
                 } for team in standings
             ])
             
-            # DataFrame과 리그 이름을 함께 캐시에 저장
             result = {"league_name": league_name, "data": df}
             self.cache.setex(cache_key, self.cache_ttl, result)
             return result
@@ -230,11 +221,46 @@ class FootballAPI:
             logger.error(f"{league_name} standings API 요청 중 오류 발생: {e}, 응답 내용: {error_detail}")
             return {"league_name": league_name, "error": f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다. 😓"}
 
+    def fetch_league_scorers(self, league_code, league_name):
+        cache_key = f"league_scorers:{league_code}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+
+        url = f"{self.base_url}/{league_code}/scorers"
+        headers = {
+            'X-Auth-Token': self.api_key
+        }
+        
+        try:
+            time.sleep(1)
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            
+            scorers = []
+            for scorer in data['scorers'][:10]:  # 상위 10명
+                scorers.append({
+                    '선수': scorer['player']['name'],
+                    '팀': scorer['team']['name'],
+                    '득점': scorer['goals']
+                })
+            
+            df = pd.DataFrame(scorers)
+            result = {"league_name": league_name, "data": df}
+            self.cache.setex(cache_key, self.cache_ttl, result)
+            return result
+        
+        except requests.exceptions.RequestException as e:
+            error_detail = e.response.text if e.response else "응답 없음"
+            logger.error(f"{league_name} scorers API 요청 중 오류 발생: {e}, 응답 내용: {error_detail}")
+            return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다. 😓"}
+
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = Client()
 weather_api = WeatherAPI()
-football_api = FootballAPI(api_key=SPORTS_API_KEY)  # SPORTS_API_KEY 사용
+football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
 NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
@@ -316,12 +342,10 @@ def create_or_get_user(nickname):
     return new_user.data[0]["id"], False
 
 def save_chat_history(user_id, session_id, question, answer, time_taken):
-    # answer가 딕셔너리이고 table 키가 DataFrame인 경우 문자열로 변환
     if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-        # DataFrame을 문자열로 변환
         answer_str = {
             "header": answer["header"],
-            "table": answer["table"].to_string(index=False),  # DataFrame을 문자열로 변환
+            "table": answer["table"].to_string(index=False),
             "footer": answer["footer"]
         }
         answer_to_save = answer_str
@@ -332,14 +356,13 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
         "user_id": user_id,
         "session_id": session_id,
         "question": question,
-        "answer": answer_to_save,  # 직렬화 가능한 데이터로 저장
+        "answer": answer_to_save,
         "time_taken": time_taken,
         "created_at": datetime.now().isoformat()
     }).execute()
-    
-async def async_save_chat_history(user_id, session_id, question, answer, time_taken):
-    """비동기적으로 채팅 기록 저장"""
-    await asyncio.to_thread(save_chat_history, user_id, session_id, question, answer, time_taken)
+
+def async_save_chat_history(user_id, session_id, question, answer, time_taken):
+    threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
 
 # 의약품 검색
 def get_drug_info(drug_query):
@@ -659,10 +682,14 @@ def needs_search(query):
     if any(kw in query_lower for kw in pubmed_keywords) and len(query_lower) > 5:
         return "pubmed_search"
     league_keywords = list(LEAGUE_MAPPING.keys())
-    if any(kw in query_lower for kw in ["리그 순위", "순위"]):
+    if any(kw in query_lower for kw in ["리그 순위", "순위"]) and not "득점" in query_lower:
         for league in league_keywords:
             if league in query_lower:
                 return "league_standings"
+    if any(kw in query_lower for kw in ["리그 득점순위", "득점순위"]):
+        for league in league_keywords:
+            if league in query_lower:
+                return "league_scorers"
     search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐", "알려줘", "찾아줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
@@ -739,9 +766,22 @@ def process_query(query):
             if "error" in result:
                 return result["error"] + "\n\n더 궁금한 점 있나요? 😊"
             else:
-                # 리그 이름과 DataFrame 출력
                 return {
                     "header": f"{result['league_name']} 리그 순위",
+                    "table": result["data"],
+                    "footer": "더 궁금한 점 있나요? 😊"
+                }
+        return "지원하지 않는 리그입니다. 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1 😓\n\n더 궁금한 점 있나요? 😊"
+    elif query_type == "league_scorers":
+        league_key = extract_league_from_query(query)
+        if league_key:
+            league_info = LEAGUE_MAPPING[league_key]
+            result = football_api.fetch_league_scorers(league_info["code"], league_info["name"])
+            if "error" in result:
+                return result["error"] + "\n\n더 궁금한 점 있나요? 😊"
+            else:
+                return {
+                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
                     "table": result["data"],
                     "footer": "더 궁금한 점 있나요? 😊"
                 }
@@ -774,32 +814,6 @@ def show_chat_dashboard():
     
     init_session_state()
     
-    # CSS 스타일 추가 (컬럼명 중앙정렬)
-    st.markdown("""
-        <style>
-        /* Streamlit DataFrame의 헤더 셀(컬럼명) 중앙정렬 */
-        .stDataFrame thead th {
-            text-align: center !important;
-        }
-        /* 테이블 본문 셀은 기본 정렬 유지 (숫자는 오른쪽 정렬, 텍스트는 왼쪽 정렬) */
-        .stDataFrame tbody td {
-            text-align: left;
-        }
-        .stDataFrame tbody td:nth-child(1),  /* 순위 */
-        .stDataFrame tbody td:nth-child(3),  /* 경기 */
-        .stDataFrame tbody td:nth-child(4),  /* 승 */
-        .stDataFrame tbody td:nth-child(5),  /* 무 */
-        .stDataFrame tbody td:nth-child(6),  /* 패 */
-        .stDataFrame tbody td:nth-child(7),  /* 득점 */
-        .stDataFrame tbody td:nth-child(8),  /* 실점 */
-        .stDataFrame tbody td:nth-child(9),  /* 득실차 */
-        .stDataFrame tbody td:nth-child(10)  /* 포인트 */
-        {
-            text-align: right;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
@@ -809,6 +823,7 @@ def show_chat_dashboard():
             "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
             "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n"
             "6. **리그 순위 검색** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
+            "7. **리그 득점순위 검색** ⚽: '[리그 이름] 리그 득점순위' (예: EPL 리그 득점순위)\n"
             "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1\n\n"
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
@@ -817,11 +832,9 @@ def show_chat_dashboard():
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
                 st.markdown(f"### {msg['content']['header']}")
-                # table이 DataFrame인 경우 (화면 표시용)
                 if isinstance(msg['content']['table'], pd.DataFrame):
                     st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)
                 else:
-                    # table이 문자열인 경우 (DB에서 불러온 경우)
                     st.text(msg['content']['table'])
                 st.markdown(msg['content']['footer'])
             else:
@@ -834,10 +847,11 @@ def show_chat_dashboard():
             try:
                 with st.spinner("응답을 준비 중이에요.. ⏳"):
                     start_time = time.time()
-                    response = get_cached_response(user_prompt)
+                    with ThreadPoolExecutor() as executor:
+                        future = executor.submit(get_cached_response, user_prompt)
+                        response = future.result()
                     time_taken = round(time.time() - start_time, 2)
                 
-                # 응답이 딕셔너리 형태일 경우 (리그 순위)
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(f"### {response['header']}")
                     st.dataframe(response['table'], use_container_width=True, hide_index=True)
@@ -846,77 +860,13 @@ def show_chat_dashboard():
                     st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
-                asyncio.run(async_save_chat_history(
-                    st.session_state.user_id, 
-                    st.session_state.session_id, 
-                    user_prompt, 
-                    response, 
-                    time_taken
-                ))
+                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
             
             except Exception as e:
                 error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
-# def show_chat_dashboard():
-#     st.title("AI 챗봇 🤖")
-    
-#     init_session_state()
-    
-#     if st.button("도움말 ℹ️"):
-#         st.info(
-#             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
-#             "1. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀정)\n"
-#             "2. **논문검색 (ArXiv)** 📚: '논문검색 [키워드]' (예: 논문검색 machine learning)\n"
-#             "3. **의학논문검색 (PubMed)** 🩺: '의학논문 [키워드]' (예: 의학논문 gene therapy)\n"
-#             "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
-#             "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n"
-#             "6. **리그 순위 검색** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
-#             "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1\n\n"
-#             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
-#         )
-    
-#     for msg in st.session_state.chat_history:
-#         with st.chat_message(msg['role']):
-#             if isinstance(msg['content'], dict) and "table" in msg['content']:
-#                 st.markdown(f"### {msg['content']['header']}")
-#                 st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)  # 인덱스 숨김
-#                 st.markdown(msg['content']['footer'])
-#             else:
-#                 st.markdown(msg['content'], unsafe_allow_html=True)
-    
-#     if user_prompt := st.chat_input("질문해 주세요!"):
-#         st.chat_message("user").markdown(user_prompt)
-#         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
-#         with st.chat_message("assistant"):
-#             try:
-#                 with st.spinner("응답을 준비 중이에요.. ⏳"):
-#                     start_time = time.time()
-#                     response = get_cached_response(user_prompt)
-#                     time_taken = round(time.time() - start_time, 2)
-                
-#                 # 응답이 딕셔너리 형태일 경우 (리그 순위)
-#                 if isinstance(response, dict) and "table" in response:
-#                     st.markdown(f"### {response['header']}")
-#                     st.dataframe(response['table'], use_container_width=True, hide_index=True)  # 인덱스 숨김
-#                     st.markdown(response['footer'])
-#                 else:
-#                     st.markdown(response, unsafe_allow_html=True)
-                
-#                 st.session_state.chat_history.append({"role": "assistant", "content": response})
-#                 asyncio.run(async_save_chat_history(
-#                     st.session_state.user_id, 
-#                     st.session_state.session_id, 
-#                     user_prompt, 
-#                     response, 
-#                     time_taken
-#                 ))
-            
-#             except Exception as e:
-#                 error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
-#                 st.markdown(error_msg, unsafe_allow_html=True)
-#                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 # 메인 실행
 def main():
     init_session_state()
