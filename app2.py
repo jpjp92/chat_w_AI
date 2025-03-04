@@ -773,7 +773,7 @@ def show_chat_dashboard():
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
                 st.markdown(f"### {msg['content']['header']}")
-                st.dataframe(msg['content']['table'], use_container_width=True)
+                st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)  # 인덱스 숨김
                 st.markdown(msg['content']['footer'])
             else:
                 st.markdown(msg['content'], unsafe_allow_html=True)
@@ -791,7 +791,7 @@ def show_chat_dashboard():
                 # 응답이 딕셔너리 형태일 경우 (리그 순위)
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(f"### {response['header']}")
-                    st.dataframe(response['table'], use_container_width=True, index=None)
+                    st.dataframe(response['table'], use_container_width=True, hide_index=True)  # 인덱스 숨김
                     st.markdown(response['footer'])
                 else:
                     st.markdown(response, unsafe_allow_html=True)
@@ -809,7 +809,6 @@ def show_chat_dashboard():
                 error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
-
 # 메인 실행
 def main():
     init_session_state()
