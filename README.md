@@ -15,6 +15,7 @@
   ☁️ Weatehr : openweather API 
   🔍 Search : Naver API, googlesearch
   📚 Paper Search : arxiv, pubmed
+  ⚽ Football : football-data.org
 ```
 🔄 **In-progress** <br>
 ```
