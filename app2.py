@@ -2,6 +2,7 @@
 from config.imports import *
 from config.env import *
 import asyncio
+import pandas as pd  # FootballAPI에서 사용
 
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
@@ -168,215 +169,62 @@ class WeatherAPI:
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
-# SportsAPI 클래스
-class SportsAPI:
-    def fetch_league_schedule(self, league_key, month):
-        """리그의 경기 일정을 조회하고 모든 이벤트를 반환"""
-        cache_key = f"league_schedule:{league_key}:{month}"
+# FootballAPI 클래스 (http://api.football-data.org 사용)
+class FootballAPI:
+    def __init__(self, api_key, cache_ttl=600):
+        self.api_key = api_key
+        self.base_url = "http://api.football-data.org/v4/competitions"
+        self.cache = cache_handler
+        self.cache_ttl = cache_ttl
+
+    def fetch_league_standings(self, league_code, league_name):
+        cache_key = f"league_standings:{league_code}"
         cached_data = self.cache.get(cache_key)
         if cached_data:
             return cached_data
 
-        if league_key not in LEAGUE_MAPPING:
-            return f"'{league_key}' 리그를 찾을 수 없습니다. 😓"
-
-        league_info = LEAGUE_MAPPING[league_key]
-        league_id = league_info['id']
-        league_name = league_info['name']
-
-        url = f"{self.base_url}/{self.api_key}/eventsnextleague.php"
-        params = {'id': league_id}
+        url = f"{self.base_url}/{league_code}/standings"
+        headers = {
+            'X-Auth-Token': self.api_key
+        }
+        
         try:
-            data = self.fetch_data(url, params)
-            if not data or 'events' not in data:
-                return f"'{league_name}'의 데이터를 가져올 수 없습니다. 😓\n\n더 궁금한 점 있나요? 😊"
-            if not data['events']:
-                return f"'{league_name}'의 예정된 경기가 없습니다. 😓"
-
-            league_color = {
-                "English Premier League": "color: #800080;",
-                "German Bundesliga": "color: #FF0000;",
-                "Italian Serie A": "color: #008000;",
-                "French Ligue 1": "color: #0000FF;",
-                "UEFA Europa League": "color: #FFA500;",
-                "South Korean K League 1": "color: #FFD700;",
-                "AFC Champions League Elite": "color: #00CED1;",
-                "Spanish La Liga": "color: #FF4500;"
-            }
-
-            events = sorted(data['events'], key=lambda x: x['dateEvent'])
-            filtered_events = [
-                event for event in events 
-                if datetime.strptime(event['dateEvent'], '%Y-%m-%d').month == month 
-                and datetime.strptime(event['dateEvent'], '%Y-%m-%d').year == 2025
-            ]
-
-            if not filtered_events:
-                return f"'{league_name}'의 {month}월 경기 일정이 없습니다. 😓\n\n더 궁금한 점 있나요? 😊"
-
-            result = f"**⚽ {league_name}의 {month}월 경기 일정 ⚽**\n\n"
-            result += "-" * 75 + "\n\n"
-            today = datetime.now().date()
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
             
-            for event in filtered_events:
-                event_date_str = event['dateEvent']
-                event_time = event['strTime'] if event['strTime'] else "시간 미정"
-
-                timezone_info = "(CET)"
-                if league_key in ["k league 1", "kleague1", "afc champions league elite", "afcchampionsleagueelite"]:
-                    timezone_info = "(KST)"
-
-                event_date_only = datetime.strptime(event_date_str, '%Y-%m-%d').date()
-                if event_date_only == today:
-                    date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (오늘! 🔥)"
-                elif event_date_only == today + timedelta(days=1):
-                    date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (내일! 🔥)"
-                else:
-                    date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info}"
-
-                league_style = league_color.get(league_name, "color: #000000;")
-                league_display = f"<span style='{league_style}'>🏆 리그: {league_name}</span>"
-
-                result += (
-                    f"{date_label}\n\n"
-                    f"🏟️ 팀: {event['strEvent']} (홈: {event['strHomeTeam']} vs 원정: {event['strAwayTeam']})\n\n"
-                    f"{league_display}\n\n"
-                    f"📍 장소: {event.get('strVenue', '미정')}\n\n"
-                    f"{'-' * 75}\n\n"
-                )
-
-            result += "더 궁금한 점 있나요? 😊"
+            # standings는 보통 첫 번째 타입의 테이블을 사용
+            standings = data['standings'][0]['table']
+            
+            # standings를 DataFrame으로 변환
+            df = pd.DataFrame([
+                {
+                    '순위': team['position'],
+                    '팀': team['team']['name'],
+                    '경기': team['playedGames'],
+                    '승': team['won'],
+                    '무': team['draw'],
+                    '패': team['lost'],
+                    '득점': team['goalsFor'],
+                    '실점': team['goalsAgainst'],
+                    '득실차': team['goalsFor'] - team['goalsAgainst'],
+                    '포인트': team['points']
+                } for team in standings
+            ])
+            
+            result = f"{league_name} 리그 순위:\n\n{df.to_string(index=False)}\n\n더 궁금한 점 있나요? 😊"
             self.cache.setex(cache_key, self.cache_ttl, result)
             return result
-
-        except Exception as e:
-            logger.error(f"리그 경기 일정 조회 중 오류: {str(e)}")
-            return f"리그 경기 일정을 가져오는 중 문제가 발생했습니다. 😓\n\n더 궁금한 점 있나요? 😊"
-    
-    # def fetch_league_schedule(self, league_key, month, initial_limit=5):
-    #     """리그의 경기 일정을 조회하고 초기에는 최대 initial_limit 경기 표시"""
-    #     cache_key = f"league_schedule:{league_key}:{month}"
-    #     cached_data = self.cache.get(cache_key)
-    #     if cached_data:
-    #         return cached_data
-
-    #     if league_key not in LEAGUE_MAPPING:
-    #         return f"'{league_key}' 리그를 찾을 수 없습니다. 😓"
-
-    #     league_info = LEAGUE_MAPPING[league_key]
-    #     league_id = league_info['id']
-    #     league_name = league_info['name']
-
-    #     url = f"{self.base_url}/{self.api_key}/eventsnextleague.php"
-    #     params = {'id': league_id}
-    #     try:
-    #         data = self.fetch_data(url, params)
-    #         if not data or 'events' not in data:
-    #             return f"'{league_name}'의 데이터를 가져올 수 없습니다. 😓\n\n더 궁금한 점 있나요? 😊"
-    #         if not data['events']:
-    #             return f"'{league_name}'의 예정된 경기가 없습니다. 😓"
-
-    #         league_color = {
-    #             "English Premier League": "color: #800080;",
-    #             "German Bundesliga": "color: #FF0000;",
-    #             "Italian Serie A": "color: #008000;",
-    #             "French Ligue 1": "color: #0000FF;",
-    #             "UEFA Europa League": "color: #FFA500;",
-    #             "South Korean K League 1": "color: #FFD700;",
-    #             "AFC Champions League Elite": "color: #00CED1;",
-    #             "Spanish La Liga": "color: #FF4500;"
-    #         }
-
-    #         events = sorted(data['events'], key=lambda x: x['dateEvent'])
-    #         filtered_events = [event for event in events if datetime.strptime(event['dateEvent'], '%Y-%m-%d').month == month and datetime.strptime(event['dateEvent'], '%Y-%m-%d').year == 2025]
-
-    #         if not filtered_events:
-    #             return f"'{league_name}'의 {month}월 경기 일정이 없습니다. 😓\n\n더 궁금한 점 있나요? 😊"
-
-    #         initial_events = filtered_events[:initial_limit]
-    #         remaining_events = filtered_events[initial_limit:]
-
-    #         if f"show_more_{league_key}_{month}" not in st.session_state:
-    #             st.session_state[f"show_more_{league_key}_{month}"] = False
-
-    #         result = f"**⚽ {league_name}의 {month}월 경기 일정 ⚽**\n\n"
-    #         result += "-" * 75 + "\n\n"
-    #         today = datetime.now().date()
-    #         for event in initial_events:
-    #             event_date_str = event['dateEvent']
-    #             event_date = datetime.strptime(event_date_str, '%Y-%m-%d')
-    #             event_time = event['strTime'] if event['strTime'] else "시간 미정"
-
-    #             timezone_info = "(CET)"
-    #             if league_key in ["k league 1", "kleague1", "afc champions league elite", "afcchampionsleagueelite"]:
-    #                 timezone_info = "(KST)"
-
-    #             event_date_only = datetime.strptime(event_date_str, '%Y-%m-%d').date()
-    #             if event_date_only == today:
-    #                 date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (오늘! 🔥)"
-    #             elif event_date_only == today + timedelta(days=1):
-    #                 date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (내일! 🔥)"
-    #             else:
-    #                 date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info}"
-
-    #             league_style = league_color.get(league_name, "color: #000000;")
-    #             league_display = f"<span style='{league_style}'>🏆 리그: {league_name}</span>"
-
-    #             result += (
-    #                 f"{date_label}\n\n"
-    #                 f"🏟️ 팀: {event['strEvent']} (홈: {event['strHomeTeam']} vs 원정: {event['strAwayTeam']})\n\n"
-    #                 f"{league_display}\n\n"
-    #                 f"📍 장소: {event.get('strVenue', '미정')}\n\n"
-    #                 f"{'-' * 75}\n\n"
-    #             )
-
-    #         if remaining_events:
-    #             result += "더 많은 경기를 보려면 아래 버튼을 클릭하세요:\n\n"
-    #             if st.button("더 보기", key=f"show_more_{league_key}_{month}"):
-    #                 st.session_state[f"show_more_{league_key}_{month}"] = True
-
-    #             if st.session_state[f"show_more_{league_key}_{month}"]:
-    #                 for event in remaining_events:
-    #                     event_date_str = event['dateEvent']
-    #                     event_date = datetime.strptime(event_date_str, '%Y-%m-%d')
-    #                     event_time = event['strTime'] if event['strTime'] else "시간 미정"
-
-    #                     timezone_info = "(CET)"
-    #                     if league_key in ["k league 1", "kleague1", "afc champions league elite", "afcchampionsleagueelite"]:
-    #                         timezone_info = "(KST)"
-
-    #                     event_date_only = datetime.strptime(event_date_str, '%Y-%m-%d').date()
-    #                     if event_date_only == today:
-    #                         date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (오늘! 🔥)"
-    #                     elif event_date_only == today + timedelta(days=1):
-    #                         date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info} (내일! 🔥)"
-    #                     else:
-    #                         date_label = f"📅 날짜: {event_date_str} {event_time} {timezone_info}"
-
-    #                     league_style = league_color.get(league_name, "color: #000000;")
-    #                     league_display = f"<span style='{league_style}'>🏆 리그: {league_name}</span>"
-
-    #                     result += (
-    #                         f"{date_label}\n\n"
-    #                         f"🏟️ 팀: {event['strEvent']} (홈: {event['strHomeTeam']} vs 원정: {event['strAwayTeam']})\n\n"
-    #                         f"{league_display}\n\n"
-    #                         f"📍 장소: {event.get('strVenue', '미정')}\n\n"
-    #                         f"{'-' * 75}\n\n"
-    #                     )
-
-    #         result += "더 궁금한 점 있나요? 😊"
-    #         self.cache.setex(cache_key, self.cache_ttl, result)
-    #         return result
-
-    #     except Exception as e:
-    #         logger.error(f"리그 경기 일정 조회 중 오류: {str(e)}")
-    #         return f"리그 경기 일정을 가져오는 중 문제가 발생했습니다. 😓\n\n더 궁금한 점 있나요? 😊"
+        
+        except requests.exceptions.RequestException as e:
+            logger.error(f"{league_name} standings API 요청 중 오류 발생: {e}")
+            return f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다. 😓\n\n더 궁금한 점 있나요? 😊"
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = Client()
 weather_api = WeatherAPI()
-sports_api = SportsAPI(api_key="3")  # TheSportsDB API 키 설정 (예시)
+football_api = FootballAPI(api_key="61db17e8")  # Football-data.org API 키 설정
 naver_request_count = 0
 NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
@@ -407,36 +255,14 @@ def extract_city_from_query(query):
                 return city
     return "서울"
 
-# 팀 및 리그 추출
-SPORTS_PATTERNS = [
-    re.compile(r'([가-힣a-zA-Z\s]{2,20}(?:시|팀)?)\s*(?:[0-9]{1,2}월)?\s*(?:경기일정|경기 일정|스케줄|일정)', re.IGNORECASE),
-    re.compile(r'(?:[0-9]{1,2}월)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|팀)?)\s*(?:경기일정|경기 일정|스케줄|일정)', re.IGNORECASE),
-]
-MONTH_PATTERN = re.compile(r'([0-9]{1,2})월')
-
+# 리그 추출 및 매핑
 LEAGUE_MAPPING = {
-    "epl": {"name": "English Premier League", "id": 4328},
-    "bundesliga": {"name": "German Bundesliga", "id": 4331},
-    "serie a": {"name": "Italian Serie A", "id": 4332},
-    "seriea": {"name": "Italian Serie A", "id": 4332},
-    "ligue 1": {"name": "French Ligue 1", "id": 4334},
-    "ligue1": {"name": "French Ligue 1", "id": 4334},
-    "europa league": {"name": "UEFA Europa League", "id": 4480},
-    "europaleague": {"name": "UEFA Europa League", "id": 4480},
-    "k league 1": {"name": "South Korean K League 1", "id": 4356},
-    "kleague1": {"name": "South Korean K League 1", "id": 4356},
-    "afc champions league elite": {"name": "AFC Champions League Elite", "id": 4517},
-    "afcchampionsleagueelite": {"name": "AFC Champions League Elite", "id": 4517},
-    "laliga": {"name": "Spanish La Liga", "id": 4335},  # LaLiga 추가
+    "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
+    "laliga": {"name": "라리가 (스페인)", "code": "PD"},
+    "bundesliga": {"name": "분데스리가 (독일)", "code": "BL1"},
+    "seriea": {"name": "세리에 A (이탈리아)", "code": "SA"},
+    "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"}
 }
-
-def extract_team_from_query(query):
-    for pattern in SPORTS_PATTERNS:
-        match = pattern.search(query)
-        if match:
-            team = match.group(1).strip()
-            return team
-    return None
 
 def extract_league_from_query(query):
     query_lower = query.strip().lower()
@@ -444,12 +270,6 @@ def extract_league_from_query(query):
         if league_key in query_lower:
             return league_key
     return None
-
-def extract_month_from_query(query):
-    match = MONTH_PATTERN.search(query)
-    if match:
-        return int(match.group(1))
-    return datetime.now().month
 
 TIME_CITY_PATTERNS = [
     re.compile(r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간'),
@@ -812,16 +632,11 @@ def needs_search(query):
     pubmed_keywords = ["의학논문"]
     if any(kw in query_lower for kw in pubmed_keywords) and len(query_lower) > 5:
         return "pubmed_search"
-    sports_keywords = ["경기일정", "경기 일정", "스케줄", "일정"]
     league_keywords = list(LEAGUE_MAPPING.keys())
-    if any(kw in query_lower for kw in sports_keywords):
+    if any(kw in query_lower for kw in ["리그 순위", "순위"]):
         for league in league_keywords:
             if league in query_lower:
-                return "league_schedule"
-        for pattern in SPORTS_PATTERNS:
-            match = pattern.search(query)
-            if match:
-                return "sports_schedule"
+                return "league_standings"
     search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐", "알려줘", "찾아줘"]
     if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
         return "web_search"
@@ -890,14 +705,12 @@ def process_query(query):
         return weather_api.get_weekly_forecast(city)
     elif query_type == "drug":
         return get_drug_info(query)
-    elif query_type == "sports_schedule":
-        team = extract_team_from_query(query)
-        month = extract_month_from_query(query)
-        return sports_api.fetch_team_schedule(team, month)
-    elif query_type == "league_schedule":
+    elif query_type == "league_standings":
         league_key = extract_league_from_query(query)
-        month = extract_month_from_query(query)
-        return sports_api.fetch_league_schedule(league_key, month)
+        if league_key:
+            league_info = LEAGUE_MAPPING[league_key]
+            return football_api.fetch_league_standings(league_info["code"], league_info["name"])
+        return "지원하지 않는 리그입니다. 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1 😓\n\n더 궁금한 점 있나요? 😊"
     elif query_type == "conversation":
         if query.strip() in GREETING_RESPONSES:
             return GREETING_RESPONSES[query.strip()]
@@ -934,10 +747,8 @@ def show_chat_dashboard():
             "3. **의학논문검색 (PubMed)** 🩺: '의학논문 [키워드]' (예: 의학논문 gene therapy)\n"
             "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
             "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n"
-            "6. **경기일정 검색** ⚽: \n"
-            "   - 팀별 일정: '[팀 이름] [월] 경기일정' (예: AT 마드리드 3월 경기일정)\n"
-            "   - 리그별 일정: '[리그 이름] [월] 경기일정' (예: EPL 3월 경기일정)\n"
-            "   - 지원 리그: EPL, Bundesliga, Serie A, Ligue 1, LaLiga, Europa League, K League 1, AFC Champions League Elite\n\n"
+            "6. **리그 순위 검색** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
+            "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1\n\n"
             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
         )
     
@@ -955,38 +766,7 @@ def show_chat_dashboard():
                     response = get_cached_response(user_prompt)
                     time_taken = round(time.time() - start_time, 2)
                 
-                # 리그 일정 처리
-                if "league_schedule" in needs_search(user_prompt):
-                    initial_limit = 5
-                    lines = response.split("\n\n")
-                    header = lines[0]  # 제목
-                    events = [line for line in lines[1:] if "📅 날짜" in line]  # 경기 이벤트
-                    footer = lines[-1]  # 꼬리말
-                    
-                    initial_events = events[:initial_limit]
-                    remaining_events = events[initial_limit:]
-                    
-                    initial_response = f"{header}\n\n" + "\n\n".join(initial_events)
-                    if remaining_events:
-                        initial_response += "\n\n더 많은 경기를 보려면 아래 버튼을 클릭하세요:"
-                    initial_response += f"\n\n{footer}"
-                    
-                    st.markdown(initial_response, unsafe_allow_html=True)
-                    
-                    if remaining_events:
-                        league_key = extract_league_from_query(user_prompt)
-                        month = extract_month_from_query(user_prompt)
-                        button_key = f"show_more_{league_key}_{month}"
-                        if button_key not in st.session_state:
-                            st.session_state[button_key] = False
-                        
-                        if st.button("더 보기", key=button_key):
-                            st.session_state[button_key] = True
-                        
-                        if st.session_state[button_key]:
-                            st.markdown("\n\n".join(remaining_events), unsafe_allow_html=True)
-                else:
-                    st.markdown(response, unsafe_allow_html=True)
+                st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
                 asyncio.run(async_save_chat_history(
