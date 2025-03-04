@@ -791,7 +791,7 @@ def show_chat_dashboard():
                 # 응답이 딕셔너리 형태일 경우 (리그 순위)
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(f"### {response['header']}")
-                    st.dataframe(response['table'], use_container_width=True)
+                    st.dataframe(response['table'], use_container_width=True, index=None)
                     st.markdown(response['footer'])
                 else:
                     st.markdown(response, unsafe_allow_html=True)
