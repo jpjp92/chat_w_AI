@@ -756,6 +756,32 @@ def show_chat_dashboard():
     
     init_session_state()
     
+    # CSS 스타일 추가 (컬럼명 중앙정렬)
+    st.markdown("""
+        <style>
+        /* Streamlit DataFrame의 헤더 셀(컬럼명) 중앙정렬 */
+        .stDataFrame thead th {
+            text-align: center !important;
+        }
+        /* 테이블 본문 셀은 기본 정렬 유지 (숫자는 오른쪽 정렬, 텍스트는 왼쪽 정렬) */
+        .stDataFrame tbody td {
+            text-align: left;
+        }
+        .stDataFrame tbody td:nth-child(1),  /* 순위 */
+        .stDataFrame tbody td:nth-child(3),  /* 경기 */
+        .stDataFrame tbody td:nth-child(4),  /* 승 */
+        .stDataFrame tbody td:nth-child(5),  /* 무 */
+        .stDataFrame tbody td:nth-child(6),  /* 패 */
+        .stDataFrame tbody td:nth-child(7),  /* 득점 */
+        .stDataFrame tbody td:nth-child(8),  /* 실점 */
+        .stDataFrame tbody td:nth-child(9),  /* 득실차 */
+        .stDataFrame tbody td:nth-child(10)  /* 포인트 */
+        {
+            text-align: right;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
@@ -773,7 +799,7 @@ def show_chat_dashboard():
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
                 st.markdown(f"### {msg['content']['header']}")
-                st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)  # 인덱스 숨김
+                st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)
                 st.markdown(msg['content']['footer'])
             else:
                 st.markdown(msg['content'], unsafe_allow_html=True)
@@ -791,7 +817,7 @@ def show_chat_dashboard():
                 # 응답이 딕셔너리 형태일 경우 (리그 순위)
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(f"### {response['header']}")
-                    st.dataframe(response['table'], use_container_width=True, hide_index=True)  # 인덱스 숨김
+                    st.dataframe(response['table'], use_container_width=True, hide_index=True)
                     st.markdown(response['footer'])
                 else:
                     st.markdown(response, unsafe_allow_html=True)
@@ -809,6 +835,65 @@ def show_chat_dashboard():
                 error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+
+# def show_chat_dashboard():
+#     st.title("AI 챗봇 🤖")
+    
+#     init_session_state()
+    
+#     if st.button("도움말 ℹ️"):
+#         st.info(
+#             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
+#             "1. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀정)\n"
+#             "2. **논문검색 (ArXiv)** 📚: '논문검색 [키워드]' (예: 논문검색 machine learning)\n"
+#             "3. **의학논문검색 (PubMed)** 🩺: '의학논문 [키워드]' (예: 의학논문 gene therapy)\n"
+#             "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
+#             "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n"
+#             "6. **리그 순위 검색** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
+#             "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1\n\n"
+#             "궁금한 점이 있으면 언제든 질문해주세요! 😊"
+#         )
+    
+#     for msg in st.session_state.chat_history:
+#         with st.chat_message(msg['role']):
+#             if isinstance(msg['content'], dict) and "table" in msg['content']:
+#                 st.markdown(f"### {msg['content']['header']}")
+#                 st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)  # 인덱스 숨김
+#                 st.markdown(msg['content']['footer'])
+#             else:
+#                 st.markdown(msg['content'], unsafe_allow_html=True)
+    
+#     if user_prompt := st.chat_input("질문해 주세요!"):
+#         st.chat_message("user").markdown(user_prompt)
+#         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
+#         with st.chat_message("assistant"):
+#             try:
+#                 with st.spinner("응답을 준비 중이에요.. ⏳"):
+#                     start_time = time.time()
+#                     response = get_cached_response(user_prompt)
+#                     time_taken = round(time.time() - start_time, 2)
+                
+#                 # 응답이 딕셔너리 형태일 경우 (리그 순위)
+#                 if isinstance(response, dict) and "table" in response:
+#                     st.markdown(f"### {response['header']}")
+#                     st.dataframe(response['table'], use_container_width=True, hide_index=True)  # 인덱스 숨김
+#                     st.markdown(response['footer'])
+#                 else:
+#                     st.markdown(response, unsafe_allow_html=True)
+                
+#                 st.session_state.chat_history.append({"role": "assistant", "content": response})
+#                 asyncio.run(async_save_chat_history(
+#                     st.session_state.user_id, 
+#                     st.session_state.session_id, 
+#                     user_prompt, 
+#                     response, 
+#                     time_taken
+#                 ))
+            
+#             except Exception as e:
+#                 error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
+#                 st.markdown(error_msg, unsafe_allow_html=True)
+#                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 # 메인 실행
 def main():
     init_session_state()
