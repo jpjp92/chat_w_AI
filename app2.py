@@ -314,11 +314,27 @@ def create_or_get_user(nickname):
     return new_user.data[0]["id"], False
 
 def save_chat_history(user_id, session_id, question, answer, time_taken):
-    supabase.table("chat_history").insert({
-        "user_id": user_id, "session_id": session_id, "question": question,
-        "answer": answer, "time_taken": time_taken, "created_at": datetime.now().isoformat()
-    }).execute()
+    # answer가 딕셔너리이고 table 키가 DataFrame인 경우 문자열로 변환
+    if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
+        # DataFrame을 문자열로 변환
+        answer_str = {
+            "header": answer["header"],
+            "table": answer["table"].to_string(index=False),  # DataFrame을 문자열로 변환
+            "footer": answer["footer"]
+        }
+        answer_to_save = answer_str
+    else:
+        answer_to_save = answer
 
+    supabase.table("chat_history").insert({
+        "user_id": user_id,
+        "session_id": session_id,
+        "question": question,
+        "answer": answer_to_save,  # 직렬화 가능한 데이터로 저장
+        "time_taken": time_taken,
+        "created_at": datetime.now().isoformat()
+    }).execute()
+    
 async def async_save_chat_history(user_id, session_id, question, answer, time_taken):
     """비동기적으로 채팅 기록 저장"""
     await asyncio.to_thread(save_chat_history, user_id, session_id, question, answer, time_taken)
@@ -799,7 +815,12 @@ def show_chat_dashboard():
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
                 st.markdown(f"### {msg['content']['header']}")
-                st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)
+                # table이 DataFrame인 경우 (화면 표시용)
+                if isinstance(msg['content']['table'], pd.DataFrame):
+                    st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)
+                else:
+                    # table이 문자열인 경우 (DB에서 불러온 경우)
+                    st.text(msg['content']['table'])
                 st.markdown(msg['content']['footer'])
             else:
                 st.markdown(msg['content'], unsafe_allow_html=True)
