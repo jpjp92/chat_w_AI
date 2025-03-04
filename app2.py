@@ -171,8 +171,8 @@ class WeatherAPI:
 
 # FootballAPI 클래스 (http://api.football-data.org 사용)
 class FootballAPI:
-    def __init__(self, api_key, cache_ttl=600):
-        self.api_key = api_key
+    def __init__(self, SPORTS_API_KEY, cache_ttl=600):
+        self.api_key = SPORTS_API_KEY
         self.base_url = "http://api.football-data.org/v4/competitions"
         self.cache = cache_handler
         self.cache_ttl = cache_ttl
