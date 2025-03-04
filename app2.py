@@ -2,7 +2,12 @@
 from config.imports import *
 from config.env import *
 import asyncio
+import pandas as pd
+import logging
+import time
 
+# API 키 확인
+print(f"SPORTS_API_KEY: {SPORTS_API_KEY}")
 
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
@@ -28,7 +33,7 @@ class MemoryCache:
 
 cache_handler = MemoryCache()
 
-# WeatherAPI 클래스
+# WeatherAPI 클래스 (변경 없음)
 class WeatherAPI:
     def __init__(self, cache_ttl=600):
         self.cache = cache_handler
@@ -171,9 +176,9 @@ class WeatherAPI:
 
 # FootballAPI 클래스 (http://api.football-data.org 사용)
 class FootballAPI:
-    def __init__(self, SPORTS_API_KEY, cache_ttl=600):
-        self.api_key = SPORTS_API_KEY
-        self.base_url = "http://api.football-data.org/v4/competitions"
+    def __init__(self, api_key, cache_ttl=600):
+        self.api_key = api_key
+        self.base_url = "https://api.football-data.org/v4/competitions"  # HTTP -> HTTPS로 변경
         self.cache = cache_handler
         self.cache_ttl = cache_ttl
 
@@ -189,6 +194,7 @@ class FootballAPI:
         }
         
         try:
+            time.sleep(1)  # 요청 간 1초 지연 추가
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
@@ -217,14 +223,15 @@ class FootballAPI:
             return result
         
         except requests.exceptions.RequestException as e:
-            logger.error(f"{league_name} standings API 요청 중 오류 발생: {e}")
+            error_detail = e.response.text if e.response else "응답 없음"
+            logger.error(f"{league_name} standings API 요청 중 오류 발생: {e}, 응답 내용: {error_detail}")
             return f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다. 😓\n\n더 궁금한 점 있나요? 😊"
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = Client()
 weather_api = WeatherAPI()
-football_api = FootballAPI(api_key="61db17e8")  # Football-data.org API 키 설정
+football_api = FootballAPI(api_key=SPORTS_API_KEY)  # SPORTS_API_KEY 사용
 naver_request_count = 0
 NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
