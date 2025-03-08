@@ -5,7 +5,6 @@ from config.env import *
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
 logger = logging.getLogger("HybridChat")
-# Streamlit과 httpx의 디버그 로그 비활성화
 logging.getLogger("streamlit").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
@@ -40,9 +39,12 @@ class WeatherAPI:
         retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("https://", adapter)
-        response = session.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = session.get(url, params=params, timeout=3)
+            response.raise_for_status()
+            return response.json()
+        except:
+            return self.cache.get(f"weather:{params.get('q', '')}") or "날씨 정보를 불러올 수 없습니다."
 
     @lru_cache(maxsize=100)
     def get_city_info(self, city_name):
@@ -53,7 +55,7 @@ class WeatherAPI:
         url = "http://api.openweathermap.org/geo/1.0/direct"
         params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
         data = self.fetch_weather(url, params)
-        if data and len(data) > 0:
+        if data and isinstance(data, list) and len(data) > 0:
             city_info = {"name": data[0]["name"], "lat": data[0]["lat"], "lon": data[0]["lon"]}
             self.cache.setex(cache_key, 86400, city_info)
             return city_info
@@ -72,6 +74,8 @@ class WeatherAPI:
         url = "https://api.openweathermap.org/data/2.5/weather"
         params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
         data = self.fetch_weather(url, params)
+        if isinstance(data, str):
+            return data
         weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
         weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
         result = (
@@ -85,7 +89,7 @@ class WeatherAPI:
         )
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
-        
+
     def get_forecast_by_day(self, city_name, days_from_today=1):
         cache_key = f"forecast:{city_name}:{days_from_today}"
         cached_data = self.cache.get(cache_key)
@@ -99,6 +103,8 @@ class WeatherAPI:
         url = "https://api.openweathermap.org/data/2.5/forecast"
         params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
         data = self.fetch_weather(url, params)
+        if isinstance(data, str):
+            return data
         target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
         forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
         weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
@@ -132,6 +138,8 @@ class WeatherAPI:
         url = "https://api.openweathermap.org/data/2.5/forecast"
         params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
         data = self.fetch_weather(url, params)
+        if isinstance(data, str):
+            return data
         today = datetime.now().date()
         week_end = today + timedelta(days=6)
         daily_forecast = {}
@@ -185,18 +193,15 @@ class FootballAPI:
             return cached_data
 
         url = f"{self.base_url}/{league_code}/standings"
-        headers = {
-            'X-Auth-Token': self.api_key
-        }
+        headers = {'X-Auth-Token': self.api_key}
         
         try:
             time.sleep(1)
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             data = response.json()
             
             standings = data['standings'][0]['table']
-            
             df = pd.DataFrame([
                 {
                     '순위': team['position'],
@@ -217,8 +222,6 @@ class FootballAPI:
             return result
         
         except requests.exceptions.RequestException as e:
-            error_detail = e.response.text if e.response else "응답 없음"
-            logger.error(f"{league_name} standings API 요청 중 오류 발생: {e}, 응답 내용: {error_detail}")
             return {"league_name": league_name, "error": f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다. 😓"}
 
     def fetch_league_scorers(self, league_code, league_name):
@@ -228,32 +231,22 @@ class FootballAPI:
             return cached_data
 
         url = f"{self.base_url}/{league_code}/scorers"
-        headers = {
-            'X-Auth-Token': self.api_key
-        }
+        headers = {'X-Auth-Token': self.api_key}
         
         try:
             time.sleep(1)
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             data = response.json()
             
-            scorers = []
-            for scorer in data['scorers'][:10]:  # 상위 10명
-                scorers.append({
-                    '선수': scorer['player']['name'],
-                    '팀': scorer['team']['name'],
-                    '득점': scorer['goals']
-                })
-            
+            scorers = [{"선수": s['player']['name'], '팀': s['team']['name'], '득점': s['goals']} 
+                       for s in data['scorers'][:10]]
             df = pd.DataFrame(scorers)
             result = {"league_name": league_name, "data": df}
             self.cache.setex(cache_key, self.cache_ttl, result)
             return result
         
         except requests.exceptions.RequestException as e:
-            error_detail = e.response.text if e.response else "응답 없음"
-            logger.error(f"{league_name} scorers API 요청 중 오류 발생: {e}, 응답 내용: {error_detail}")
             return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다. 😓"}
 
 # 초기화
@@ -265,7 +258,7 @@ naver_request_count = 0
 NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
-# 세션 상태 초기화 함수
+# 세션 상태 초기화
 def init_session_state():
     if "is_logged_in" not in st.session_state:
         st.session_state.is_logged_in = False
@@ -276,11 +269,10 @@ def init_session_state():
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
 
-# 도시 추출
+# 도시 및 시간 추출
 CITY_PATTERNS = [
     re.compile(r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨', re.IGNORECASE),
     re.compile(r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨', re.IGNORECASE),
-    re.compile(r'날씨\s*(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)', re.IGNORECASE),
 ]
 def extract_city_from_query(query):
     for pattern in CITY_PATTERNS:
@@ -291,26 +283,9 @@ def extract_city_from_query(query):
                 return city
     return "서울"
 
-# 리그 추출 및 매핑
-LEAGUE_MAPPING = {
-    "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
-    "laliga": {"name": "라리가 (스페인)", "code": "PD"},
-    "bundesliga": {"name": "분데스리가 (독일)", "code": "BL1"},
-    "seriea": {"name": "세리에 A (이탈리아)", "code": "SA"},
-    "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"}
-}
-
-def extract_league_from_query(query):
-    query_lower = query.strip().lower()
-    for league_key in LEAGUE_MAPPING.keys():
-        if league_key in query_lower:
-            return league_key
-    return None
-
 TIME_CITY_PATTERNS = [
     re.compile(r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간'),
     re.compile(r'([가-힣a-zA-Z]{2,20}(?:시|군)?)\s*시간'),
-    re.compile(r'시간\s*([가-힣a-zA-Z\s]{2,20}(?:시|군)?)'),
 ]
 def extract_city_from_time_query(query):
     for pattern in TIME_CITY_PATTERNS:
@@ -321,6 +296,21 @@ def extract_city_from_time_query(query):
                 return city
     return "서울"
 
+LEAGUE_MAPPING = {
+    "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
+    "laliga": {"name": "라리가 (스페인)", "code": "PD"},
+    "bundesliga": {"name": "분데스리가 (독일)", "code": "BL1"},
+    "seriea": {"name": "세리에 A (이탈리아)", "code": "SA"},
+    "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"}
+}
+
+def extract_league_from_query(query):
+    query_lower = query.lower()
+    for league_key in LEAGUE_MAPPING.keys():
+        if league_key in query_lower:
+            return league_key
+    return None
+
 # 시간 정보
 def get_time_by_city(city_name="서울"):
     city_info = weather_api.get_city_info(city_name)
@@ -330,7 +320,6 @@ def get_time_by_city(city_name="서울"):
     timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
     timezone = pytz.timezone(timezone_str)
     city_time = datetime.now(timezone)
-    am_pm = "오전" if city_time.strftime("%p") == "AM" else "오후"
     return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일 %p %I:%M')} ⏰\n더 궁금한 점 있나요? 😊"
 
 # 사용자 및 채팅 기록 관리
@@ -342,16 +331,11 @@ def create_or_get_user(nickname):
     return new_user.data[0]["id"], False
 
 def save_chat_history(user_id, session_id, question, answer, time_taken):
-    if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-        answer_str = {
-            "header": answer["header"],
-            "table": answer["table"].to_string(index=False),
-            "footer": answer["footer"]
-        }
-        answer_to_save = answer_str
-    else:
-        answer_to_save = answer
-
+    answer_to_save = answer if not isinstance(answer, dict) else {
+        "header": answer["header"],
+        "table": answer["table"].to_string(index=False),
+        "footer": answer["footer"]
+    }
     supabase.table("chat_history").insert({
         "user_id": user_id,
         "session_id": session_id,
@@ -375,15 +359,14 @@ def get_drug_info(drug_query):
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
     params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'json'}
     try:
-        response = requests.get(url, params=params, timeout=5)
+        response = requests.get(url, params=params, timeout=3)
         response.raise_for_status()
         data = response.json()
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
             item = data['body']['items'][0]
             efcy = item.get('efcyQesitm', '정보 없음')[:150] + ("..." if len(item.get('efcyQesitm', '')) > 150 else "")
-            use_method_raw = item.get('useMethodQesitm', '정보 없음')
+            use_method = item.get('useMethodQesitm', '정보 없음')[:150] + ("..." if len(item.get('useMethodQesitm', '')) > 150 else "")
             atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
-            use_method = use_method_raw[:150] + ("..." if len(use_method_raw) > 150 else "")
             
             result = (
                 f"💊 **의약품 정보** 💊\n\n"
@@ -392,85 +375,39 @@ def get_drug_info(drug_query):
                 f"✅ **효능**: {efcy}\n\n"
                 f"✅ **용법용량**: {use_method}\n\n"
                 f"✅ **주의사항**: {atpn}\n\n"
-                f"ℹ️ 자세한 정보는 [약학정보원](https://www.health.kr/searchDrug/search_detail.asp)에서 확인하세요! 🩺\n\n"
-                f"더 궁금한 점 있으신가요? 😊"
+                f"더 궁금한 점 있나요? 😊"
             )
             cache_handler.setex(cache_key, 86400, result)
             return result
-        else:
-            return search_and_summarize_drug(drug_name)
+        return f"'{drug_name}'의 공식 정보를 찾을 수 없습니다."
     except Exception as e:
         logger.error(f"약품 API 오류: {str(e)}")
-        return search_and_summarize_drug(drug_name)
+        return f"'{drug_name}'의 정보를 가져오는 중 문제가 발생했습니다. 😓"
 
-def search_and_summarize_drug(drug_name):
-    search_results = search_and_summarize(f"{drug_name} 의약품 정보", num_results=5)
-    if not search_results.empty:
-        return f"'{drug_name}' 공식 정보 없음. 웹 검색 요약:\n{get_ai_summary(search_results)}"
-    return f"'{drug_name}' 의약품 정보를 찾을 수 없습니다."
-
-# Naver API 및 웹 검색
+# Naver API 검색
 def get_naver_api_results(query):
     global naver_request_count
     if naver_request_count >= NAVER_DAILY_LIMIT:
-        return search_and_summarize(query, num_results=5)
+        return None
     enc_text = urllib.parse.quote(query)
-    url = f"https://openapi.naver.com/v1/search/webkr?query={enc_text}&display=10&sort=date"
+    url = f"https://openapi.naver.com/v1/search/webkr?query={enc_text}&display=5&sort=date"
     request = urllib.request.Request(url)
     request.add_header("X-Naver-Client-Id", NAVER_CLIENT_ID)
     request.add_header("X-Naver-Client-Secret", NAVER_CLIENT_SECRET)
-    results = []
     try:
-        response = urllib.request.urlopen(request)
+        response = urllib.request.urlopen(request, timeout=3)
         naver_request_count += 1
         if response.getcode() == 200:
             data = json.loads(response.read().decode('utf-8'))
-            for item in data.get('items', [])[:5]:
-                title = re.sub(r'<b>|</b>', '', item['title'])
-                contents = re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100] + "..."
-                results.append({"title": title, "contents": contents, "url": item.get('link', ''), "date": item.get('pubDate', '')})
+            results = [{"title": re.sub(r'<b>|</b>', '', item['title']),
+                       "contents": re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100] + "...",
+                       "url": item.get('link', '')} 
+                       for item in data.get('items', [])]
+            return pd.DataFrame(results)
     except Exception:
-        return search_and_summarize(query, num_results=5)
-    return pd.DataFrame(results)
+        return None
 
-def search_and_summarize(query, num_results=5):
-    data = []
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(requests.get, link, timeout=5) for link in search(query, num_results=num_results)]
-        for future in futures:
-            try:
-                response = future.result()
-                soup = BeautifulSoup(response.text, 'html.parser')
-                title = soup.title.get_text() if soup.title else "No title"
-                description = ' '.join([p.get_text() for p in soup.find_all('p')[:3]])
-                link = response.url if response.url else None
-                if not link:
-                    logger.warning(f"링크 누락 발생: query={query}, title={title}, url=없음")
-                data.append({"title": title, "contents": description[:500], "link": link})
-            except Exception as e:
-                logger.error(f"검색 요청 실패: query={query}, error={str(e)}")
-                continue
-    df = pd.DataFrame(data)
-    if df.empty or 'link' not in df.columns or df['link'].isnull().all():
-        logger.warning(f"검색 결과 비어있음 또는 모든 링크 누락: query={query}, data={data}")
-    return df
-
-def get_ai_summary(search_results):
-    if search_results.empty:
-        return "검색 결과를 찾을 수 없습니다."
-    context = "\n".join([f"출처: {row['title']}\n내용: {row['contents']}" for _, row in search_results.iterrows()])
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": f"검색 결과를 2~3문장으로 요약:\n{context}"}]
-    )
-    summary = response.choices[0].message.content
-    sources = "\n\n📜 **출처**\n" + "\n".join(
-        [f"🌐 [{row['title']}]({row.get('link', '링크 없음')})" 
-         for _, row in search_results.iterrows()]
-    )
-    return f"{summary}{sources}\n\n더 궁금한 점 있나요? 😊"
-
-# 논문 검색 (ArXiv)
+# ArXiv 논문 검색
 def fetch_arxiv_paper(paper):
     return {
         "title": paper.title,
@@ -494,16 +431,9 @@ def get_arxiv_papers(query, max_results=3):
     
     response = "📚 **Arxiv 논문 검색 결과** 📚\n\n"
     response += "\n\n".join(
-        [f"**논문 {i}**\n\n"
-         f"📄 **제목**: {r['title']}\n\n"
-         f"👥 **저자**: {r['authors']}\n\n"
-         f"📝 **초록**: {r['summary']}...\n\n"
-         f"🔗 **논문 페이지**: {r['entry_id']}\n\n"
-         f"📥 **PDF 다운로드**: [{r['pdf_url'].split('/')[-1]}]({r['pdf_url']})\n\n"
-         f"📅 **출판일**: {r['published']}\n\n"
-         f"{'-' * 50}"
+        [f"**논문 {i}**\n\n📄 **제목**: {r['title']}\n\n👥 **저자**: {r['authors']}\n\n📝 **초록**: {r['summary']}...\n\n🔗 **논문 페이지**: {r['entry_id']}\n\n📅 **출판일**: {r['published']}"
          for i, r in enumerate(results, 1)]
-    ) + "\n\n더 많은 논문을 보고 싶다면 말씀해 주세요! 😊"
+    ) + "\n\n더 궁금한 점 있나요? 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
 
@@ -512,39 +442,20 @@ base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
 def search_pubmed(query, max_results=5):
     search_url = f"{base_url}esearch.fcgi"
-    params = {
-        "db": "pubmed",
-        "term": query,
-        "retmode": "json",
-        "retmax": max_results,
-        "api_key": NCBI_KEY
-    }
-    response = requests.get(search_url, params=params)
+    params = {"db": "pubmed", "term": query, "retmode": "json", "retmax": max_results, "api_key": NCBI_KEY}
+    response = requests.get(search_url, params=params, timeout=3)
     return response.json()
 
 def get_pubmed_summaries(id_list):
     summary_url = f"{base_url}esummary.fcgi"
-    ids = ",".join(id_list)
-    params = {
-        "db": "pubmed",
-        "id": ids,
-        "retmode": "json",
-        "api_key": NCBI_KEY
-    }
-    response = requests.get(summary_url, params=params)
+    params = {"db": "pubmed", "id": ",".join(id_list), "retmode": "json", "api_key": NCBI_KEY}
+    response = requests.get(summary_url, params=params, timeout=3)
     return response.json()
 
 def get_pubmed_abstract(id_list):
     fetch_url = f"{base_url}efetch.fcgi"
-    ids = ",".join(id_list)
-    params = {
-        "db": "pubmed",
-        "id": ids,
-        "retmode": "xml",
-        "rettype": "abstract",
-        "api_key": NCBI_KEY
-    }
-    response = requests.get(fetch_url, params=params)
+    params = {"db": "pubmed", "id": ",".join(id_list), "retmode": "xml", "rettype": "abstract", "api_key": NCBI_KEY}
+    response = requests.get(fetch_url, params=params, timeout=3)
     return response.text
 
 def extract_first_two_sentences(abstract_text):
@@ -558,14 +469,12 @@ def parse_abstracts(xml_text):
     try:
         root = ET.fromstring(xml_text)
         for article in root.findall(".//PubmedArticle"):
-            pmid_elem = article.find(".//MedlineCitation/PMID")
+            pmid = article.find(".//MedlineCitation/PMID").text
             abstract_elem = article.find(".//Abstract/AbstractText")
-            pmid = pmid_elem.text if pmid_elem is not None else None
             abstract = abstract_elem.text if abstract_elem is not None else "No abstract available"
-            if pmid:
-                abstract_dict[pmid] = extract_first_two_sentences(abstract)
-    except ET.ParseError as e:
-        logger.error(f"XML 파싱 오류 발생: {e}")
+            abstract_dict[pmid] = extract_first_two_sentences(abstract)
+    except ET.ParseError:
+        return {}
     return abstract_dict
 
 def get_pubmed_papers(query, max_results=5):
@@ -585,115 +494,121 @@ def get_pubmed_papers(query, max_results=5):
     
     response = "📚 **PubMed 의학 논문 검색 결과** 📚\n\n"
     response += "\n\n".join(
-        [f"**논문 {i}**\n\n"
-         f"🆔 **PMID**: {pmid}\n\n"
-         f"📖 **제목**: {summaries['result'][pmid].get('title', 'No title available')}\n\n"
-         f"📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date available')}\n\n"
-         f"✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n"
-         f"🔗 **링크**: {'https://doi.org/' + next((aid['value'] for aid in summaries['result'][pmid].get('articleids', []) if aid['idtype'] == 'doi'), None) if next((aid['value'] for aid in summaries['result'][pmid].get('articleids', []) if aid['idtype'] == 'doi'), None) else f'https://pubmed.ncbi.nlm.nih.gov/{pmid}/'}\n\n"
-         f"📝 **초록**: {abstract_dict.get(pmid, 'No abstract available')}\n\n"
-         f"{'-' * 50}"
+        [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
          for i, pmid in enumerate(pubmed_ids, 1)]
-    ) + "\n\n더 많은 의학 논문을 보고 싶다면 말씀해 주세요! 😊"
+    ) + "\n\n더 궁금한 점 있나요? 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
 
-# 대화형 응답
+# 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
-def get_conversational_response(query, chat_history):
-    cache_key = f"conv:{needs_search(query)}:{query}:{hash(str(chat_history[-5:]))}"
+async def get_conversational_response(query, chat_history):
+    cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
     if cached:
         return cached
     
-    emoji_list = (
-        "체크리스트 이모지:\n"
-        "✅ 완료된 항목 | ☑️ 체크 상자 (체크됨) | ✓ 체크 표시 | ✔️ 굵은 체크 표시 | ❌ 취소/실패 항목 | ⬜ 빈 상자 | ⚪ 빈 원 | 🔘 라디오 버튼 | 📌 핀으로 고정된 항목 | 🚀 시작/출시 항목\n\n"
-        "상태 표시 이모지:\n"
-        "🟢 녹색 원 (성공/활성) | 🔴 빨간 원 (실패/중요) | 🟡 노란 원 (주의/진행 중) | 🔄 업데이트/진행 중 | ⏱️ 대기 중/시간 관련 | 🔍 검토 중/검색\n\n"
-        "개발 관련 이모지:\n"
-        "💻 코드/프로그래밍 | 🔧 도구/설정 | 🐛 버그 | 📦 패키지/모듈 | 📝 문서/노트 | 🗂️ 폴더/분류 | ⚙️ 설정/구성 | 🔒 보안/잠금 | 📊 데이터/통계 | 📈 성장/증가\n\n"
-        "섹션 구분 이모지:\n"
-        "📋 목록/체크리스트 | 📚 책/문서 | 💡 아이디어/팁 | ⚠️ 주의/경고 | 🎯 목표/타겟 | 🔗 링크/연결 | 👥 사용자/팀 | 📅 일정/캘린더\n\n"
-        "기타 유용한 이모지:\n"
-        "🌟 하이라이트/중요 항목 | ✨ 특별/개선 항목 | 📱 모바일 | 🖥️ 데스크톱 | 🏗️ 아키텍처 | 🚧 작업 중 | 💬 의견/코멘트 | 🌐 웹/글로벌 | 📤 배포/업로드 | 📥 다운로드/수신"
-    )
-    
     messages = [
-        {"role": "system", "content": (
-            "당신은 친절하고 상호작용적인 AI 챗봇입니다. 사용자의 질문에 답하고, 필요하면 추가 질문을 던져 대화를 이어가세요. "
-            "응답 내용에 따라 적절한 이모지를 아래 목록에서 선택해 자연스럽게 삽입하세요. 이모지는 문맥에 맞게 사용하고, 과도하게 많지 않도록 하세요:\n\n" + emoji_list
-        )}] + [
-        {"role": msg["role"], "content": msg["content"]} for msg in chat_history[-5:]
-    ] + [{"role": "user", "content": query}]
+        {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"},
+        {"role": "user", "content": query}
+    ] + [{"role": msg["role"], "content": msg["content"]} 
+         for msg in chat_history[-2:] if "더 궁금한 점 있나요?" not in msg["content"]]
     
-    response = client.chat.completions.create(model="gpt-4", messages=messages)
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
+        model="gpt-3.5-turbo", messages=messages))
     result = response.choices[0].message.content
     conversation_cache.setex(cache_key, 600, result)
     return result
 
 GREETING_RESPONSES = {
     "안녕": "안녕하세요! 반갑습니다! 😊",
-    "안녕 반가워": "안녕하세요! 저도 반갑습니다! 오늘 기분이 어떠신가요? 😄",
     "하이": "하이! 무엇을 도와드릴까요? 😊",
     "헬로": "안녕하세요! 반갑습니다! 😊",
-    "헤이": "헤이! 잘 지내세요? 😄",
-    "왓업": "왓업! 뭐하고 계신가요? 😊",
-    "왓썹": "안녕하세요! 오늘 기분이 어떠신가요? 😄",
 }
 
 # 쿼리 분류
+@lru_cache(maxsize=100)
 def needs_search(query):
     query_lower = query.strip().lower()
-    greeting_keywords = ["안녕", "하이", "반가워", "안뇽", "뭐해", "헬로", "헬롱", "하잇", "헤이", "헤이요", "왓업", "왓썹", "에이요"]
-    emotion_keywords = ["배고프다", "배고프", "졸리다", "피곤하다", "화남", "열받음", "짜증남", "피곤함"]
-    if any(greeting in query_lower for greeting in greeting_keywords) or \
-       any(emo in query_lower for emo in emotion_keywords) or \
-       len(query_lower) <= 3 and "?" not in query_lower:
-        return "conversation"
-    intent_keywords = ["추천해줘", "뭐 먹을까", "메뉴", "뭐할까"]
-    if any(kw in query_lower for kw in intent_keywords):
-        return "conversation"
-    time_keywords = ["현재 시간", "시간", "몇 시", "지금", "몇시", "몇 시야", "지금 시간", "현재", "시계"]
-    if any(keyword in query_lower for keyword in time_keywords) and \
-       any(timeword in query_lower for timeword in ["시간", "몇시", "몇 시", "시계"]):
+    if "날씨" in query_lower:
+        return "weather" if "내일" not in query_lower else "tomorrow_weather"
+    if "시간" in query_lower:
         return "time"
-    weather_keywords = ["날씨", "온도", "기온"]
-    if any(keyword in query_lower for keyword in weather_keywords) and "내일" in query_lower:
-        return "tomorrow_weather"
-    elif any(keyword in query_lower for keyword in weather_keywords) and "모레" in query_lower:
-        return "day_after_tomorrow_weather"
-    elif any(keyword in query_lower for keyword in weather_keywords) and ("주간" in query_lower or any(kw in query_lower for kw in ["이번 주", "주간 예보", "주간 날씨"])):
-        return "weekly_forecast"
-    elif any(keyword in query_lower for keyword in weather_keywords):
-        return "weather"
-    drug_keywords = ["약품검색"]
-    drug_pattern = r'^약품검색\s+[가-힣a-zA-Z]{2,10}(?:약|정|시럽|캡슐)?$'
-    if any(keyword in query_lower for keyword in drug_keywords) and re.match(drug_pattern, query_lower):
+    if "리그 순위" in query_lower:
+        return "league_standings"
+    if "리그 득점순위" in query_lower:
+        return "league_scorers"
+    if "약품검색" in query_lower:
         return "drug"
-    if query_lower == "mbti 검사":
-        return "mbti"
-    if query_lower == "다중지능 검사":
-        return "multi_iq"
-    arxiv_keywords = ["논문검색", "arxiv", "paper", "research"]
-    if any(kw in query_lower for kw in arxiv_keywords) and len(query_lower) > 5:
+    if "논문검색" in query_lower or "arxiv" in query_lower:
         return "arxiv_search"
-    pubmed_keywords = ["의학논문"]
-    if any(kw in query_lower for kw in pubmed_keywords) and len(query_lower) > 5:
+    if "의학논문" in query_lower:
         return "pubmed_search"
-    league_keywords = list(LEAGUE_MAPPING.keys())
-    if any(kw in query_lower for kw in ["리그 순위", "순위"]) and not "득점" in query_lower:
-        for league in league_keywords:
-            if league in query_lower:
-                return "league_standings"
-    if any(kw in query_lower for kw in ["리그 득점순위", "득점순위"]):
-        for league in league_keywords:
-            if league in query_lower:
-                return "league_scorers"
-    search_keywords = ["검색", "알려줘", "정보", "뭐야", "무엇이야", "무엇인지", "찾아서", "정리해줘", "설명해줘", "알고싶어", "알려줄래","알아","뭐냐", "알려줘", "찾아줘"]
-    if any(kw in query_lower for kw in search_keywords) and len(query_lower) > 5:
-        return "web_search"
-    return "general_query"
+    if "검색" in query_lower:
+        return "naver_search"
+    if any(greeting in query_lower for greeting in GREETING_RESPONSES.keys()):
+        return "conversation"
+    return "conversation"
+
+# 쿼리 처리
+@st.cache_data(ttl=600)
+def process_query(query):
+    query_type = needs_search(query)
+    with ThreadPoolExecutor() as executor:
+        if query_type == "weather":
+            future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
+            return future.result()
+        elif query_type == "tomorrow_weather":
+            future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
+            return future.result()
+        elif query_type == "time":
+            future = executor.submit(get_time_by_city, extract_city_from_time_query(query))
+            return future.result()
+        elif query_type == "league_standings":
+            league_key = extract_league_from_query(query)
+            if league_key:
+                league_info = LEAGUE_MAPPING[league_key]
+                future = executor.submit(football_api.fetch_league_standings, league_info["code"], league_info["name"])
+                result = future.result()
+                return result["error"] if "error" in result else {
+                    "header": f"{result['league_name']} 리그 순위",
+                    "table": result["data"],
+                    "footer": "더 궁금한 점 있나요? 😊"
+                }
+            return "지원하지 않는 리그입니다. 😓"
+        elif query_type == "league_scorers":
+            league_key = extract_league_from_query(query)
+            if league_key:
+                league_info = LEAGUE_MAPPING[league_key]
+                future = executor.submit(football_api.fetch_league_scorers, league_info["code"], league_info["name"])
+                result = future.result()
+                return result["error"] if "error" in result else {
+                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
+                    "table": result["data"],
+                    "footer": "더 궁금한 점 있나요? 😊"
+                }
+            return "지원하지 않는 리그입니다. 😓"
+        elif query_type == "drug":
+            future = executor.submit(get_drug_info, query)
+            return future.result()
+        elif query_type == "arxiv_search":
+            keywords = query.replace("논문검색", "").replace("arxiv", "").strip()
+            future = executor.submit(get_arxiv_papers, keywords)
+            return future.result()
+        elif query_type == "pubmed_search":
+            keywords = query.replace("의학논문", "").strip()
+            future = executor.submit(get_pubmed_papers, keywords)
+            return future.result()
+        elif query_type == "naver_search":
+            future = executor.submit(get_naver_api_results, query.replace("검색", "").strip())
+            result = future.result()
+            return f"검색 결과:\n{result.to_string(index=False)}\n\n더 궁금한 점 있나요? 😊" if result is not None else "검색 한도 초과 또는 오류 발생. 😓"
+        elif query_type == "conversation":
+            if query.strip() in GREETING_RESPONSES:
+                return GREETING_RESPONSES[query.strip()]
+            return asyncio.run(get_conversational_response(query, st.session_state.chat_history))
+    return "아직 지원하지 않는 기능이에요. 😅"
 
 # UI 함수
 def show_login_page():
@@ -702,140 +617,40 @@ def show_login_page():
         nickname = st.text_input("닉네임", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")
         
-        if submit_button:
-            if nickname:
-                try:
-                    user_id, is_existing = create_or_get_user(nickname)
-                    st.session_state.user_id = user_id
-                    st.session_state.is_logged_in = True
-                    st.session_state.chat_history = []
-                    st.session_state.session_id = str(uuid.uuid4())
-                    
-                    if is_existing:
-                        st.toast(f"환영합니다, {nickname}님! 🎉")
-                    else:
-                        st.toast(f"새로운 사용자로 등록되었습니다. 환영합니다, {nickname}님! 🎉")
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as e:
-                    st.toast(f"로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
-            else:
-                st.toast("닉네임을 입력해주세요.", icon="⚠️")
-
-@st.cache_data(ttl=600)
-def get_cached_response(query):
-    return process_query(query)
-
-def process_query(query):
-    init_session_state()
-    query_type = needs_search(query)
-    if query_type == "mbti":
-        return (
-            "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
-            "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
-            "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡"
-        )
-    elif query_type == "multi_iq":
-        return (
-            "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
-            "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
-            "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
-        )
-    elif query_type == "time":
-        city = extract_city_from_time_query(query)
-        return get_time_by_city(city)
-    elif query_type == "weather":
-        city = extract_city_from_query(query)
-        return weather_api.get_city_weather(city)
-    elif query_type == "tomorrow_weather":
-        city = extract_city_from_query(query)
-        return weather_api.get_forecast_by_day(city, days_from_today=1)
-    elif query_type == "day_after_tomorrow_weather":
-        city = extract_city_from_query(query)
-        return weather_api.get_forecast_by_day(city, days_from_today=2)
-    elif query_type == "weekly_forecast":
-        city = extract_city_from_query(query)
-        return weather_api.get_weekly_forecast(city)
-    elif query_type == "drug":
-        return get_drug_info(query)
-    elif query_type == "league_standings":
-        league_key = extract_league_from_query(query)
-        if league_key:
-            league_info = LEAGUE_MAPPING[league_key]
-            result = football_api.fetch_league_standings(league_info["code"], league_info["name"])
-            if "error" in result:
-                return result["error"] + "\n\n더 궁금한 점 있나요? 😊"
-            else:
-                return {
-                    "header": f"{result['league_name']} 리그 순위",
-                    "table": result["data"],
-                    "footer": "더 궁금한 점 있나요? 😊"
-                }
-        return "지원하지 않는 리그입니다. 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1 😓\n\n더 궁금한 점 있나요? 😊"
-    elif query_type == "league_scorers":
-        league_key = extract_league_from_query(query)
-        if league_key:
-            league_info = LEAGUE_MAPPING[league_key]
-            result = football_api.fetch_league_scorers(league_info["code"], league_info["name"])
-            if "error" in result:
-                return result["error"] + "\n\n더 궁금한 점 있나요? 😊"
-            else:
-                return {
-                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
-                    "table": result["data"],
-                    "footer": "더 궁금한 점 있나요? 😊"
-                }
-        return "지원하지 않는 리그입니다. 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1 😓\n\n더 궁금한 점 있나요? 😊"
-    elif query_type == "conversation":
-        if query.strip() in GREETING_RESPONSES:
-            return GREETING_RESPONSES[query.strip()]
-        return get_conversational_response(query, st.session_state.chat_history)
-    elif query_type == "web_search":
-        language = detect(query)
-        if language == 'ko' and naver_request_count < NAVER_DAILY_LIMIT:
-            return get_ai_summary(get_naver_api_results(query))
-        return get_ai_summary(search_and_summarize(query))
-    elif query_type == "arxiv_search":
-        keywords = query.replace("논문검색", "").replace("arxiv", "").replace("paper", "").replace("research", "").strip()
-        return get_arxiv_papers(keywords)
-    elif query_type == "pubmed_search":
-        keywords = query.replace("의학논문", "").strip()
-        return get_pubmed_papers(keywords)
-    elif query_type == "general_query":
-        return get_conversational_response(query, st.session_state.chat_history)
-    return "아직 지원하지 않는 기능이에요. 😅"
-
-def handle_error(e, context="작업 중", user_friendly_msg="응답을 준비하다 문제가 생겼어요. 😓"):
-    logger.error(f"{context} 오류 발생: {str(e)}", exc_info=True)
-    return user_friendly_msg
+        if submit_button and nickname:
+            try:
+                user_id, is_existing = create_or_get_user(nickname)
+                st.session_state.user_id = user_id
+                st.session_state.is_logged_in = True
+                st.session_state.chat_history = []
+                st.session_state.session_id = str(uuid.uuid4())
+                st.toast(f"환영합니다, {nickname}님! 🎉")
+                time.sleep(1)
+                st.rerun()
+            except Exception:
+                st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     
-    init_session_state()
-    
     if st.button("도움말 ℹ️"):
         st.info(
-            "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n\n"
-            "1. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀정)\n"
-            "2. **논문검색 (ArXiv)** 📚: '논문검색 [키워드]' (예: 논문검색 machine learning)\n"
-            "3. **의학논문검색 (PubMed)** 🩺: '의학논문 [키워드]' (예: 의학논문 gene therapy)\n"
-            "4. **날씨검색** ☀️: '[도시명] 날씨' 또는 '내일 [도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
-            "5. **시간검색** ⏱️: '[도시명] 시간' (예: 파리 시간, 뉴욕 시간)\n"
-            "6. **리그 순위 검색** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
-            "7. **리그 득점순위 검색** ⚽: '[리그 이름] 리그 득점순위' (예: EPL 리그 득점순위)\n"
-            "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1\n\n"
-            "궁금한 점이 있으면 언제든 질문해주세요! 😊"
+            "챗봇 사용법:\n"
+            "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
+            "2. **시간** ⏱️: '[도시명] 시간' (예: 파리 시간)\n"
+            "3. **리그 순위** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
+            "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀)\n"
+            "5. **논문검색** 📚: '논문검색 [키워드]' (예: 논문검색 AI)\n"
+            "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer)\n"
+            "7. **Naver 검색** 🌐: '[키워드] 검색' (예: 파이썬 검색)\n"
+            "궁금한 점 있으면 질문해주세요! 😊"
         )
     
-    for msg in st.session_state.chat_history:
+    for msg in st.session_state.chat_history[-10:]:
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
                 st.markdown(f"### {msg['content']['header']}")
-                if isinstance(msg['content']['table'], pd.DataFrame):
-                    st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)
-                else:
-                    st.text(msg['content']['table'])
+                st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)
                 st.markdown(msg['content']['footer'])
             else:
                 st.markdown(msg['content'], unsafe_allow_html=True)
@@ -845,12 +660,9 @@ def show_chat_dashboard():
         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
         with st.chat_message("assistant"):
             try:
-                with st.spinner("응답을 준비 중이에요.. ⏳"):
-                    start_time = time.time()
-                    with ThreadPoolExecutor() as executor:
-                        future = executor.submit(get_cached_response, user_prompt)
-                        response = future.result()
-                    time_taken = round(time.time() - start_time, 2)
+                start_time = time.time()
+                response = process_query(user_prompt)
+                time_taken = round(time.time() - start_time, 2)
                 
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(f"### {response['header']}")
@@ -863,7 +675,8 @@ def show_chat_dashboard():
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
             
             except Exception as e:
-                error_msg = handle_error(e, "대화 처리 중", "응답을 준비하다 문제가 생겼어요. 😓")
+                error_msg = f"응답을 준비하다 문제가 생겼어요. 😓\n에러: {str(e)}"
+                logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
