@@ -516,7 +516,7 @@ async def get_conversational_response(query, chat_history):
     
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
-        model="gpt-3.5-turbo", messages=messages))
+        model="gpt-4o", messages=messages))
     result = response.choices[0].message.content
     conversation_cache.setex(cache_key, 600, result)
     return result
