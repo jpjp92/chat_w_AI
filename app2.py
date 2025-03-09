@@ -342,7 +342,7 @@ def extract_league_from_query(query):
 def get_kst_time():
     kst_timezone = pytz.timezone("Asia/Seoul")
     kst_time = datetime.now(kst_timezone)
-    return f"대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다 ⏰\n더 궁금한 점 있나요? 😊"
+    return f"대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰\n\n 더 궁금한 점 있나요? 😊"
 
 # 시간 정보
 def get_time_by_city(city_name="서울"):
@@ -353,7 +353,7 @@ def get_time_by_city(city_name="서울"):
     timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
     timezone = pytz.timezone(timezone_str)
     city_time = datetime.now(timezone)
-    return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일 %p %I:%M')} ⏰\n더 궁금한 점 있나요? 😊"
+    return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰\n\n 더 궁금한 점 있나요? 😊"
 
 # 사용자 및 채팅 기록 관리
 def create_or_get_user(nickname):
