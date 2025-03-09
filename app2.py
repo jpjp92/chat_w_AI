@@ -251,7 +251,7 @@ class FootballAPI:
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client()
+client = Client(exclude_providers=["OpenaiChat", "Copilot"])  # 문제 제공자 제외
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -331,11 +331,15 @@ def create_or_get_user(nickname):
     return new_user.data[0]["id"], False
 
 def save_chat_history(user_id, session_id, question, answer, time_taken):
-    answer_to_save = answer if not isinstance(answer, dict) else {
-        "header": answer["header"],
-        "table": answer["table"].to_string(index=False),
-        "footer": answer["footer"]
-    }
+    if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
+        answer_to_save = {
+            "header": answer["header"],
+            "table": answer["table"].to_dict(orient="records"),  # DataFrame을 직렬화 가능하게 변환
+            "footer": answer["footer"]
+        }
+    else:
+        answer_to_save = answer
+    
     supabase.table("chat_history").insert({
         "user_id": user_id,
         "session_id": session_id,
@@ -384,11 +388,16 @@ def get_drug_info(drug_query):
         logger.error(f"약품 API 오류: {str(e)}")
         return f"'{drug_name}'의 정보를 가져오는 중 문제가 발생했습니다. 😓"
 
-# Naver API 검색
+# Naver API 검색 (웹 검색)
 def get_naver_api_results(query):
     global naver_request_count
+    cache_key = f"naver:{query}"
+    cached = cache_handler.get(cache_key)
+    if cached:
+        return cached
+    
     if naver_request_count >= NAVER_DAILY_LIMIT:
-        return None
+        return "검색 한도 초과로 결과를 가져올 수 없습니다. 😓"
     enc_text = urllib.parse.quote(query)
     url = f"https://openapi.naver.com/v1/search/webkr?query={enc_text}&display=5&sort=date"
     request = urllib.request.Request(url)
@@ -399,13 +408,20 @@ def get_naver_api_results(query):
         naver_request_count += 1
         if response.getcode() == 200:
             data = json.loads(response.read().decode('utf-8'))
-            results = [{"title": re.sub(r'<b>|</b>', '', item['title']),
-                       "contents": re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100] + "...",
-                       "url": item.get('link', '')} 
-                       for item in data.get('items', [])]
-            return pd.DataFrame(results)
-    except Exception:
-        return None
+            results = data.get('items', [])
+            if not results:
+                return "검색 결과가 없습니다. 😓"
+            
+            response_text = "🌐 **웹 검색 결과** 🌐\n\n"
+            response_text += "\n\n".join(
+                [f"**결과 {i}**\n\n📄 **제목**: {re.sub(r'<b>|</b>', '', item['title'])}\n\n📝 **내용**: {re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100]}...\n\n🔗 **링크**: {item.get('link', '')}"
+                 for i, item in enumerate(results, 1)]
+            ) + "\n\n더 궁금한 점 있나요? 😊"
+            cache_handler.setex(cache_key, 3600, response_text)
+            return response_text
+    except Exception as e:
+        logger.error(f"Naver API 오류: {str(e)}")
+        return "검색 중 오류가 발생했습니다. 😓"
 
 # ArXiv 논문 검색
 def fetch_arxiv_paper(paper):
@@ -515,17 +531,18 @@ async def get_conversational_response(query, chat_history):
          for msg in chat_history[-2:] if "더 궁금한 점 있나요?" not in msg["content"]]
     
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
-        model="gpt-4o", messages=messages))
-    result = response.choices[0].message.content
+    try:
+        response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
+            model="gpt-4o", messages=messages))
+        result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
+    except IndexError:
+        result = "응답을 생성하는 중 문제가 발생했습니다. 😓"
     conversation_cache.setex(cache_key, 600, result)
     return result
 
-GREETING_RESPONSES = {
-    "안녕": "안녕하세요! 반갑습니다! 😊",
-    "하이": "하이! 무엇을 도와드릴까요? 😊",
-    "헬로": "안녕하세요! 반갑습니다! 😊",
-}
+# GREETING_RESPONSES 개선
+GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
+GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
 
 # 쿼리 분류
 @lru_cache(maxsize=100)
@@ -541,13 +558,13 @@ def needs_search(query):
         return "league_scorers"
     if "약품검색" in query_lower:
         return "drug"
-    if "논문검색" in query_lower or "arxiv" in query_lower:
+    if "공학논문" in query_lower or "arxiv" in query_lower:
         return "arxiv_search"
     if "의학논문" in query_lower:
         return "pubmed_search"
-    if "검색" in query_lower:
+    if "웹검색" in query_lower:
         return "naver_search"
-    if any(greeting in query_lower for greeting in GREETING_RESPONSES.keys()):
+    if any(greeting in query_lower for greeting in GREETINGS):  # GREETINGS 리스트 사용
         return "conversation"
     return "conversation"
 
@@ -593,7 +610,7 @@ def process_query(query):
             future = executor.submit(get_drug_info, query)
             return future.result()
         elif query_type == "arxiv_search":
-            keywords = query.replace("논문검색", "").replace("arxiv", "").strip()
+            keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
             future = executor.submit(get_arxiv_papers, keywords)
             return future.result()
         elif query_type == "pubmed_search":
@@ -601,14 +618,74 @@ def process_query(query):
             future = executor.submit(get_pubmed_papers, keywords)
             return future.result()
         elif query_type == "naver_search":
-            future = executor.submit(get_naver_api_results, query.replace("검색", "").strip())
-            result = future.result()
-            return f"검색 결과:\n{result.to_string(index=False)}\n\n더 궁금한 점 있나요? 😊" if result is not None else "검색 한도 초과 또는 오류 발생. 😓"
+            future = executor.submit(get_naver_api_results, query.replace("웹검색", "").strip())
+            return future.result()
         elif query_type == "conversation":
-            if query.strip() in GREETING_RESPONSES:
-                return GREETING_RESPONSES[query.strip()]
+            query_stripped = query.strip().lower()
+            if query_stripped in GREETINGS:  # GREETINGS 리스트로 체크
+                return GREETING_RESPONSE  # 단일 응답 반환
             return asyncio.run(get_conversational_response(query, st.session_state.chat_history))
     return "아직 지원하지 않는 기능이에요. 😅"
+
+
+
+# GREETING_RESPONSES = {
+#     "안녕": "안녕하세요! 반갑습니다! 😊",
+#     "하이": "하이! 무엇을 도와드릴까요? 😊",
+#     "헬로": "안녕하세요! 반갑습니다! 😊",
+#     "ㅎㅇ": "안녕하세요! 반갑습니다! 😊",
+#     "왓업": "안녕하세요! 반갑습니다! 😊"
+# }
+
+# # 쿼리 분류
+# @lru_cache(maxsize=100)
+# def needs_search(query):
+#     query_lower = query.strip().lower()
+#     if "날씨" in query_lower:
+#         return "weather" if "내일" not in query_lower else "tomorrow_weather"
+#     if "시간" in query_lower:
+#         return "time"
+#     if "리그 순위" in query_lower:
+#         return "league_standings"
+#     if "리그 득점순위" in query_lower:
+#         return "league_scorers"
+#     if "약품검색" in query_lower:
+#         return "drug"
+#     if "공학논문" in query_lower or "arxiv" in query_lower:
+#         return "arxiv_search"
+#     if "의학논문" in query_lower:
+#         return "pubmed_search"
+#     if "웹검색" in query_lower:
+#         return "naver_search"
+#     if any(greeting in query_lower for greeting in GREETING_RESPONSES.keys()):
+#         return "conversation"
+#     return "conversation"
+
+# # 쿼리 처리
+# @st.cache_data(ttl=600)
+# def process_query(query):
+#     query_type = needs_search(query)
+#     with ThreadPoolExecutor() as executor:
+#         if query_type == "weather":
+#             future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
+#             return future.result()
+#         elif query_type == "tomorrow_weather":
+#             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
+#             return future.result()
+#         elif query_type == "time":
+#             future = executor.submit(get_time_by_city, extract_city_from_time_query(query))
+#             return future.result()
+#         elif query_type == "league_standings":
+#             league_key = extract_league_from_query(query)
+#             if league_key:
+#                 league_info = LEAGUE_MAPPING[league_key]
+#                 future = executor.submit(football_웹검색", "").strip())
+#             return future.result()
+#         elif query_type == "conversation":
+#             if query.strip() in GREETING_RESPONSES:
+#                 return GREETING_RESPONSES[query.strip()]
+#             return asyncio.run(get_conversational_response(query, st.session_state.chat_history))
+#     return "아직 지원하지 않는 기능이에요. 😅"
 
 # UI 함수
 def show_login_page():
@@ -638,11 +715,11 @@ def show_chat_dashboard():
             "챗봇 사용법:\n"
             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
             "2. **시간** ⏱️: '[도시명] 시간' (예: 파리 시간)\n"
-            "3. **리그 순위** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
-            "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀)\n"
-            "5. **논문검색** 📚: '논문검색 [키워드]' (예: 논문검색 AI)\n"
-            "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer)\n"
-            "7. **Naver 검색** 🌐: '[키워드] 검색' (예: 파이썬 검색)\n"
+            "3. **리그순위** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
+            "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보)\n"
+            "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
+            "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
+            "7. **웹검색** 🌐: '[키워드] 검색' (예: 3월검색)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
         )
     
@@ -650,7 +727,7 @@ def show_chat_dashboard():
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
                 st.markdown(f"### {msg['content']['header']}")
-                st.dataframe(msg['content']['table'], use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(msg['content']['table']), use_container_width=True, hide_index=True)
                 st.markdown(msg['content']['footer'])
             else:
                 st.markdown(msg['content'], unsafe_allow_html=True)
