@@ -179,76 +179,6 @@ class WeatherAPI:
         return result
 
 # FootballAPI 클래스
-# class FootballAPI:
-#     def __init__(self, api_key, cache_ttl=600):
-#         self.api_key = api_key
-#         self.base_url = "https://api.football-data.org/v4/competitions"
-#         self.cache = cache_handler
-#         self.cache_ttl = cache_ttl
-
-#     def fetch_league_standings(self, league_code, league_name):
-#         cache_key = f"league_standings:{league_code}"
-#         cached_data = self.cache.get(cache_key)
-#         if cached_data is not None:
-#             return cached_data
-
-#         url = f"{self.base_url}/{league_code}/standings"
-#         headers = {'X-Auth-Token': self.api_key}
-        
-#         try:
-#             time.sleep(1)
-#             response = requests.get(url, headers=headers, timeout=3)
-#             response.raise_for_status()
-#             data = response.json()
-            
-#             standings = data['standings'][0]['table']
-#             df = pd.DataFrame([
-#                 {
-#                     '순위': team['position'],
-#                     '팀': team['team']['name'],
-#                     '경기': team['playedGames'],
-#                     '승': team['won'],
-#                     '무': team['draw'],
-#                     '패': team['lost'],
-#                     '득점': team['goalsFor'],
-#                     '실점': team['goalsAgainst'],
-#                     '득실차': team['goalsFor'] - team['goalsAgainst'],
-#                     '포인트': team['points']
-#                 } for team in standings
-#             ])
-            
-#             result = {"league_name": league_name, "data": df}
-#             self.cache.setex(cache_key, self.cache_ttl, result)
-#             return result
-        
-#         except requests.exceptions.RequestException as e:
-#             return {"league_name": league_name, "error": f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다. 😓"}
-
-#     def fetch_league_scorers(self, league_code, league_name):
-#         cache_key = f"league_scorers:{league_code}"
-#         cached_data = self.cache.get(cache_key)
-#         if cached_data is not None:
-#             return cached_data
-
-#         url = f"{self.base_url}/{league_code}/scorers"
-#         headers = {'X-Auth-Token': self.api_key}
-        
-#         try:
-#             time.sleep(1)
-#             response = requests.get(url, headers=headers, timeout=3)
-#             response.raise_for_status()
-#             data = response.json()
-            
-#             scorers = [{"순위": i+1, "선수": s['player']['name'], "팀": s['team']['name'], "득점": s['goals']} 
-#                        for i, s in enumerate(data['scorers'][:10])]  # 순위 추가
-#             df = pd.DataFrame(scorers)
-#             result = {"league_name": league_name, "data": df}
-#             self.cache.setex(cache_key, self.cache_ttl, result)
-#             return result
-        
-#         except requests.exceptions.RequestException as e:
-#             return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
-
 class FootballAPI:
     def __init__(self, api_key, cache_ttl=600):
         self.api_key = api_key
@@ -386,14 +316,6 @@ def extract_city_from_time_query(query):
                 return city
     return "서울"
 
-# LEAGUE_MAPPING = {
-#     "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
-#     "laliga": {"name": "라리가 (스페인)", "code": "PD"},
-#     "bundesliga": {"name": "분데스리가 (독일)", "code": "BL1"},
-#     "seriea": {"name": "세리에 A (이탈리아)", "code": "SA"},
-#     "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"}
-# }
-
 LEAGUE_MAPPING = {
     "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
     "laliga": {"name": "라리가 (스페인)", "code": "PD"},
@@ -404,13 +326,6 @@ LEAGUE_MAPPING = {
 }
 
 # 리그 추출 함수 수정 (띄어쓰기 유연성 개선)
-# def extract_league_from_query(query):
-#     query_lower = query.lower().replace(" ", "")  # 공백 제거
-#     for league_key in LEAGUE_MAPPING.keys():
-#         if league_key in query_lower:
-#             return league_key
-#     return None
-
 def extract_league_from_query(query):
     query_lower = query.lower().replace(" ", "")  # 공백 제거
     league_keywords = {
@@ -425,8 +340,6 @@ def extract_league_from_query(query):
         if any(keyword in query_lower for keyword in keywords):
             return league_key
     return None
-
-
 
 # KST 시간 반환 함수 추가
 def get_kst_time():
