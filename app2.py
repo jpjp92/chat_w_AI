@@ -629,64 +629,6 @@ def process_query(query):
 
 
 
-# GREETING_RESPONSES = {
-#     "안녕": "안녕하세요! 반갑습니다! 😊",
-#     "하이": "하이! 무엇을 도와드릴까요? 😊",
-#     "헬로": "안녕하세요! 반갑습니다! 😊",
-#     "ㅎㅇ": "안녕하세요! 반갑습니다! 😊",
-#     "왓업": "안녕하세요! 반갑습니다! 😊"
-# }
-
-# # 쿼리 분류
-# @lru_cache(maxsize=100)
-# def needs_search(query):
-#     query_lower = query.strip().lower()
-#     if "날씨" in query_lower:
-#         return "weather" if "내일" not in query_lower else "tomorrow_weather"
-#     if "시간" in query_lower:
-#         return "time"
-#     if "리그 순위" in query_lower:
-#         return "league_standings"
-#     if "리그 득점순위" in query_lower:
-#         return "league_scorers"
-#     if "약품검색" in query_lower:
-#         return "drug"
-#     if "공학논문" in query_lower or "arxiv" in query_lower:
-#         return "arxiv_search"
-#     if "의학논문" in query_lower:
-#         return "pubmed_search"
-#     if "웹검색" in query_lower:
-#         return "naver_search"
-#     if any(greeting in query_lower for greeting in GREETING_RESPONSES.keys()):
-#         return "conversation"
-#     return "conversation"
-
-# # 쿼리 처리
-# @st.cache_data(ttl=600)
-# def process_query(query):
-#     query_type = needs_search(query)
-#     with ThreadPoolExecutor() as executor:
-#         if query_type == "weather":
-#             future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
-#             return future.result()
-#         elif query_type == "tomorrow_weather":
-#             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
-#             return future.result()
-#         elif query_type == "time":
-#             future = executor.submit(get_time_by_city, extract_city_from_time_query(query))
-#             return future.result()
-#         elif query_type == "league_standings":
-#             league_key = extract_league_from_query(query)
-#             if league_key:
-#                 league_info = LEAGUE_MAPPING[league_key]
-#                 future = executor.submit(football_웹검색", "").strip())
-#             return future.result()
-#         elif query_type == "conversation":
-#             if query.strip() in GREETING_RESPONSES:
-#                 return GREETING_RESPONSES[query.strip()]
-#             return asyncio.run(get_conversational_response(query, st.session_state.chat_history))
-#     return "아직 지원하지 않는 기능이에요. 😅"
-
 # UI 함수
 def show_login_page():
     st.title("로그인 🤗")
@@ -716,10 +658,10 @@ def show_chat_dashboard():
             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
             "2. **시간** ⏱️: '[도시명] 시간' (예: 파리 시간)\n"
             "3. **리그순위** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
-            "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보)\n"
+            "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **웹검색** 🌐: '[키워드] 검색' (예: 3월검색)\n\n"
+            "7. **웹검색** 🌐: '[키워드] 검색' (예: 3월 공연 검색)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
         )
     
