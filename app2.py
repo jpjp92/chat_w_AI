@@ -239,15 +239,40 @@ class FootballAPI:
             response.raise_for_status()
             data = response.json()
             
-            scorers = [{"선수": s['player']['name'], '팀': s['team']['name'], '득점': s['goals']} 
-                       for s in data['scorers'][:10]]
+            scorers = [{"순위": i+1, "선수": s['player']['name'], "팀": s['team']['name'], "득점": s['goals']} 
+                       for i, s in enumerate(data['scorer'][:10])]  # 순위 추가
             df = pd.DataFrame(scorers)
             result = {"league_name": league_name, "data": df}
             self.cache.setex(cache_key, self.cache_ttl, result)
             return result
         
         except requests.exceptions.RequestException as e:
-            return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다. 😓"}
+            return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
+            
+    # def fetch_league_scorers(self, league_code, league_name):
+    #     cache_key = f"league_scorers:{league_code}"
+    #     cached_data = self.cache.get(cache_key)
+    #     if cached_data is not None:
+    #         return cached_data
+
+    #     url = f"{self.base_url}/{league_code}/scorers"
+    #     headers = {'X-Auth-Token': self.api_key}
+        
+    #     try:
+    #         time.sleep(1)
+    #         response = requests.get(url, headers=headers, timeout=3)
+    #         response.raise_for_status()
+    #         data = response.json()
+            
+    #         scorers = [{"선수": s['player']['name'], '팀': s['team']['name'], '득점': s['goals']} 
+    #                    for s in data['scorers'][:10]]
+    #         df = pd.DataFrame(scorers)
+    #         result = {"league_name": league_name, "data": df}
+    #         self.cache.setex(cache_key, self.cache_ttl, result)
+    #         return result
+        
+    #     except requests.exceptions.RequestException as e:
+    #         return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다. 😓"}
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -304,8 +329,9 @@ LEAGUE_MAPPING = {
     "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"}
 }
 
+# 리그 추출 함수 수정 (띄어쓰기 유연성 개선)
 def extract_league_from_query(query):
-    query_lower = query.lower()
+    query_lower = query.lower().replace(" ", "")  # 공백 제거
     for league_key in LEAGUE_MAPPING.keys():
         if league_key in query_lower:
             return league_key
@@ -555,14 +581,14 @@ GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까
 # 쿼리 분류
 @lru_cache(maxsize=100)
 def needs_search(query):
-    query_lower = query.strip().lower()
+    query_lower = query.strip().lower().replace(" ", "")  # 공백 제거로 유연성 확보
     if "날씨" in query_lower:
         return "weather" if "내일" not in query_lower else "tomorrow_weather"
     if "시간" in query_lower or "날짜" in query_lower:
         return "time"
-    if "리그 순위" in query_lower:
+    if "리그순위" in query_lower:
         return "league_standings"
-    if "리그 득점순위" in query_lower:
+    if "리그득점순위" in query_lower or "득점순위" in query_lower:  # 띄어쓰기 없이도 인식
         return "league_scorers"
     if "약품검색" in query_lower:
         return "drug"
@@ -576,7 +602,7 @@ def needs_search(query):
         return "conversation"
     return "conversation"
 
-# 쿼리 처리
+# 쿼리 처리 (오류 처리 강화)
 def process_query(query):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
@@ -593,8 +619,7 @@ def process_query(query):
             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
             result = future.result()
         elif query_type == "time":
-            # "오늘 날짜", "현재 날짜", "금일 날짜"는 KST로 처리
-            if "오늘 날짜" in query_lower or "현재 날짜" in query_lower or "금일 날짜" in query_lower:
+            if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
                 result = get_kst_time()
             else:
                 city = extract_city_from_time_query(query)
@@ -612,20 +637,23 @@ def process_query(query):
                     "footer": "더 궁금한 점 있나요? 😊"
                 }
             else:
-                result = "지원하지 않는 리그입니다. 😓"
+                result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
         elif query_type == "league_scorers":
             league_key = extract_league_from_query(query)
             if league_key:
                 league_info = LEAGUE_MAPPING[league_key]
                 future = executor.submit(football_api.fetch_league_scorers, league_info["code"], league_info["name"])
-                result = future.result()
-                result = result["error"] if "error" in result else {
-                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
-                    "table": result["data"],
-                    "footer": "더 궁금한 점 있나요? 😊"
-                }
+                try:
+                    result = future.result()
+                    result = result["error"] if "error" in result else {
+                        "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
+                        "table": result["data"],
+                        "footer": "더 궁금한 점 있나요? 😊"
+                    }
+                except Exception as e:
+                    result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
             else:
-                result = "지원하지 않는 리그입니다. 😓"
+                result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
         elif query_type == "drug":
             future = executor.submit(get_drug_info, query)
             result = future.result()
@@ -644,8 +672,8 @@ def process_query(query):
         elif query_type == "conversation":
             if query_lower in GREETINGS:
                 result = GREETING_RESPONSE
-            elif "오늘 날짜" in query_lower or "현재 날짜" in query_lower or "금일 날짜" in query_lower:
-                result = get_kst_time()  # 대화형 질문에서도 KST 처리
+            elif "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
+                result = get_kst_time()
             else:
                 result = asyncio.run(get_conversational_response(query, st.session_state.chat_history))
         else:
@@ -654,7 +682,7 @@ def process_query(query):
         cache_handler.setex(cache_key, 600, result)
         return result
 
-# UI 함수 (변경 없음, 대기 메시지 개선 유지)
+# UI 함수 (도움말 업데이트)
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     
@@ -662,8 +690,8 @@ def show_chat_dashboard():
         st.info(
             "챗봇 사용법:\n"
             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
-            "2. **시간** ⏱️: '[도시명] 시간' (예: 파리 시간)\n"
-            "3. **리그순위** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
+            "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 부산 시간, 금일 날짜)\n"
+            "3. **리그순위** ⚽: '[리그 이름] 리그 순위' 또는 '[리그 이름] 리그 득점순위' (예: EPL 리그 순위, EPL 리그득점순위)\n"
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
@@ -704,13 +732,10 @@ def show_chat_dashboard():
             
             except Exception as e:
                 placeholder.empty()
-                error_msg = "응답을 준비하다 문제가 생겼어요. 😓"
+                error_msg = f"응답을 준비하다 문제가 생겼어요: {str(e)} 😓"
                 logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
-
-
-
 
 def show_login_page():
     st.title("로그인 🤗")
