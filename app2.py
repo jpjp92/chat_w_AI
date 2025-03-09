@@ -342,7 +342,7 @@ def extract_league_from_query(query):
 def get_kst_time():
     kst_timezone = pytz.timezone("Asia/Seoul")
     kst_time = datetime.now(kst_timezone)
-    return f"현재 대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')} ⏰\n더 궁금한 점 있나요? 😊"
+    return f"대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다 ⏰\n더 궁금한 점 있나요? 😊"
 
 # 시간 정보
 def get_time_by_city(city_name="서울"):
