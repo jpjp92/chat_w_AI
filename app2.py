@@ -611,6 +611,8 @@ def process_query(query):
     
     query_type = needs_search(query)
     query_lower = query.strip().lower()
+    query_no_space = query_lower.replace(" ", "")  # 띄어쓰기 제거 추가
+    
     with ThreadPoolExecutor() as executor:
         if query_type == "weather":
             future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
@@ -619,7 +621,8 @@ def process_query(query):
             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
             result = future.result()
         elif query_type == "time":
-            if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
+            # 띄어쓰기 제거된 쿼리로 키워드 검색
+            if "오늘날짜" in query_no_space or "현재날짜" in query_no_space or "금일날짜" in query_no_space:
                 result = get_kst_time()
             else:
                 city = extract_city_from_time_query(query)
@@ -672,7 +675,8 @@ def process_query(query):
         elif query_type == "conversation":
             if query_lower in GREETINGS:
                 result = GREETING_RESPONSE
-            elif "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
+            # 띄어쓰기 제거된 쿼리로 키워드 검색
+            elif "오늘날짜" in query_no_space or "현재날짜" in query_no_space or "금일날짜" in query_no_space:
                 result = get_kst_time()
             else:
                 result = asyncio.run(get_conversational_response(query, st.session_state.chat_history))
@@ -681,6 +685,84 @@ def process_query(query):
         
         cache_handler.setex(cache_key, 600, result)
         return result
+# def process_query(query):
+#     cache_key = f"query:{hash(query)}"
+#     cached = cache_handler.get(cache_key)
+#     if cached is not None:
+#         return cached
+    
+#     query_type = needs_search(query)
+#     query_lower = query.strip().lower()
+#     with ThreadPoolExecutor() as executor:
+#         if query_type == "weather":
+#             future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
+#             result = future.result()
+#         elif query_type == "tomorrow_weather":
+#             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
+#             result = future.result()
+#         elif query_type == "time":
+#             if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
+#                 result = get_kst_time()
+#             else:
+#                 city = extract_city_from_time_query(query)
+#                 future = executor.submit(get_time_by_city, city)
+#                 result = future.result()
+#         elif query_type == "league_standings":
+#             league_key = extract_league_from_query(query)
+#             if league_key:
+#                 league_info = LEAGUE_MAPPING[league_key]
+#                 future = executor.submit(football_api.fetch_league_standings, league_info["code"], league_info["name"])
+#                 result = future.result()
+#                 result = result["error"] if "error" in result else {
+#                     "header": f"{result['league_name']} 리그 순위",
+#                     "table": result["data"],
+#                     "footer": "더 궁금한 점 있나요? 😊"
+#                 }
+#             else:
+#                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
+#         elif query_type == "league_scorers":
+#             league_key = extract_league_from_query(query)
+#             if league_key:
+#                 league_info = LEAGUE_MAPPING[league_key]
+#                 future = executor.submit(football_api.fetch_league_scorers, league_info["code"], league_info["name"])
+#                 try:
+#                     result = future.result()
+#                     result = result["error"] if "error" in result else {
+#                         "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
+#                         "table": result["data"],
+#                         "footer": "더 궁금한 점 있나요? 😊"
+#                     }
+#                 except Exception as e:
+#                     result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
+#             else:
+#                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
+#         elif query_type == "drug":
+#             future = executor.submit(get_drug_info, query)
+#             result = future.result()
+#         elif query_type == "arxiv_search":
+#             keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
+#             future = executor.submit(get_arxiv_papers, keywords)
+#             result = future.result()
+#         elif query_type == "pubmed_search":
+#             keywords = query.replace("의학논문", "").strip()
+#             future = executor.submit(get_pubmed_papers, keywords)
+#             result = future.result()
+#         elif query_type == "naver_search":
+#             search_query = query_lower.replace("검색", "").strip()
+#             future = executor.submit(get_naver_api_results, search_query)
+#             result = future.result()
+#         elif query_type == "conversation":
+#             if query_lower in GREETINGS:
+#                 result = GREETING_RESPONSE
+#             elif "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
+#                 result = get_kst_time()
+#             else:
+#                 result = asyncio.run(get_conversational_response(query, st.session_state.chat_history))
+#         else:
+#             result = "아직 지원하지 않는 기능이에요. 😅"
+        
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
 
 # UI 함수 (도움말 업데이트)
 def show_chat_dashboard():
