@@ -251,7 +251,7 @@ class FootballAPI:
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client(exclude_providers=["OpenaiChat", "Copilot"])  # 문제 제공자 제외
+client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])  # 문제 제공자 제외
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -334,7 +334,7 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
     if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
         answer_to_save = {
             "header": answer["header"],
-            "table": answer["table"].to_dict(orient="records"),  # DataFrame을 직렬화 가능하게 변환
+            "table": answer["table"].to_dict(orient="records"),  # DataFrame 직렬화
             "footer": answer["footer"]
         }
     else:
@@ -535,8 +535,9 @@ async def get_conversational_response(query, chat_history):
         response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
             model="gpt-4o", messages=messages))
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
-    except IndexError:
-        result = "응답을 생성하는 중 문제가 발생했습니다. 😓"
+    except (IndexError, Exception) as e:  # IndexError 및 기타 예외 처리
+        logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
+        result = "응답을 생성하는 중 문제가 발생했습니다."
     conversation_cache.setex(cache_key, 600, result)
     return result
 
@@ -564,7 +565,7 @@ def needs_search(query):
         return "pubmed_search"
     if "웹검색" in query_lower:
         return "naver_search"
-    if any(greeting in query_lower for greeting in GREETINGS):  # GREETINGS 리스트 사용
+    if any(greeting in query_lower for greeting in GREETINGS):
         return "conversation"
     return "conversation"
 
@@ -622,12 +623,10 @@ def process_query(query):
             return future.result()
         elif query_type == "conversation":
             query_stripped = query.strip().lower()
-            if query_stripped in GREETINGS:  # GREETINGS 리스트로 체크
-                return GREETING_RESPONSE  # 단일 응답 반환
+            if query_stripped in GREETINGS:
+                return GREETING_RESPONSE
             return asyncio.run(get_conversational_response(query, st.session_state.chat_history))
     return "아직 지원하지 않는 기능이에요. 😅"
-
-
 
 # UI 함수
 def show_login_page():
@@ -661,7 +660,7 @@ def show_chat_dashboard():
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **웹검색** 🌐: '[키워드] 검색' (예: 3월 공연 검색)\n\n"
+            "7. **웹검색** 🌐: '[키워드] 웹검색' (예: 전시회 추천 웹검색)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
         )
     
@@ -678,26 +677,27 @@ def show_chat_dashboard():
         st.chat_message("user").markdown(user_prompt)
         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
         with st.chat_message("assistant"):
-            try:
-                start_time = time.time()
-                response = process_query(user_prompt)
-                time_taken = round(time.time() - start_time, 2)
+            with st.spinner("응답을 준비 중이에요.. ⏳"):  # 대기 메시지 추가
+                try:
+                    start_time = time.time()
+                    response = process_query(user_prompt)
+                    time_taken = round(time.time() - start_time, 2)
+                    
+                    if isinstance(response, dict) and "table" in response:
+                        st.markdown(f"### {response['header']}")
+                        st.dataframe(response['table'], use_container_width=True, hide_index=True)
+                        st.markdown(response['footer'])
+                    else:
+                        st.markdown(response, unsafe_allow_html=True)
+                    
+                    st.session_state.chat_history.append({"role": "assistant", "content": response})
+                    async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
                 
-                if isinstance(response, dict) and "table" in response:
-                    st.markdown(f"### {response['header']}")
-                    st.dataframe(response['table'], use_container_width=True, hide_index=True)
-                    st.markdown(response['footer'])
-                else:
-                    st.markdown(response, unsafe_allow_html=True)
-                
-                st.session_state.chat_history.append({"role": "assistant", "content": response})
-                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
-            
-            except Exception as e:
-                error_msg = f"응답을 준비하다 문제가 생겼어요. 😓\n에러: {str(e)}"
-                logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
-                st.markdown(error_msg, unsafe_allow_html=True)
-                st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+                except Exception as e:
+                    error_msg = "응답을 준비하다 문제가 생겼어요. 😓"  # 한 줄로 간소화
+                    logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
+                    st.markdown(error_msg, unsafe_allow_html=True)
+                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
 # 메인 실행
 def main():
