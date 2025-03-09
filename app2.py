@@ -240,7 +240,7 @@ class FootballAPI:
             data = response.json()
             
             scorers = [{"순위": i+1, "선수": s['player']['name'], "팀": s['team']['name'], "득점": s['goals']} 
-                       for i, s in enumerate(data['scores'][:10])]  # 순위 추가
+                       for i, s in enumerate(data['scorers'][:10])]  # 순위 추가
             df = pd.DataFrame(scorers)
             result = {"league_name": league_name, "data": df}
             self.cache.setex(cache_key, self.cache_ttl, result)
