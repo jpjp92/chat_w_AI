@@ -311,6 +311,13 @@ def extract_league_from_query(query):
             return league_key
     return None
 
+
+# KST 시간 반환 함수 추가
+def get_kst_time():
+    kst_timezone = pytz.timezone("Asia/Seoul")
+    kst_time = datetime.now(kst_timezone)
+    return f"현재 대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')} ⏰\n더 궁금한 점 있나요? 😊"
+
 # 시간 정보
 def get_time_by_city(city_name="서울"):
     city_info = weather_api.get_city_info(city_name)
@@ -551,7 +558,7 @@ def needs_search(query):
     query_lower = query.strip().lower()
     if "날씨" in query_lower:
         return "weather" if "내일" not in query_lower else "tomorrow_weather"
-    if "시간" in query_lower or "날짜" in query_lower:  # "날짜" 추가
+    if "시간" in query_lower or "날짜" in query_lower:
         return "time"
     if "리그 순위" in query_lower:
         return "league_standings"
@@ -569,7 +576,7 @@ def needs_search(query):
         return "conversation"
     return "conversation"
 
-# 쿼리 처리 (수동 캐싱 유지)
+# 쿼리 처리
 def process_query(query):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
@@ -577,6 +584,7 @@ def process_query(query):
         return cached
     
     query_type = needs_search(query)
+    query_lower = query.strip().lower()
     with ThreadPoolExecutor() as executor:
         if query_type == "weather":
             future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
@@ -585,9 +593,13 @@ def process_query(query):
             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
             result = future.result()
         elif query_type == "time":
-            city = extract_city_from_time_query(query)
-            future = executor.submit(get_time_by_city, city if city != "서울" else "서울")  # 기본값 서울
-            result = future.result()
+            # "오늘 날짜", "현재 날짜", "금일 날짜"는 KST로 처리
+            if "오늘 날짜" in query_lower or "현재 날짜" in query_lower or "금일 날짜" in query_lower:
+                result = get_kst_time()
+            else:
+                city = extract_city_from_time_query(query)
+                future = executor.submit(get_time_by_city, city)
+                result = future.result()
         elif query_type == "league_standings":
             league_key = extract_league_from_query(query)
             if league_key:
@@ -626,15 +638,14 @@ def process_query(query):
             future = executor.submit(get_pubmed_papers, keywords)
             result = future.result()
         elif query_type == "naver_search":
-            search_query = query.lower().replace("검색", "").strip()
+            search_query = query_lower.replace("검색", "").strip()
             future = executor.submit(get_naver_api_results, search_query)
             result = future.result()
         elif query_type == "conversation":
-            query_stripped = query.strip().lower()
-            if query_stripped in GREETINGS:
+            if query_lower in GREETINGS:
                 result = GREETING_RESPONSE
-            elif "오늘 날짜" in query_stripped or "현재 날짜" in query_stripped:  # 날짜 질문 처리
-                result = get_time_by_city("서울")  # 기본값 서울
+            elif "오늘 날짜" in query_lower or "현재 날짜" in query_lower or "금일 날짜" in query_lower:
+                result = get_kst_time()  # 대화형 질문에서도 KST 처리
             else:
                 result = asyncio.run(get_conversational_response(query, st.session_state.chat_history))
         else:
@@ -698,146 +709,7 @@ def show_chat_dashboard():
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
-# 쿼리 분류
-# @lru_cache(maxsize=100)
-# def needs_search(query):
-#     query_lower = query.strip().lower()
-#     if "날씨" in query_lower:
-#         return "weather" if "내일" not in query_lower else "tomorrow_weather"
-#     if "시간" in query_lower:
-#         return "time"
-#     if "리그 순위" in query_lower:
-#         return "league_standings"
-#     if "리그 득점순위" in query_lower:
-#         return "league_scorers"
-#     if "약품검색" in query_lower:
-#         return "drug"
-#     if "공학논문" in query_lower or "arxiv" in query_lower:
-#         return "arxiv_search"
-#     if "의학논문" in query_lower:
-#         return "pubmed_search"
-#     if "검색" in query_lower:  # "검색" 키워드 체크
-#         return "naver_search"
-#     if any(greeting in query_lower for greeting in GREETINGS):
-#         return "conversation"
-#     return "conversation"
 
-# # 쿼리 처리
-# @st.cache_data(ttl=600)
-# def process_query(query):
-#     query_type = needs_search(query)
-#     with ThreadPoolExecutor() as executor:
-#         if query_type == "weather":
-#             future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
-#             return future.result()
-#         elif query_type == "tomorrow_weather":
-#             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
-#             return future.result()
-#         elif query_type == "time":
-#             future = executor.submit(get_time_by_city, extract_city_from_time_query(query))
-#             return future.result()
-#         elif query_type == "league_standings":
-#             league_key = extract_league_from_query(query)
-#             if league_key:
-#                 league_info = LEAGUE_MAPPING[league_key]
-#                 future = executor.submit(football_api.fetch_league_standings, league_info["code"], league_info["name"])
-#                 result = future.result()
-#                 return result["error"] if "error" in result else {
-#                     "header": f"{result['league_name']} 리그 순위",
-#                     "table": result["data"],
-#                     "footer": "더 궁금한 점 있나요? 😊"
-#                 }
-#             return "지원하지 않는 리그입니다. 😓"
-#         elif query_type == "league_scorers":
-#             league_key = extract_league_from_query(query)
-#             if league_key:
-#                 league_info = LEAGUE_MAPPING[league_key]
-#                 future = executor.submit(football_api.fetch_league_scorers, league_info["code"], league_info["name"])
-#                 result = future.result()
-#                 return result["error"] if "error" in result else {
-#                     "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
-#                     "table": result["data"],
-#                     "footer": "더 궁금한 점 있나요? 😊"
-#                 }
-#             return "지원하지 않는 리그입니다. 😓"
-#         elif query_type == "drug":
-#             future = executor.submit(get_drug_info, query)
-#             return future.result()
-#         elif query_type == "arxiv_search":
-#             keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
-#             future = executor.submit(get_arxiv_papers, keywords)
-#             return future.result()
-#         elif query_type == "pubmed_search":
-#             keywords = query.replace("의학논문", "").strip()
-#             future = executor.submit(get_pubmed_papers, keywords)
-#             return future.result()
-#         elif query_type == "naver_search":
-#             # "검색" 이후의 키워드만 추출 (대괄호 없이)
-#             search_query = query.lower().replace("검색", "").strip()
-#             future = executor.submit(get_naver_api_results, search_query)
-#             return future.result()
-#         elif query_type == "conversation":
-#             query_stripped = query.strip().lower()
-#             if query_stripped in GREETINGS:
-#                 return GREETING_RESPONSE
-#             return asyncio.run(get_conversational_response(query, st.session_state.chat_history))
-#     return "아직 지원하지 않는 기능이에요. 😅"
-
-# # UI 함수
-# def show_chat_dashboard():
-#     st.title("AI 챗봇 🤖")
-    
-#     if st.button("도움말 ℹ️"):
-#         st.info(
-#             "챗봇 사용법:\n"
-#             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
-#             "2. **시간** ⏱️: '[도시명] 시간' (예: 파리 시간)\n"
-#             "3. **리그순위** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
-#             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
-#             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
-#             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-#             "7. **검색** 🌐: '검색 [키워드]' (예: 검색 최근 전시회 추천)\n\n"  # 수정된 부분
-#             "궁금한 점 있으면 질문해주세요! 😊"
-#         )
-    
-#     for msg in st.session_state.chat_history[-10:]:
-#         with st.chat_message(msg['role']):
-#             if isinstance(msg['content'], dict) and "table" in msg['content']:
-#                 st.markdown(f"### {msg['content']['header']}")
-#                 st.dataframe(pd.DataFrame(msg['content']['table']), use_container_width=True, hide_index=True)
-#                 st.markdown(msg['content']['footer'])
-#             else:
-#                 st.markdown(msg['content'], unsafe_allow_html=True)
-    
-#     if user_prompt := st.chat_input("질문해 주세요!"):
-#         st.chat_message("user").markdown(user_prompt)
-#         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
-#         with st.chat_message("assistant"):
-#             with st.spinner(""):  # 빈 spinner로 기본 메시지 억제
-#                 placeholder = st.empty()
-#                 placeholder.markdown("응답을 준비 중이에요.. ⏳")
-#                 try:
-#                     start_time = time.time()
-#                     response = process_query(user_prompt)
-#                     time_taken = round(time.time() - start_time, 2)
-                    
-#                     placeholder.empty()  # 대기 메시지 제거
-#                     if isinstance(response, dict) and "table" in response:
-#                         st.markdown(f"### {response['header']}")
-#                         st.dataframe(response['table'], use_container_width=True, hide_index=True)
-#                         st.markdown(response['footer'])
-#                     else:
-#                         st.markdown(response, unsafe_allow_html=True)
-                    
-#                     st.session_state.chat_history.append({"role": "assistant", "content": response})
-#                     async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
-                
-#                 except Exception as e:
-#                     placeholder.empty()  # 대기 메시지 제거
-#                     error_msg = "응답을 준비하다 문제가 생겼어요. 😓"
-#                     logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
-#                     st.markdown(error_msg, unsafe_allow_html=True)
-#                     st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
 
 def show_login_page():
