@@ -746,7 +746,7 @@ def show_chat_dashboard():
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **검색** 🌐: '검색 키워드' (예: 검색 최근 전시회 추천)\n\n"  # 수정된 부분
+            "7. **검색** 🌐: '검색 [키워드]' (예: 검색 최근 전시회 추천)\n\n"  # 수정된 부분
             "궁금한 점 있으면 질문해주세요! 😊"
         )
     
@@ -790,58 +790,79 @@ def show_chat_dashboard():
                     st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
 
+def show_login_page():
+    st.title("로그인 🤗")
+    with st.form("login_form"):
+        nickname = st.text_input("닉네임", placeholder="예: 후안")
+        submit_button = st.form_submit_button("시작하기 🚀")
+        
+        if submit_button and nickname:
+            try:
+                user_id, is_existing = create_or_get_user(nickname)
+                st.session_state.user_id = user_id
+                st.session_state.is_logged_in = True
+                st.session_state.chat_history = []
+                st.session_state.session_id = str(uuid.uuid4())
+                st.toast(f"환영합니다, {nickname}님! 🎉")
+                time.sleep(1)
+                st.rerun()
+            except Exception:
+                st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
 
-def show_chat_dashboard():
-    st.title("AI 챗봇 🤖")
+
+
+
+# def show_chat_dashboard():
+#     st.title("AI 챗봇 🤖")
     
-    if st.button("도움말 ℹ️"):
-        st.info(
-            "챗봇 사용법:\n"
-            "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
-            "2. **시간** ⏱️: '[도시명] 시간' (예: 파리 시간)\n"
-            "3. **리그순위** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
-            "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
-            "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
-            "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **웹검색** 🌐: '[키워드] 웹검색' (예: 최근 전시회 추천 웹검색)\n\n"
-            "궁금한 점 있으면 질문해주세요! 😊"
-        )
+#     if st.button("도움말 ℹ️"):
+#         st.info(
+#             "챗봇 사용법:\n"
+#             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
+#             "2. **시간** ⏱️: '[도시명] 시간' (예: 파리 시간)\n"
+#             "3. **리그순위** ⚽: '[리그 이름] 리그 순위' (예: EPL 리그 순위)\n"
+#             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
+#             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
+#             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
+#             "7. **웹검색** 🌐: '[키워드] 웹검색' (예: 최근 전시회 추천 웹검색)\n\n"
+#             "궁금한 점 있으면 질문해주세요! 😊"
+#         )
     
-    for msg in st.session_state.chat_history[-10:]:
-        with st.chat_message(msg['role']):
-            if isinstance(msg['content'], dict) and "table" in msg['content']:
-                st.markdown(f"### {msg['content']['header']}")
-                st.dataframe(pd.DataFrame(msg['content']['table']), use_container_width=True, hide_index=True)
-                st.markdown(msg['content']['footer'])
-            else:
-                st.markdown(msg['content'], unsafe_allow_html=True)
+#     for msg in st.session_state.chat_history[-10:]:
+#         with st.chat_message(msg['role']):
+#             if isinstance(msg['content'], dict) and "table" in msg['content']:
+#                 st.markdown(f"### {msg['content']['header']}")
+#                 st.dataframe(pd.DataFrame(msg['content']['table']), use_container_width=True, hide_index=True)
+#                 st.markdown(msg['content']['footer'])
+#             else:
+#                 st.markdown(msg['content'], unsafe_allow_html=True)
     
-    if user_prompt := st.chat_input("질문해 주세요!"):
-        st.chat_message("user").markdown(user_prompt)
-        st.session_state.chat_history.append({"role": "user", "content": user_prompt})
-        with st.chat_message("assistant"):
-            with st.spinner("응답을 준비 중이에요.. ⏳"):  # 대기 메시지 추가
-                try:
-                    start_time = time.time()
-                    response = process_query(user_prompt)
-                    time_taken = round(time.time() - start_time, 2)
+#     if user_prompt := st.chat_input("질문해 주세요!"):
+#         st.chat_message("user").markdown(user_prompt)
+#         st.session_state.chat_history.append({"role": "user", "content": user_prompt})
+#         with st.chat_message("assistant"):
+#             with st.spinner("응답을 준비 중이에요.. ⏳"):  # 대기 메시지 추가
+#                 try:
+#                     start_time = time.time()
+#                     response = process_query(user_prompt)
+#                     time_taken = round(time.time() - start_time, 2)
                     
-                    if isinstance(response, dict) and "table" in response:
-                        st.markdown(f"### {response['header']}")
-                        st.dataframe(response['table'], use_container_width=True, hide_index=True)
-                        st.markdown(response['footer'])
-                    else:
-                        st.markdown(response, unsafe_allow_html=True)
+#                     if isinstance(response, dict) and "table" in response:
+#                         st.markdown(f"### {response['header']}")
+#                         st.dataframe(response['table'], use_container_width=True, hide_index=True)
+#                         st.markdown(response['footer'])
+#                     else:
+#                         st.markdown(response, unsafe_allow_html=True)
                     
-                    st.session_state.chat_history.append({"role": "assistant", "content": response})
-                    async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
+#                     st.session_state.chat_history.append({"role": "assistant", "content": response})
+#                     async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
                 
-                except Exception as e:
-                    error_msg = "응답을 준비하다 문제가 생겼어요. 😓"  # 한 줄로 간소화
-                    logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
-                    st.markdown(error_msg, unsafe_allow_html=True)
-                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+#                 except Exception as e:
+#                     error_msg = "응답을 준비하다 문제가 생겼어요. 😓"  # 한 줄로 간소화
+#                     logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
+#                     st.markdown(error_msg, unsafe_allow_html=True)
+#                     st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
 # 메인 실행
 def main():
