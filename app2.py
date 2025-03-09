@@ -271,8 +271,8 @@ class FootballAPI:
             response.raise_for_status()
             data = response.json()
             
-            standings = data['standings'][0]['table'] if league_code not in ["CL", "EL"] else data['standings']
-            if league_code in ["CL", "EL"]:  # 챔피언스 리그와 유로파 리그는 그룹 스테이지 처리
+            standings = data['standings'][0]['table'] if league_code not in ["CL"] else data['standings']
+            if league_code in ["CL"]:  # 챔피언스 리그는 그룹 스테이지 처리
                 standings_data = []
                 for group in standings:
                     for team in group['table']:
@@ -400,8 +400,7 @@ LEAGUE_MAPPING = {
     "bundesliga": {"name": "분데스리가 (독일)", "code": "BL1"},
     "seriea": {"name": "세리에 A (이탈리아)", "code": "SA"},
     "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"},
-    "championsleague": {"name": "챔피언스 리그", "code": "CL"},
-    "europaleague": {"name": "유로파 리그", "code": "EL"}
+    "championsleague": {"name": "챔피언스 리그", "code": "CL"}
 }
 
 # 리그 추출 함수 수정 (띄어쓰기 유연성 개선)
@@ -420,8 +419,7 @@ def extract_league_from_query(query):
         "bundesliga": ["bundesliga", "분데스리가"],
         "seriea": ["seriea", "세리에a"],
         "ligue1": ["ligue1", "리그1"],
-        "championsleague": ["championsleague", "챔피언스리그", "ucl"],
-        "europaleague": ["europaleague", "유로파리그", "uel"]
+        "championsleague": ["championsleague", "챔피언스리그", "ucl"]
     }
     for league_key, keywords in league_keywords.items():
         if any(keyword in query_lower for keyword in keywords):
@@ -633,7 +631,7 @@ def get_pubmed_papers(query, max_results=5):
     abstracts_xml = get_pubmed_abstract(pubmed_ids)
     abstract_dict = parse_abstracts(abstracts_xml)
     
-    response = "📚 **PubMed 의학 논문 검색 결과** 📚\n\n"
+    response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
     response += "\n\n".join(
         [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
          for i, pmid in enumerate(pubmed_ids, 1)]
@@ -788,7 +786,7 @@ def show_chat_dashboard():
             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
             "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 부산 시간, 금일 날짜)\n"
             "3. **리그순위** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위'(예: EPL 리그순위, EPL 리그득점순위)\n"
-            "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague, EuropaLeague\n"
+            "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
