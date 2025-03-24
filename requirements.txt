@@ -12,3 +12,4 @@ langdetect
 arxiv
 diskcache
 curl_cffi>=0.5.0
+konlpy
