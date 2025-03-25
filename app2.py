@@ -325,9 +325,8 @@ LEAGUE_MAPPING = {
     "championsleague": {"name": "챔피언스 리그", "code": "CL"}
 }
 
-# 리그 추출 함수 수정 (띄어쓰기 유연성 개선)
 def extract_league_from_query(query):
-    query_lower = query.lower().replace(" ", "")  # 공백 제거
+    query_lower = query.lower().replace(" ", "")
     league_keywords = {
         "epl": ["epl", "프리미어리그"],
         "laliga": ["laliga", "라리가"],
@@ -341,13 +340,11 @@ def extract_league_from_query(query):
             return league_key
     return None
 
-# KST 시간 반환 함수 추가
 def get_kst_time():
     kst_timezone = pytz.timezone("Asia/Seoul")
     kst_time = datetime.now(kst_timezone)
     return f"대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰\n\n 더 궁금한 점 있나요? 😊"
 
-# 시간 정보
 def get_time_by_city(city_name="서울"):
     city_info = weather_api.get_city_info(city_name)
     if not city_info:
@@ -370,7 +367,7 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
     if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
         answer_to_save = {
             "header": answer["header"],
-            "table": answer["table"].to_dict(orient="records"),  # DataFrame 직렬화
+            "table": answer["table"].to_dict(orient="records"),
             "footer": answer["footer"]
         }
     else:
@@ -571,27 +568,25 @@ async def get_conversational_response(query, chat_history):
         response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
             model="gpt-4o", messages=messages))
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
-    except (IndexError, Exception) as e:  # IndexError 및 기타 예외 처리
+    except (IndexError, Exception) as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
         result = "응답을 생성하는 중 문제가 발생했습니다."
     conversation_cache.setex(cache_key, 600, result)
     return result
 
-# GREETING_RESPONSES 개선
 GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
 GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
 
-# 쿼리 분류
 @lru_cache(maxsize=100)
 def needs_search(query):
-    query_lower = query.strip().lower().replace(" ", "")  # 공백 제거로 유연성 확보
+    query_lower = query.strip().lower().replace(" ", "")
     if "날씨" in query_lower:
         return "weather" if "내일" not in query_lower else "tomorrow_weather"
     if "시간" in query_lower or "날짜" in query_lower:
         return "time"
     if "리그순위" in query_lower:
         return "league_standings"
-    if "리그득점순위" in query_lower or "득점순위" in query_lower:  # 띄어쓰기 없이도 인식
+    if "리그득점순위" in query_lower or "득점순위" in query_lower:
         return "league_scorers"
     if "약품검색" in query_lower:
         return "drug"
@@ -601,11 +596,14 @@ def needs_search(query):
         return "pubmed_search"
     if "검색" in query_lower:
         return "naver_search"
+    if "mbti" in query_lower:
+        return "mbti"
+    if "다중지능" in query_lower or "multi_iq" in query_lower:
+        return "multi_iq"
     if any(greeting in query_lower for greeting in GREETINGS):
         return "conversation"
     return "conversation"
 
-# 쿼리 처리 (오류 처리 강화)
 def process_query(query):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
@@ -614,7 +612,7 @@ def process_query(query):
     
     query_type = needs_search(query)
     query_lower = query.strip().lower()
-    query_no_space = query_lower.replace(" ", "")  # 띄어쓰기 제거 추가
+    query_no_space = query_lower.replace(" ", "")
     
     with ThreadPoolExecutor() as executor:
         if query_type == "weather":
@@ -624,7 +622,6 @@ def process_query(query):
             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
             result = future.result()
         elif query_type == "time":
-            # 띄어쓰기 제거된 쿼리로 키워드 검색
             if "오늘날짜" in query_no_space or "현재날짜" in query_no_space or "금일날짜" in query_no_space:
                 result = get_kst_time()
             else:
@@ -675,10 +672,21 @@ def process_query(query):
             search_query = query_lower.replace("검색", "").strip()
             future = executor.submit(get_naver_api_results, search_query)
             result = future.result()
+        elif query_type == "mbti":
+            result = (
+                "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
+                "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
+                "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 🧠💡"
+            )
+        elif query_type == "multi_iq":
+            result = (
+                "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
+                "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
+                "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
+            )
         elif query_type == "conversation":
             if query_lower in GREETINGS:
                 result = GREETING_RESPONSE
-            # 띄어쓰기 제거된 쿼리로 키워드 검색
             elif "오늘날짜" in query_no_space or "현재날짜" in query_no_space or "금일날짜" in query_no_space:
                 result = get_kst_time()
             else:
@@ -689,7 +697,6 @@ def process_query(query):
         cache_handler.setex(cache_key, 600, result)
         return result
 
-# UI 함수 (도움말 업데이트)
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     
@@ -703,7 +710,9 @@ def show_chat_dashboard():
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **검색** 🌐: '검색 키워드' (예: 검색 최근 전시회 추천)\n\n"
+            "7. **검색** 🌐: '검색 키워드' (예: 검색 최근 전시회 추천)\n"
+            "8. **MBTI 검사** ✨: 'MBTI' (예: MBTI 검사)\n"
+            "9. **다중지능 검사** 🎉: '다중지능' 또는 'multi_iq' (예: 다중지능 검사)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
         )
     
@@ -764,7 +773,6 @@ def show_login_page():
             except Exception:
                 st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
-# 메인 실행
 def main():
     init_session_state()
     if not st.session_state.is_logged_in:
