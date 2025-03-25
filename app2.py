@@ -448,7 +448,7 @@ def get_naver_api_results(query):
             if not results:
                 return "검색 결과가 없습니다. 😓"
             
-            response_text = "🌐 **웹 검색 결과** 🌐\n\n"
+            response_text = "🌐 **웹 검색 결과** \n\n"
             response_text += "\n\n".join(
                 [f"**결과 {i}**\n\n📄 **제목**: {re.sub(r'<b>|</b>', '', item['title'])}\n\n📝 **내용**: {re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100]}...\n\n🔗 **링크**: {item.get('link', '')}"
                  for i, item in enumerate(results, 1)]
