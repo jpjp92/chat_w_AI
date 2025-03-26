@@ -3,20 +3,83 @@ from datetime import datetime
 import uuid
 import threading
 import logging
+from supabase import create_client, Client
+from config.env import SUPABASE_URL, SUPABASE_KEY  # 환경 변수에서 Supabase 정보 가져오기
+import pandas as pd
+import time
 
+# Supabase 클라이언트 초기화
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 세션 상태 초기화
 def init_session_state():
     if "is_logged_in" not in st.session_state:
         st.session_state.is_logged_in = False
     if "user_id" not in st.session_state:
         st.session_state.user_id = None
     if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+        if st.session_state.user_id:
+            # Supabase에서 사용자별 채팅 기록 가져오기
+            response = supabase.table("chat_history").select("*").eq("user_id", st.session_state.user_id).order("created_at", desc=True).limit(10).execute()
+            st.session_state.chat_history = []
+            for r in response.data:
+                if r["question"]:
+                    st.session_state.chat_history.append({"role": "user", "content": r["question"]})
+                if r["answer"]:
+                    # DataFrame이 포함된 경우 처리
+                    if isinstance(r["answer"], dict) and "table" in r["answer"]:
+                        r["answer"]["table"] = pd.DataFrame(r["answer"]["table"])
+                    st.session_state.chat_history.append({"role": "assistant", "content": r["answer"]})
+        else:
+            st.session_state.chat_history = []
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
 
+# 사용자 생성 또는 조회
+def create_or_get_user(nickname):
+    try:
+        response = supabase.table("users").upsert(
+            {"nickname": nickname, "created_at": datetime.now().isoformat()},
+            on_conflict="nickname"
+        ).execute()
+        return response.data[0]["id"], len(response.data) > 1
+    except Exception as e:
+        logger.error(f"Error creating/getting user: {str(e)}")
+        raise
+
+# 채팅 기록 저장
+def save_chat_history(user_id, session_id, question, answer, time_taken):
+    try:
+        if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
+            answer_to_save = {
+                "header": answer["header"],
+                "table": answer["table"].to_dict(orient="records"),
+                "footer": answer["footer"]
+            }
+        else:
+            answer_to_save = answer
+        
+        supabase.table("chat_history").insert({
+            "user_id": user_id,
+            "session_id": session_id,
+            "question": question,
+            "answer": answer_to_save,
+            "time_taken": time_taken,
+            "created_at": datetime.now().isoformat()
+        }).execute()
+        logger.info(f"Chat saved: {question} -> {answer}")
+    except Exception as e:
+        logger.error(f"Failed to save chat history: {str(e)}")
+
+# 비동기 저장
+def async_save_chat_history(user_id, session_id, question, answer, time_taken):
+    threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
+
+# 검색 필요 여부 판단
 def needs_search(query):
     query_lower = query.strip().lower().replace(" ", "")
     if "mbti" in query_lower:
@@ -25,6 +88,7 @@ def needs_search(query):
         return "multi_iq"
     return "conversation"
 
+# 쿼리 처리
 @st.cache_data
 def process_query(query):
     query_type = needs_search(query)
@@ -45,12 +109,7 @@ def process_query(query):
     else:
         return "현재는 MBTI와 다중지능 검색만 지원합니다. 'MBTI' 또는 '다중지능'을 입력해보세요! 😊"
 
-def save_chat_history(user_id, session_id, question, answer, time_taken):
-    logger.info(f"Saving chat: {question} -> {answer}")
-
-def async_save_chat_history(user_id, session_id, question, answer, time_taken):
-    threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
-
+# 대시보드 표시
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     
@@ -64,7 +123,12 @@ def show_chat_dashboard():
     
     for msg in st.session_state.chat_history[-10:]:
         with st.chat_message(msg['role']):
-            st.markdown(msg['content'], unsafe_allow_html=True)
+            if isinstance(msg['content'], dict) and "table" in msg['content']:
+                st.markdown(msg['content']['header'], unsafe_allow_html=True)
+                st.dataframe(msg['content']['table'])
+                st.markdown(msg['content']['footer'], unsafe_allow_html=True)
+            else:
+                st.markdown(msg['content'], unsafe_allow_html=True)
     
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.chat_message("user").markdown(user_prompt)
@@ -78,7 +142,12 @@ def show_chat_dashboard():
                 time_taken = round(time.time() - start_time, 2)
                 
                 placeholder.empty()
-                st.markdown(response, unsafe_allow_html=True)
+                if isinstance(response, dict) and "table" in response:
+                    st.markdown(response['header'], unsafe_allow_html=True)
+                    st.dataframe(response['table'])
+                    st.markdown(response['footer'], unsafe_allow_html=True)
+                else:
+                    st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
@@ -90,6 +159,7 @@ def show_chat_dashboard():
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
+# 로그인 페이지
 def show_login_page():
     st.title("로그인 🤗")
     with st.form("login_form"):
@@ -98,16 +168,18 @@ def show_login_page():
         
         if submit_button and nickname:
             try:
-                st.session_state.user_id = nickname
+                user_id, existed = create_or_get_user(nickname)
+                st.session_state.user_id = user_id
                 st.session_state.is_logged_in = True
                 st.session_state.chat_history = []
                 st.session_state.session_id = str(uuid.uuid4())
                 st.toast(f"환영합니다, {nickname}님! 🎉")
                 time.sleep(1)
-                st.rerun()
+                st.experimental_rerun()  # 최신 Streamlit 버전 호환성
             except Exception:
                 st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
+# 메인 함수
 def main():
     init_session_state()
     if not st.session_state.is_logged_in:
