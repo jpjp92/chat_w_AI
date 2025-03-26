@@ -182,13 +182,11 @@ def show_login_page():
                 st.session_state.is_logged_in = True
                 st.session_state.chat_history = []
                 st.session_state.session_id = str(uuid.uuid4())
-                st.write(f"Logged in with user_id: {user_id}, existed: {existed}")  # 디버깅용
                 st.toast(f"환영합니다, {nickname}님! 🎉")
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
                 st.toast(f"로그인 중 오류: {str(e)}", icon="❌")
-                st.write(f"Error details: {str(e)}")  # 디버깅용
 
 # 메인 함수
 def main():
