@@ -30,10 +30,15 @@ def init_session_state():
                 if r["question"]:
                     st.session_state.chat_history.append({"role": "user", "content": r["question"]})
                 if r["answer"]:
-                    # DataFrame이 포함된 경우 처리
-                    if isinstance(r["answer"], dict) and "table" in r["answer"]:
-                        r["answer"]["table"] = pd.DataFrame(r["answer"]["table"])
-                    st.session_state.chat_history.append({"role": "assistant", "content": r["answer"]})
+                    # answer가 JSON 문자열일 경우 파싱 시도
+                    try:
+                        import json
+                        answer_content = json.loads(r["answer"]) if isinstance(r["answer"], str) and r["answer"].startswith("{") else r["answer"]
+                        if isinstance(answer_content, dict) and "table" in answer_content:
+                            answer_content["table"] = pd.DataFrame(answer_content["table"])
+                        st.session_state.chat_history.append({"role": "assistant", "content": answer_content})
+                    except:
+                        st.session_state.chat_history.append({"role": "assistant", "content": r["answer"]})
         else:
             st.session_state.chat_history = []
     if "session_id" not in st.session_state:
@@ -42,10 +47,14 @@ def init_session_state():
 # 사용자 생성 또는 조회
 def create_or_get_user(nickname):
     try:
+        # id는 자동 증가로 설정되어 있으므로 명시적으로 제공하지 않음
         response = supabase.table("users").upsert(
             {"nickname": nickname, "created_at": datetime.now().isoformat()},
             on_conflict="nickname"
         ).execute()
+        if not response.data or "id" not in response.data[0]:
+            raise ValueError("Invalid response from Supabase: missing 'id'")
+        logger.info(f"User created/fetched: {response.data[0]}")
         return response.data[0]["id"], len(response.data) > 1
     except Exception as e:
         logger.error(f"Error creating/getting user: {str(e)}")
@@ -173,11 +182,13 @@ def show_login_page():
                 st.session_state.is_logged_in = True
                 st.session_state.chat_history = []
                 st.session_state.session_id = str(uuid.uuid4())
+                st.write(f"Logged in with user_id: {user_id}, existed: {existed}")  # 디버깅용
                 st.toast(f"환영합니다, {nickname}님! 🎉")
                 time.sleep(1)
-                st.experimental_rerun()  # 최신 Streamlit 버전 호환성
-            except Exception:
-                st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
+                st.rerun()
+            except Exception as e:
+                st.toast(f"로그인 중 오류: {str(e)}", icon="❌")
+                st.write(f"Error details: {str(e)}")  # 디버깅용
 
 # 메인 함수
 def main():
