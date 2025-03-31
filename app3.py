@@ -109,6 +109,7 @@ multi_iq_full_description = """
             st.toast(f"환영합니다, {nickname}님! 🎉")
             time.sleep(1)
             st.rerun()
+"""
 
 # 메인 함수
 def main():
