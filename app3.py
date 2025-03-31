@@ -1,19 +1,8 @@
 import streamlit as st
 from datetime import datetime
 import uuid
-import threading
-import logging
-from supabase import create_client, Client
-from config.env import SUPABASE_URL, SUPABASE_KEY  # 환경 변수에서 Supabase 정보 가져오기
 import pandas as pd
 import time
-
-# Supabase 클라이언트 초기화
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # MBTI 유형별 설명 딕셔너리
 mbti_descriptions = {
@@ -49,40 +38,40 @@ multi_iq_descriptions = {
 
 # MBTI 전체 설명
 mbti_full_description = """
-### 🔥 MBTI 유형별 한 줄 설명
+### 📝 MBTI 유형별 한 줄 설명
 #### 🔥 외향형 (E) vs ❄️ 내향형 (I)  
-- **E (외향형)** 🎉🗣️🚀🌞: 사람들과 어울리며 에너지를 얻는 사교적인 성격!  
-- **I (내향형)** 📚🛋️🌙🤫: 혼자만의 시간을 즐기며 내면에 집중하는 성격!  
+**E (외향형)** 🎉🗣️🚀🌞: 사람들과 어울리며 에너지를 얻는 사교적인 성격!  
+**I (내향형)** 📚🛋️🌙🤫: 혼자만의 시간을 즐기며 내면에 집중하는 성격!  
 
 #### 📊 직관형 (N) vs 🧐 감각형 (S)  
-- **N (직관형)** 💡✨🎨🔮: 창의적이고 큰 그림을 보며 아이디어를 중시!  
-- **S (감각형)** 🔎📏🛠️🍽️: 현실적이고 구체적인 정보를 바탕으로 행동!  
+**N (직관형)** 💡✨🎨🔮: 창의적이고 큰 그림을 보며 아이디어를 중시!  
+**S (감각형)** 🔎📏🛠️🍽️: 현실적이고 구체적인 정보를 바탕으로 행동!  
 
 #### 🤝 감정형 (F) vs ⚖️ 사고형 (T)  
-- **F (감정형)** ❤️🥰🌸🫂: 공감과 사람 중심으로 따뜻한 결정을 내림!  
-- **T (사고형)** 🧠⚙️📊📏: 논리와 객관적 판단으로 문제를 해결!  
+**F (감정형)** ❤️🥰🌸🫂: 공감과 사람 중심으로 따뜻한 결정을 내림!  
+**T (사고형)** 🧠⚙️📊📏: 논리와 객관적 판단으로 문제를 해결!  
 
 #### ⏳ 판단형 (J) vs 🌊 인식형 (P)  
-- **J (계획형)** 📅📌📝✅: 체계적이고 계획적으로 일을 처리하는 스타일!  
-- **P (즉흥형)** 🎭🎢🌪️🌍: 유연하고 변화에 잘 적응하는 자유로운 스타일!  
+**J (계획형)** 📅📌📝✅: 체계적이고 계획적으로 일을 처리하는 스타일!  
+**P (즉흥형)** 🎭🎢🌪️🌍: 유연하고 변화에 잘 적응하는 자유로운 스타일!  
 
 #### 🎭 MBTI 유형별 한 줄 설명  
-- ✅ **ISTJ** (현실주의자) 🏛️📚🧑‍⚖️: 원칙을 중시하며 꼼꼼한 계획으로 목표를 달성!  
-- ✅ **ISFJ** (따뜻한 수호자) 🛡️🧸💖: 타인을 배려하며 헌신적인 도움을 주는 성격!  
-- ✅ **INFJ** (신비로운 조언자) 🌿🔮📖: 깊은 통찰력으로 사람들에게 영감을 주는 이상주의자!  
-- ✅ **INTJ** (전략가) 🧠♟️📈: 미래를 설계하며 목표를 향해 나아가는 마스터마인드!  
-- ✅ **ISTP** (만능 재주꾼) 🔧🕶️🏍️: 문제를 실질적으로 해결하는 실용적인 모험가!  
-- ✅ **ISFP** (예술가) 🎨🎵🦋: 감성을 표현하며 자유로운 삶을 추구하는 예술가!  
-- ✅ **INFP** (이상주의자) 🌌📜🕊️: 내면의 가치를 중시하며 세상을 더 나은 곳으로 만드는 몽상가!  
-- ✅ **INTP** (논리적인 철학자) 🤔📖⚙️: 호기심 많고 논리적으로 세상을 탐구하는 사색가!  
-- ✅ **ESTP** (모험가) 🏎️🔥🎤: 순간을 즐기며 도전과 모험을 사랑하는 활동가!  
-- ✅ **ESFP** (사교적인 연예인) 🎭🎤🎊: 사람들과 함께하며 분위기를 띄우는 파티의 중심!  
-- ✅ **ENFP** (자유로운 영혼) 🌈🚀💡: 창의적인 아이디어로 세상을 밝히는 열정적인 영혼!  
-- ✅ **ENTP** (토론가) 🗣️⚡♟️: 새로운 아이디어를 탐구하며 논쟁을 즐기는 혁신가!  
-- ✅ **ESTJ** (엄격한 관리자) 🏗️📊🛠️: 체계적으로 목표를 달성하는 리더십의 대가!  
-- ✅ **ESFJ** (친절한 외교관) 💐🤗🏡: 사람들을 연결하며 따뜻한 공동체를 만드는 외교관!  
-- ✅ **ENFJ** (열정적인 리더) 🌟🎤🫶: 타인을 이끌며 긍정적인 변화를 만드는 카리스마 리더!  
-- ✅ **ENTJ** (야망가) 👑📈🔥: 목표를 향해 돌진하며 큰 그림을 그리는 지휘관!
+ ✅ **ISTJ** (현실주의자) 🏛️📚🧑‍⚖️: 원칙을 중시하며 꼼꼼한 계획으로 목표를 달성!  
+ ✅ **ISFJ** (따뜻한 수호자) 🛡️🧸💖: 타인을 배려하며 헌신적인 도움을 주는 성격!  
+ ✅ **INFJ** (신비로운 조언자) 🌿🔮📖: 깊은 통찰력으로 사람들에게 영감을 주는 이상주의자!  
+ ✅ **INTJ** (전략가) 🧠♟️📈: 미래를 설계하며 목표를 향해 나아가는 마스터마인드!  
+ ✅ **ISTP** (만능 재주꾼) 🔧🕶️🏍️: 문제를 실질적으로 해결하는 실용적인 모험가!  
+ ✅ **ISFP** (예술가) 🎨🎵🦋: 감성을 표현하며 자유로운 삶을 추구하는 예술가!  
+ ✅ **INFP** (이상주의자) 🌌📜🕊️: 내면의 가치를 중시하며 세상을 더 나은 곳으로 만드는 몽상가!  
+ ✅ **INTP** (논리적인 철학자) 🤔📖⚙️: 호기심 많고 논리적으로 세상을 탐구하는 사색가!  
+ ✅ **ESTP** (모험가) 🏎️🔥🎤: 순간을 즐기며 도전과 모험을 사랑하는 활동가!  
+ ✅ **ESFP** (사교적인 연예인) 🎭🎤🎊: 사람들과 함께하며 분위기를 띄우는 파티의 중심!  
+ ✅ **ENFP** (자유로운 영혼) 🌈🚀💡: 창의적인 아이디어로 세상을 밝히는 열정적인 영혼!  
+ ✅ **ENTP** (토론가) 🗣️⚡♟️: 새로운 아이디어를 탐구하며 논쟁을 즐기는 혁신가!  
+ ✅ **ESTJ** (엄격한 관리자) 🏗️📊🛠️: 체계적으로 목표를 달성하는 리더십의 대가!  
+ ✅ **ESFJ** (친절한 외교관) 💐🤗🏡: 사람들을 연결하며 따뜻한 공동체를 만드는 외교관!  
+ ✅ **ENFJ** (열정적인 리더) 🌟🎤🫶: 타인을 이끌며 긍정적인 변화를 만드는 카리스마 리더!  
+ ✅ **ENTJ** (야망가) 👑📈🔥: 목표를 향해 돌진하며 큰 그림을 그리는 지휘관!
 """
 
 # 다중지능 전체 설명
@@ -105,71 +94,9 @@ def init_session_state():
     if "user_id" not in st.session_state:
         st.session_state.user_id = None
     if "chat_history" not in st.session_state:
-        if st.session_state.user_id:
-            # Supabase에서 사용자별 채팅 기록 가져오기
-            response = supabase.table("chat_history").select("*").eq("user_id", st.session_state.user_id).order("created_at", desc=True).limit(10).execute()
-            st.session_state.chat_history = []
-            for r in response.data:
-                if r["question"]:
-                    st.session_state.chat_history.append({"role": "user", "content": r["question"]})
-                if r["answer"]:
-                    # answer가 JSON 문자열일 경우 파싱 시도
-                    try:
-                        import json
-                        answer_content = json.loads(r["answer"]) if isinstance(r["answer"], str) and r["answer"].startswith("{") else r["answer"]
-                        if isinstance(answer_content, dict) and "table" in answer_content:
-                            answer_content["table"] = pd.DataFrame(answer_content["table"])
-                        st.session_state.chat_history.append({"role": "assistant", "content": answer_content})
-                    except:
-                        st.session_state.chat_history.append({"role": "assistant", "content": r["answer"]})
-        else:
-            st.session_state.chat_history = []
+        st.session_state.chat_history = []
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-
-# 사용자 생성 또는 조회
-def create_or_get_user(nickname):
-    try:
-        # id는 자동 증가로 설정되어 있으므로 명시적으로 제공하지 않음
-        response = supabase.table("users").upsert(
-            {"nickname": nickname, "created_at": datetime.now().isoformat()},
-            on_conflict="nickname"
-        ).execute()
-        if not response.data or "id" not in response.data[0]:
-            raise ValueError("Invalid response from Supabase: missing 'id'")
-        logger.info(f"User created/fetched: {response.data[0]}")
-        return response.data[0]["id"], len(response.data) > 1
-    except Exception as e:
-        logger.error(f"Error creating/getting user: {str(e)}")
-        raise
-
-# 채팅 기록 저장
-def save_chat_history(user_id, session_id, question, answer, time_taken):
-    try:
-        if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-            answer_to_save = {
-                "header": answer["header"],
-                "table": answer["table"].to_dict(orient="records"),
-                "footer": answer["footer"]
-            }
-        else:
-            answer_to_save = answer
-        
-        supabase.table("chat_history").insert({
-            "user_id": user_id,
-            "session_id": session_id,
-            "question": question,
-            "answer": answer_to_save,
-            "time_taken": time_taken,
-            "created_at": datetime.now().isoformat()
-        }).execute()
-        logger.info(f"Chat saved: {question} -> {answer}")
-    except Exception as e:
-        logger.error(f"Failed to save chat history: {str(e)}")
-
-# 비동기 저장
-def async_save_chat_history(user_id, session_id, question, answer, time_taken):
-    threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
 
 # 검색 필요 여부 판단
 def needs_search(query):
@@ -197,7 +124,6 @@ def process_query(query):
             "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 💡"
         )
     elif query_type == "mbti_types":
-        # 특정 MBTI 유형 조회
         specific_type = query_lower.replace("mbti", "").replace("유형", "").replace("설명", "").strip().upper()
         if specific_type in mbti_descriptions:
             return f"### 🎭 {specific_type} 한 줄 설명\n- ✅ **{specific_type}** {mbti_descriptions[specific_type]}"
@@ -209,7 +135,6 @@ def process_query(query):
             "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
         )
     elif query_type == "multi_iq_types":
-        # 특정 다중지능 유형 조회
         specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("유형", "").replace("설명", "").strip().replace(" ", "")
         if specific_type in multi_iq_descriptions:
             return f"### 🎨 {specific_type.replace('지능', ' 지능')} 한 줄 설명\n- 📖 **{specific_type.replace('지능', ' 지능')}** {multi_iq_descriptions[specific_type]}"
@@ -232,7 +157,8 @@ def show_chat_dashboard():
             """
         )
     
-    for msg in st.session_state.chat_history[-10:]:
+    # 최근 5개 메시지만 표시 (메모리 최적화)
+    for msg in st.session_state.chat_history[-5:]:
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
                 st.markdown(msg['content']['header'], unsafe_allow_html=True)
@@ -261,12 +187,10 @@ def show_chat_dashboard():
                     st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
-                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
             
             except Exception as e:
                 placeholder.empty()
                 error_msg = f"응답을 준비하다 문제가 생겼어요: {str(e)} 😓"
-                logger.error(f"오류 발생: {str(e)}", exc_info=True)
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
@@ -274,21 +198,17 @@ def show_chat_dashboard():
 def show_login_page():
     st.title("로그인 🤗")
     with st.form("login_form"):
-        nickname = st.text_input("닉네임", placeholder="예: 사용자")
+        nickname = st.text_input("닉네임", placeholder="예: 해피")
         submit_button = st.form_submit_button("시작하기 🚀")
         
         if submit_button and nickname:
-            try:
-                user_id, existed = create_or_get_user(nickname)
-                st.session_state.user_id = user_id
-                st.session_state.is_logged_in = True
-                st.session_state.chat_history = []
-                st.session_state.session_id = str(uuid.uuid4())
-                st.toast(f"환영합니다, {nickname}님! 🎉")
-                time.sleep(1)
-                st.rerun()
-            except Exception as e:
-                st.toast(f"로그인 중 오류: {str(e)}", icon="❌")
+            st.session_state.user_id = nickname  # Supabase 대신 닉네임 사용
+            st.session_state.is_logged_in = True
+            st.session_state.chat_history = []
+            st.session_state.session_id = str(uuid.uuid4())
+            st.toast(f"환영합니다, {nickname}님! 🎉")
+            time.sleep(1)
+            st.rerun()
 
 # 메인 함수
 def main():
