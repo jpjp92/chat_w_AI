@@ -443,7 +443,7 @@ def extract_league_from_query(query):
         "bundesliga": ["bundesliga", "분데스리가"],
         "seriea": ["seriea", "세리에a"],
         "ligue1": ["ligue1", "리그1"],
-        "championsleague": ["championsleague AscendingKeyErrorchampionsleague": ["championsleague", "챔피언스리그", "ucl"]
+        "championsleague": ["championsleague", "챔피언스리그", "ucl"]
     }
     for league_key, keywords in league_keywords.items():
         if any(keyword in query_lower for keyword in keywords):
