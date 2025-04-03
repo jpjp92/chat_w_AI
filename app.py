@@ -76,7 +76,7 @@ multi_iq_descriptions = {
     },
     "자기이해지능": {
         "description": "🧘‍♂️💭📖: 자신을 깊이 이해하고 성찰하는 내면의 힘!\n",
-        "jobs": "변호사, 검사, 판사, 변리사, 평론가, 논설 / 교사, 교수, 심리상담사 / 스포츠 감독, 코치, 심판, 스포츠 해설가 / 협상가, CEO, CTOA 컨설팅, 마케팅, 회사 경영 / 기자, 아나운서, 요리사, 심사위원 / 의사, 제약 분야 연구원 / 성직자, 철학자, 투자분석가, 자산관리 / 영화감독, 작가, 건축가"
+        "jobs": "변호사, 검사, 판사, 변리사, 평론가, 논설 / 교사, 교수, 심리상담사 / 스포츠 감독, 코치, 심판, 스포츠 해설가 / 협상가, CEO, CTO, 컨설팅, 마케팅, 회사 경영 / 기자, 아나운서, 요리사, 심사위원 / 의사, 제약 분야 연구원 / 성직자, 철학자, 투자분석가, 자산관리 / 영화감독, 작가, 건축가"
     },
     "자연친화지능": {
         "description": "🌿🐦🌍: 자연과 동물을 사랑하며 환경에 민감한 재능!\n",
@@ -84,20 +84,59 @@ multi_iq_descriptions = {
     }
 }
 
-# MBTI 전체 설명 (간소화)
+# MBTI 전체 설명
 mbti_full_description = """
 ### 📝 MBTI 유형별 한 줄 설명
-- ✅ **ISTJ**: 원칙을 중시하며 꼼꼼한 계획으로 목표를 달성!
-- ✅ **ISFJ**: 타인을 배려하며 헌신적인 도움을 주는 성격!
-- (나머지 생략)
+#### 🔥 외향형 (E) vs ❄️ 내향형 (I)  
+- **E (외향형)** 🎉🗣️🚀🌞: 사람들과 어울리며 에너지를 얻는 사교적인 성격!  
+- **I (내향형)** 📚🛋️🌙🤫: 혼자만의 시간을 즐기며 내면에 집중하는 성격!  
+#### 📊 직관형 (N) vs 🧐 감각형 (S)  
+- **N (직관형)** 💡✨🎨🔮: 창의적이고 큰 그림을 보며 아이디어를 중시!  
+- **S (감각형)** 🔎📏🛠️🍽️: 현실적이고 구체적인 정보를 바탕으로 행동!  
+#### 🤝 감정형 (F) vs ⚖️ 사고형 (T)  
+- **F (감정형)** ❤️🥰🌸🫂: 공감과 사람 중심으로 따뜻한 결정을 내림!  
+- **T (사고형)** 🧠⚙️📊📏: 논리와 객관적 판단으로 문제를 해결!  
+#### ⏳ 판단형 (J) vs 🌊 인식형 (P)  
+- **J (계획형)** 📅📌📝✅: 체계적이고 계획적으로 일을 처리하는 스타일!  
+- **P (즉흥형)** 🎭🎢🌪️🌍: 유연하고 변화에 잘 적응하는 자유로운 스타일!  
+#### 🎭 MBTI 유형별 한 줄 설명  
+- ✅ **ISTJ** (현실주의자) 🏛️📚🧑‍⚖️: 원칙을 중시하며 꼼꼼한 계획으로 목표를 달성!  
+- ✅ **ISFJ** (따뜻한 수호자) 🛡️🧸💖: 타인을 배려하며 헌신적인 도움을 주는 성격!  
+- ✅ **INFJ** (신비로운 조언자) 🌿🔮📖: 깊은 통찰력으로 사람들에게 영감을 주는 이상주의자!  
+- ✅ **INTJ** (전략가) 🧠♟️📈: 미래를 설계하며 목표를 향해 나아가는 마스터마인드!  
+- ✅ **ISTP** (만능 재주꾼) 🔧🕶️🏍️: 문제를 실질적으로 해결하는 실용적인 모험가!  
+- ✅ **ISFP** (예술가) 🎨🎵🦋: 감성을 표현하며 자유로운 삶을 추구하는 예술가!  
+- ✅ **INFP** (이상주의자) 🌌📜🕊️: 내면의 가치를 중시하며 세상을 더 나은 곳으로 만드는 몽상가!  
+- ✅ **INTP** (논리적인 철학자) 🤔📖⚙️: 호기심 많고 논리적으로 세상을 탐구하는 사색가!  
+- ✅ **ESTP** (모험가) 🏎️🔥🎤: 순간을 즐기며 도전과 모험을 사랑하는 활동가!  
+- ✅ **ESFP** (사교적인 연예인) 🎭🎤🎊: 사람들과 함께하며 분위기를 띄우는 파티의 중심!  
+- ✅ **ENFP** (자유로운 영혼) 🌈🚀💡: 창의적인 아이디어로 세상을 밝히는 열정적인 영혼!  
+- ✅ **ENTP** (토론가) 🗣️⚡♟️: 새로운 아이디어를 탐구하며 논쟁을 즐기는 혁신가!  
+- ✅ **ESTJ** (엄격한 관리자) 🏗️📊🛠️: 체계적으로 목표를 달성하는 리더십의 대가!  
+- ✅ **ESFJ** (친절한 외교관) 💐🤗🏡: 사람들을 연결하며 따뜻한 공동체를 만드는 외교관!  
+- ✅ **ENFJ** (열정적인 리더) 🌟🎤🫶: 타인을 이끌며 긍정적인 변화를 만드는 카리스마 리더!  
+- ✅ **ENTJ** (야망가) 👑📈🔥: 목표를 향해 돌진하며 큰 그림을 그리는 지휘관!
 """
 
-# 다중지능 전체 설명 (간소화)
+# 다중지능 전체 설명
 multi_iq_full_description = """
-### 🎨 다중지능 유형별 한 줄 설명 및 추천 직업
-- 📖 **언어 지능**: 말과 글을 통해 생각을 표현하는 데 탁월!
-- 🔢 **논리-수학 지능**: 분석적 사고와 문제 해결 능력이 뛰어남!
-- (나머지 생략)
+### 🎨 다중지능 유형별 한 줄 설명 및 추천 직업  
+- 📖 **언어 지능** 📝📚📢: 말과 글을 통해 생각을 표현하는 데 탁월!  
+    - **추천 직업**: 소설가, 시인, 작가, 논설 / 동화 작가, 방송작가, 영화대본작가, 웹툰 작가 / 아나운서, 리포터, 성우 / 교사, 교수, 강사, 독서 지도사 / 언어치료사, 심리치료사, 구연동화가  
+- 🔢 **논리-수학 지능** 🧮📊🧠: 분석적 사고와 문제 해결 능력이 뛰어남!  
+    - **추천 직업**: 과학자, 물리학자, 수학자 / 의료공학, 전자공학, 컴퓨터 공학, 항공우주공학 / 애널리스트, 경영 컨설팅, 회계사, 세무사 / 투자분석가, M&A 전문가 / IT 컨설팅, 컴퓨터 프로그래머, web 개발 / 통신 신호처리, 통계학, AI 개발, 정보처리, 빅데이터 업무 / 은행원, 금융기관, 강사, 비평가, 논설 / 변호사, 변리사, 검사, 판사 / 의사, 건축가, 설계사  
+- 🎨 **공간 지능** 🎨📸🏛️: 그림과 디자인으로 공간을 아름답게 표현!  
+    - **추천 직업**: 사진사, 촬영기사, 만화가, 애니메이션, 화가, 아티스트 / 건축 설계, 인테리어, 디자이너 / 지도 제작, 엔지니어, 발명가 / 전자공학, 기계공학, 통신공학, 산업공학, 로봇 개발 / 영화감독, 방송 피디, 푸드스타일리스트 / 광고 제작, 인쇄 업무  
+- 🎵 **음악 지능** 🎶🎧🎸: 소리와 리듬을 느끼고 창조하는 음악적 재능!  
+    - **추천 직업**: 음악교사, 음향사, 작곡가, 작사가, 편곡가, 가수, 성악가 / 악기 연주 / 동시통역사, 성우 / 뮤지컬 배우 / 발레, 무용 / 음향 부문, 연예 기획사 / DJ, 개인 음악 방송, 가수 매니지먼트  
+- 🏃 **신체-운동 지능** 🏀🤸‍♂️🏆: 몸을 활용해 스포츠와 움직임에서 두각!  
+    - **추천 직업**: 외과의사, 치기공사, 한의사, 수의사, 간호사, 대체의학 / 물리치료사, 작업치료사 / 악기 연주, 성악가, 가수, 무용, 연극 / 스포츠, 체육교사, 모델 / 경찰, 경호원, 군인, 소방관 / 농업, 임업, 수산업, 축산업 / 공예, 액세서리 제작, 가구 제작  
+- 🤝 **대인관계 지능** 🤝🗣️💬: 사람들과 소통하며 관계를 잘 맺는 능력!  
+    - **추천 직업**: 변호사, 검사, 판사, 법무사 / 교사, 교수, 강사 / 홍보 업무, 마케팅 / 지배인, 비서, 승무원, 판매업무 / 기자, 리포터, 보험서비스 / 외교관, 국제공무원, 경찰 / 병원코디네이터, 간호사 / 호텔리어, 학습지 교사, 웨딩플래너, 웃음치료사, 성직자  
+- 🧘 **자기 이해 지능** 🧘‍♂️💭📖: 자신을 깊이 이해하고 성찰하는 내면의 힘!  
+    - **추천 직업**: 변호사, 검사, 판사, 변리사, 평론가, 논설 / 교사, 교수, 심리상담사 / 스포츠 감독, 코치, 심판, 스포츠 해설가 / 협상가, CEO, CTO, 컨설팅, 마케팅, 회사 경영 / 기자, 아나운서, 요리사, 심사위원 / 의사, 제약 분야 연구원 / 성직자, 철학자, 투자분석가, 자산관리 / 영화감독, 작가, 건축가  
+- 🌱 **자연 친화 지능** 🌿🐦🌍: 자연과 동물을 사랑하며 환경에 민감한 재능!  
+    - **추천 직업**: 의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기 punctuated공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트  
 """
 
 # WeatherAPI 클래스
@@ -156,18 +195,99 @@ class WeatherAPI:
             f"온도: {data['main']['temp']}°C\n"
             f"체감: {data['main']['feels_like']}°C\n"
             f"습도: {data['main']['humidity']}%\n"
-            f"풍속: {data['wind']['speed']}m/s"
+            f"풍속: {data['wind']['speed']}m/s\n"
+            f"더 궁금한 점 있나요? 😊"
         )
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
     def get_forecast_by_day(self, city_name, days_from_today=1):
-        # 기존 로직 유지 (간소화)
-        return "예보 기능 생략"
+        cache_key = f"forecast:{city_name}:{days_from_today}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data:
+            return cached_data
+        
+        city_info = self.get_city_info(city_name)
+        if not city_info:
+            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다."
+        
+        url = "https://api.openweathermap.org/data/2.5/forecast"
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+        data = self.fetch_weather(url, params)
+        if isinstance(data, str):
+            return data
+        target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
+        forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
+        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+        
+        found = False
+        for forecast in data['list']:
+            dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
+            if dt == target_date:
+                found = True
+                time_only = datetime.fromtimestamp(forecast['dt']).strftime('%H:%M')
+                weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
+                forecast_text += (
+                    f"⏰ {time_only} {forecast['weather'][0]['description']} {weather_emoji} "
+                    f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s\n\n"
+                )
+        
+        result = forecast_text + "더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
+        self.cache.setex(cache_key, self.cache_ttl, result)
+        return result
 
     def get_weekly_forecast(self, city_name):
-        # 기존 로직 유지 (간소화)
-        return "주간 예보 생략"
+        cache_key = f"weekly_forecast:{city_name}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data:
+            return cached_data
+        
+        city_info = self.get_city_info(city_name)
+        if not city_info:
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다."
+        
+        url = "https://api.openweathermap.org/data/2.5/forecast"
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+        data = self.fetch_weather(url, params)
+        if isinstance(data, str):
+            return data
+        today = datetime.now().date()
+        week_end = today + timedelta(days=6)
+        daily_forecast = {}
+        weekdays_kr = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+        today_weekday = today.weekday()
+        
+        for forecast in data['list']:
+            dt = datetime.fromtimestamp(forecast['dt']).date()
+            if today <= dt <= week_end:
+                dt_str = dt.strftime('%Y-%m-%d')
+                if dt_str not in daily_forecast:
+                    weekday_idx = (today_weekday + (dt - today).days) % 7
+                    daily_forecast[dt_str] = {
+                        'weekday': weekdays_kr[weekday_idx],
+                        'temp_min': forecast['main']['temp_min'],
+                        'temp_max': forecast['main']['temp_max'],
+                        'weather': forecast['weather'][0]['description']
+                    }
+                else:
+                    daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], forecast['main']['temp_min'])
+                    daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], forecast['main']['temp_max'])
+        
+        today_str = today.strftime('%Y-%m-%d')
+        today_weekday_str = weekdays_kr[today_weekday]
+        forecast_text = f"{today_str}({today_weekday_str}) 기준 {city_info['name']}의 주간 날씨 예보 🌤️\n"
+        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+        
+        for date, info in daily_forecast.items():
+            weather_emoji = weather_emojis.get(info['weather'].split()[0], '🌤️')
+            forecast_text += (
+                f"\n{info['weekday']}: {info['weather']} {weather_emoji} "
+                f"최저 {info['temp_min']}°C 최고 {info['temp_max']}°C\n\n"
+            )
+        
+        result = forecast_text + "\n더 궁금한 점 있나요? 😊"
+        self.cache.setex(cache_key, self.cache_ttl, result)
+        return result
 
 # FootballAPI 클래스
 class FootballAPI:
@@ -178,16 +298,90 @@ class FootballAPI:
         self.cache_ttl = cache_ttl
 
     def fetch_league_standings(self, league_code, league_name):
-        # 기존 로직 유지 (간소화)
-        return {"league_name": league_name, "data": pd.DataFrame()}
+        cache_key = f"league_standings:{league_code}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+
+        url = f"{self.base_url}/{league_code}/standings"
+        headers = {'X-Auth-Token': self.api_key}
+        
+        try:
+            time.sleep(1)  # API 요청 간격 조절
+            response = requests.get(url, headers=headers, timeout=3)
+            response.raise_for_status()
+            data = response.json()
+            
+            standings = data['standings'][0]['table'] if league_code not in ["CL"] else data['standings']
+            if league_code in ["CL"]:  # 챔피언스 리그는 그룹 스테이지 처리
+                standings_data = []
+                for group in standings:
+                    for team in group['table']:
+                        standings_data.append({
+                            '순위': team['position'],
+                            '그룹': group['group'],
+                            '팀': team['team']['name'],
+                            '경기': team['playedGames'],
+                            '승': team['won'],
+                            '무': team['draw'],
+                            '패': team['lost'],
+                            '득점': team['goalsFor'],
+                            '실점': team['goalsAgainst'],
+                            '득실차': team['goalsFor'] - team['goalsAgainst'],
+                            '포인트': team['points']
+                        })
+                df = pd.DataFrame(standings_data)
+            else:  # 일반 리그
+                df = pd.DataFrame([
+                    {
+                        '순위': team['position'],
+                        '팀': team['team']['name'],
+                        '경기': team['playedGames'],
+                        '승': team['won'],
+                        '무': team['draw'],
+                        '패': team['lost'],
+                        '득점': team['goalsFor'],
+                        '실점': team['goalsAgainst'],
+                        '득실차': team['goalsFor'] - team['goalsAgainst'],
+                        '포인트': team['points']
+                    } for team in standings
+                ])
+            
+            result = {"league_name": league_name, "data": df}
+            self.cache.setex(cache_key, self.cache_ttl, result)
+            return result
+        
+        except requests.exceptions.RequestException as e:
+            return {"league_name": league_name, "error": f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
 
     def fetch_league_scorers(self, league_code, league_name):
-        # 기존 로직 유지 (간소화)
-        return {"league_name": league_name, "data": pd.DataFrame()}
+        cache_key = f"league_scorers:{league_code}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+
+        url = f"{self.base_url}/{league_code}/scorers"
+        headers = {'X-Auth-Token': self.api_key}
+        
+        try:
+            time.sleep(1)  # API 요청 간격 조절
+            response = requests.get(url, headers=headers, timeout=3)
+            response.raise_for_status()
+            data = response.json()
+            
+            scorers = [{"순위": i+1, "선수": s['player']['name'], "팀": s['team']['name'], "득점": s['goals']} 
+                       for i, s in enumerate(data['scorers'][:10])]  # 상위 10명
+            df = pd.DataFrame(scorers)
+            result = {"league_name": league_name, "data": df}
+            self.cache.setex(cache_key, self.cache_ttl, result)
+            return result
+        
+        except requests.exceptions.RequestException as e:
+            return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])
+client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])  # 문제 제공자 제외
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -204,10 +398,8 @@ def init_session_state():
         st.session_state.chat_history = []
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-    if "current_topic" not in st.session_state:
-        st.session_state.current_topic = None
 
-# 도시 및 시간 추출 (기존과 동일)
+# 도시 및 시간 추출
 CITY_PATTERNS = [
     re.compile(r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨', re.IGNORECASE),
     re.compile(r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨', re.IGNORECASE),
@@ -261,7 +453,7 @@ def extract_league_from_query(query):
 def get_kst_time():
     kst_timezone = pytz.timezone("Asia/Seoul")
     kst_time = datetime.now(kst_timezone)
-    return f"대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰"
+    return f"대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰\n\n 더 궁금한 점 있나요? 😊"
 
 def get_time_by_city(city_name="서울"):
     city_info = weather_api.get_city_info(city_name)
@@ -271,7 +463,7 @@ def get_time_by_city(city_name="서울"):
     timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
     timezone = pytz.timezone(timezone_str)
     city_time = datetime.now(timezone)
-    return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰"
+    return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰\n\n 더 궁금한 점 있나요? 😊"
 
 # 사용자 및 채팅 기록 관리
 def create_or_get_user(nickname):
@@ -329,7 +521,8 @@ def get_drug_info(drug_query):
                 f"✅ **제조사**: {item.get('entpName', '정보 없음')}\n\n"
                 f"✅ **효능**: {efcy}\n\n"
                 f"✅ **용법용량**: {use_method}\n\n"
-                f"✅ **주의사항**: {atpn}"
+                f"✅ **주의사항**: {atpn}\n\n"
+                f"더 궁금한 점 있나요? 😊"
             )
             cache_handler.setex(cache_key, 86400, result)
             return result
@@ -338,7 +531,7 @@ def get_drug_info(drug_query):
         logger.error(f"약품 API 오류: {str(e)}")
         return f"'{drug_name}'의 정보를 가져오는 중 문제가 발생했습니다. 😓"
 
-# Naver API 검색
+# Naver API 검색 (웹 검색)
 def get_naver_api_results(query):
     global naver_request_count
     cache_key = f"naver:{query}"
@@ -366,7 +559,7 @@ def get_naver_api_results(query):
             response_text += "\n\n".join(
                 [f"**결과 {i}**\n\n📄 **제목**: {re.sub(r'<b>|</b>', '', item['title'])}\n\n📝 **내용**: {re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100]}...\n\n🔗 **링크**: {item.get('link', '')}"
                  for i, item in enumerate(results, 1)]
-            )
+            ) + "\n\n더 궁금한 점 있나요? 😊"
             cache_handler.setex(cache_key, 3600, response_text)
             return response_text
     except Exception as e:
@@ -399,7 +592,7 @@ def get_arxiv_papers(query, max_results=3):
     response += "\n\n".join(
         [f"**논문 {i}**\n\n📄 **제목**: {r['title']}\n\n👥 **저자**: {r['authors']}\n\n📝 **초록**: {r['summary']}...\n\n🔗 **논문 페이지**: {r['entry_id']}\n\n📅 **출판일**: {r['published']}"
          for i, r in enumerate(results, 1)]
-    )
+    ) + "\n\n더 궁금한 점 있나요? 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
 
@@ -462,44 +655,23 @@ def get_pubmed_papers(query, max_results=5):
     response += "\n\n".join(
         [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
          for i, pmid in enumerate(pubmed_ids, 1)]
-    )
+    ) + "\n\n더 궁금한 점 있나요? 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
-
-# 대화 요약 함수
-def summarize_history(chat_history):
-    if len(chat_history) > 5:  # 5턴 이상이면 요약
-        summary_prompt = "다음 대화를 요약해 주세요:\n" + "\n".join(
-            [f"{msg['role']}: {msg['content']}" for msg in chat_history]
-        )
-        summary = asyncio.run(get_conversational_response(summary_prompt, []))
-        return [{"role": "system", "content": f"대화 요약: {summary}"}]
-    return chat_history
-
-# 후속 질문 추가
-def add_follow_up(response, query_type):
-    follow_ups = {
-        "weather": "내일 날씨나 주간 예보도 궁금하시면 말씀해 주세요!",
-        "league_standings": "득점 순위나 특정 팀 정보도 확인할까요?",
-        "mbti": "당신의 MBTI 유형을 알려주시면 더 자세히 설명드릴게요!",
-        "conversation": "더 궁금한 점 있나요? 😊"
-    }
-    return f"{response}\n\n{follow_ups.get(query_type, '더 궁금한 점 있나요? 😊')}"
 
 # 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
 async def get_conversational_response(query, chat_history):
-    cache_key = f"conv:{needs_search(query)}:{query}:{st.session_state.session_id}"
+    cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
     if cached:
         return cached
     
-    summarized_history = summarize_history(chat_history)
     messages = [
         {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"},
-        *summarized_history,
         {"role": "user", "content": query}
-    ]
+    ] + [{"role": msg["role"], "content": msg["content"]} 
+         for msg in chat_history[-2:] if "더 궁금한 점 있나요?" not in msg["content"]]
     
     loop = asyncio.get_event_loop()
     try:
@@ -509,7 +681,6 @@ async def get_conversational_response(query, chat_history):
     except (IndexError, Exception) as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
         result = "응답을 생성하는 중 문제가 발생했습니다."
-    result = add_follow_up(result, "conversation")
     conversation_cache.setex(cache_key, 600, result)
     return result
 
@@ -549,27 +720,19 @@ def needs_search(query):
         return "conversation"
     return "conversation"
 
-def update_topic(query):
-    query_type = needs_search(query)
-    st.session_state.current_topic = query_type if query_type != "conversation" else st.session_state.current_topic
-
 def process_query(query):
-    cache_key = f"query:{st.session_state.session_id}:{hash(query)}"
+    cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
     if cached is not None:
         return cached
     
-    update_topic(query)
     query_type = needs_search(query)
     query_lower = query.strip().lower().replace(" ", "")
     
     with ThreadPoolExecutor() as executor:
         if query_type == "weather":
-            if "도시" not in query:
-                result = "어느 도시의 날씨를 알려드릴까요? 예: '서울 날씨'"
-            else:
-                future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
-                result = future.result()
+            future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
+            result = future.result()
         elif query_type == "tomorrow_weather":
             future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
             result = future.result()
@@ -589,7 +752,7 @@ def process_query(query):
                 result = result["error"] if "error" in result else {
                     "header": f"{result['league_name']} 리그 순위",
                     "table": result["data"],
-                    "footer": ""
+                    "footer": "더 궁금한 점 있나요? 😊"
                 }
             else:
                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
@@ -598,12 +761,15 @@ def process_query(query):
             if league_key:
                 league_info = LEAGUE_MAPPING[league_key]
                 future = executor.submit(football_api.fetch_league_scorers, league_info["code"], league_info["name"])
-                result = future.result()
-                result = result["error"] if "error" in result else {
-                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
-                    "table": result["data"],
-                    "footer": ""
-                }
+                try:
+                    result = future.result()
+                    result = result["error"] if "error" in result else {
+                        "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
+                        "table": result["data"],
+                        "footer": "더 궁금한 점 있나요? 😊"
+                    }
+                except Exception as e:
+                    result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
             else:
                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
         elif query_type == "drug":
@@ -661,40 +827,8 @@ def process_query(query):
         else:
             result = "아직 지원하지 않는 기능이에요. 😅"
         
-        result = add_follow_up(result, query_type)
         cache_handler.setex(cache_key, 600, result)
         return result
-
-def show_login_page():
-    st.title("로그인 🤗")
-    with st.form("login_form"):
-        nickname = st.text_input("닉네임", placeholder="예: 후안")
-        submit_button = st.form_submit_button("시작하기 🚀")
-        
-        if submit_button and nickname:
-            try:
-                user_id, is_existing = create_or_get_user(nickname)
-                st.session_state.user_id = user_id
-                st.session_state.is_logged_in = True
-                st.session_state.chat_history = []
-                st.session_state.session_id = str(uuid.uuid4())
-                st.markdown(
-                    """
-                    <style>
-                    .stToast {
-                        position: fixed;
-                        top: 10px !important;
-                        z-index: 9999;
-                    }
-                    </style>
-                    """,
-                    unsafe_allow_html=True
-                )
-                st.toast(f"환영합니다, {nickname}님! 🎉")
-                time.sleep(1)
-                st.rerun()
-            except Exception:
-                st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
@@ -723,11 +857,6 @@ def show_chat_dashboard():
                 st.markdown(msg['content']['footer'])
             else:
                 st.markdown(msg['content'], unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
-            if col1.button("👍", key=f"like_{hash(msg['content'])}"):
-                st.toast("피드백 감사합니다!")
-            if col2.button("👎", key=f"dislike_{hash(msg['content'])}"):
-                st.toast("어떤 점이 아쉬웠는지 알려주시면 개선할게요!")
     
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.chat_message("user").markdown(user_prompt)
@@ -757,6 +886,25 @@ def show_chat_dashboard():
                 logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
                 st.markdown(error_msg, unsafe_allow_html=True)
                 st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+
+def show_login_page():
+    st.title("로그인 🤗")
+    with st.form("login_form"):
+        nickname = st.text_input("닉네임", placeholder="예: 후안")
+        submit_button = st.form_submit_button("시작하기 🚀")
+        
+        if submit_button and nickname:
+            try:
+                user_id, is_existing = create_or_get_user(nickname)
+                st.session_state.user_id = user_id
+                st.session_state.is_logged_in = True
+                st.session_state.chat_history = []
+                st.session_state.session_id = str(uuid.uuid4())
+                st.toast(f"환영합니다, {nickname}님! 🎉")
+                time.sleep(1)
+                st.rerun()
+            except Exception:
+                st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
 def main():
     init_session_state()
