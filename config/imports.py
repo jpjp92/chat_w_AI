@@ -30,3 +30,6 @@ from diskcache import Cache
 from functools import lru_cache
 import xml.etree.ElementTree as ET
 import asyncio
+from soynlp.word import WordExtractor
+from soynlp.tokenizer import LTokenizer
+from soynlp.normalizer import repeat_normalize
