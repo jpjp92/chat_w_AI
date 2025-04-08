@@ -2,37 +2,6 @@
 from config.imports import *
 from config.env import *
 
-# import asyncio
-# import logging
-# import os
-# import time
-# import threading
-# import uuid
-# import re
-# import pytz
-# import pandas as pd
-# from datetime import datetime, timedelta
-# from supabase import create_client
-# from g4f.client import Client
-# import streamlit as st
-# from diskcache import Cache
-# from requests.adapters import HTTPAdapter
-# from requests.packages.urllib3.util.retry import Retry
-# from timezonefinder import TimezoneFinder
-# import arxiv
-# import xml.etree.ElementTree as ET
-# from concurrent.futures import ThreadPoolExecutor
-# from functools import lru_cache
-# import requests
-# import urllib.parse
-# import json
-# import urllib.request
-
-# # soynlp 추가
-# from soynlp.word import WordExtractor
-# from soynlp.tokenizer import LTokenizer
-# from soynlp.normalizer import repeat_normalize
-
 # 로깅 설정
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
 logger = logging.getLogger("HybridChat")
@@ -737,7 +706,7 @@ def process_query(query):
         return cached
     
     tokens, normalized_query = preprocess_query(query)
-    query_type = needspug_search(normalized_query)
+    query_type = needs_search(normalized_query)
     
     with ThreadPoolExecutor() as executor:
         if query_type == "weather":
