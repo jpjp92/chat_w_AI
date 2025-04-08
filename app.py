@@ -598,6 +598,7 @@ def parse_abstracts(xml_text):
         return {}
     return abstract_dict
 
+# 링크추가 테스트
 def get_pubmed_papers(query, max_results=5):
     cache_key = f"pubmed:{query}:{max_results}"
     cached = cache_handler.get(cache_key)
@@ -615,11 +616,34 @@ def get_pubmed_papers(query, max_results=5):
     
     response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
     response += "\n\n".join(
-        [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
+        [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n🔗 **논문 링크**: [PubMed 페이지](https://pubmed.ncbi.nlm.nih.gov/{pmid}/)"
          for i, pmid in enumerate(pubmed_ids, 1)]
     ) + "\n\n더 궁금한 점 있나요? 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
+    
+# def get_pubmed_papers(query, max_results=5):
+#     cache_key = f"pubmed:{query}:{max_results}"
+#     cached = cache_handler.get(cache_key)
+#     if cached:
+#         return cached
+    
+#     search_results = search_pubmed(query, max_results)
+#     pubmed_ids = search_results["esearchresult"]["idlist"]
+#     if not pubmed_ids:
+#         return "해당 키워드로 의학 논문을 찾을 수 없습니다."
+    
+#     summaries = get_pubmed_summaries(pubmed_ids)
+#     abstracts_xml = get_pubmed_abstract(pubmed_ids)
+#     abstract_dict = parse_abstracts(abstracts_xml)
+    
+#     response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
+#     response += "\n\n".join(
+#         [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
+#          for i, pmid in enumerate(pubmed_ids, 1)]
+#     ) + "\n\n더 궁금한 점 있나요? 😊"
+#     cache_handler.setex(cache_key, 3600, response)
+#     return response
 
 # 사용자 입력 전처리
 def preprocess_query(query):
