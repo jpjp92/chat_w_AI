@@ -136,7 +136,7 @@ multi_iq_full_description = """
 - 🧘 **자기 이해 지능** 🧘‍♂️💭📖: 자신을 깊이 이해하고 성찰하는 내면의 힘!  
     - **추천 직업**: 변호사, 검사, 판사, 변리사, 평론가, 논설 / 교사, 교수, 심리상담사 / 스포츠 감독, 코치, 심판, 스포츠 해설가 / 협상가, CEO, CTO, 컨설팅, 마케팅, 회사 경영 / 기자, 아나운서, 요리사, 심사위원 / 의사, 제약 분야 연구원 / 성직자, 철학자, 투자분석가, 자산관리 / 영화감독, 작가, 건축가  
 - 🌱 **자연 친화 지능** 🌿🐦🌍: 자연과 동물을 사랑하며 환경에 민감한 재능!  
-    - **추천 직업**: 의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기계 공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트  
+    - **추천 직업**: 의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기 punctuated공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트  
 """
 
 # WeatherAPI 클래스
@@ -164,7 +164,7 @@ class WeatherAPI:
         if cached:
             return cached
         url = "http://api.openweathermap.org/geo/1.0/direct"
-        params = {'q': city_name, 'limit': 1, 'appid': os.getenv("WEATHER_API_KEY")}
+        params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
         data = self.fetch_weather(url, params)
         if data and isinstance(data, list) and len(data) > 0:
             city_info = {"name": data[0]["name"], "lat": data[0]["lat"], "lon": data[0]["lon"]}
@@ -183,7 +183,7 @@ class WeatherAPI:
             return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다."
         
         url = "https://api.openweathermap.org/data/2.5/weather"
-        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': os.getenv("WEATHER_API_KEY"), 'units': 'metric', 'lang': 'kr'}
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
         data = self.fetch_weather(url, params)
         if isinstance(data, str):
             return data
@@ -212,7 +212,7 @@ class WeatherAPI:
             return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다."
         
         url = "https://api.openweathermap.org/data/2.5/forecast"
-        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': os.getenv("WEATHER_API_KEY"), 'units': 'metric', 'lang': 'kr'}
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
         data = self.fetch_weather(url, params)
         if isinstance(data, str):
             return data
@@ -233,6 +233,59 @@ class WeatherAPI:
                 )
         
         result = forecast_text + "더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
+        self.cache.setex(cache_key, self.cache_ttl, result)
+        return result
+
+    def get_weekly_forecast(self, city_name):
+        cache_key = f"weekly_forecast:{city_name}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data:
+            return cached_data
+        
+        city_info = self.get_city_info(city_name)
+        if not city_info:
+            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다."
+        
+        url = "https://api.openweathermap.org/data/2.5/forecast"
+        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
+        data = self.fetch_weather(url, params)
+        if isinstance(data, str):
+            return data
+        today = datetime.now().date()
+        week_end = today + timedelta(days=6)
+        daily_forecast = {}
+        weekdays_kr = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+        today_weekday = today.weekday()
+        
+        for forecast in data['list']:
+            dt = datetime.fromtimestamp(forecast['dt']).date()
+            if today <= dt <= week_end:
+                dt_str = dt.strftime('%Y-%m-%d')
+                if dt_str not in daily_forecast:
+                    weekday_idx = (today_weekday + (dt - today).days) % 7
+                    daily_forecast[dt_str] = {
+                        'weekday': weekdays_kr[weekday_idx],
+                        'temp_min': forecast['main']['temp_min'],
+                        'temp_max': forecast['main']['temp_max'],
+                        'weather': forecast['weather'][0]['description']
+                    }
+                else:
+                    daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], forecast['main']['temp_min'])
+                    daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], forecast['main']['temp_max'])
+        
+        today_str = today.strftime('%Y-%m-%d')
+        today_weekday_str = weekdays_kr[today_weekday]
+        forecast_text = f"{today_str}({today_weekday_str}) 기준 {city_info['name']}의 주간 날씨 예보 🌤️\n"
+        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
+        
+        for date, info in daily_forecast.items():
+            weather_emoji = weather_emojis.get(info['weather'].split()[0], '🌤️')
+            forecast_text += (
+                f"\n{info['weekday']}: {info['weather']} {weather_emoji} "
+                f"최저 {info['temp_min']}°C 최고 {info['temp_max']}°C\n\n"
+            )
+        
+        result = forecast_text + "\n더 궁금한 점 있나요? 😊"
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
@@ -327,26 +380,13 @@ class FootballAPI:
             return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
 
 # 초기화
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])  # 문제 제공자 제외
 weather_api = WeatherAPI()
-football_api = FootballAPI(api_key=os.getenv("SPORTS_API_KEY"))
+football_api = FootballAPI(api_key=SPORTS_API_KEY)
+naver_request_count = 0
+NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
-
-# soynlp 초기화
-word_extractor = WordExtractor(min_frequency=1, min_cohesion_forward=0.05)
-cohesion_scores = None
-l_tokenizer = None
-
-def update_tokenizer(chat_history):
-    global cohesion_scores, l_tokenizer
-    if chat_history and len(chat_history) % 5 == 0:  # 5턴ごとに更新
-        docs = [msg["content"] for msg in chat_history if isinstance(msg["content"], str)]
-        if docs:
-            word_extractor.train(docs)
-            word_score_table = word_extractor.extract()
-            cohesion_scores = {word: scores.cohesion_forward for word, scores in word_score_table.items()}
-            l_tokenizer = LTokenizer(scores=cohesion_scores)
 
 # 세션 상태 초기화
 def init_session_state():
@@ -464,7 +504,7 @@ def get_drug_info(drug_query):
         return cached
     
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
-    params = {'serviceKey': os.getenv("DRUG_API_KEY"), 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'json'}
+    params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'json'}
     try:
         response = requests.get(url, params=params, timeout=3)
         response.raise_for_status()
@@ -491,9 +531,7 @@ def get_drug_info(drug_query):
         logger.error(f"약품 API 오류: {str(e)}")
         return f"'{drug_name}'의 정보를 가져오는 중 문제가 발생했습니다. 😓"
 
-# Naver API 검색
-naver_request_count = 0
-NAVER_DAILY_LIMIT = 25000
+# Naver API 검색 (웹 검색)
 def get_naver_api_results(query):
     global naver_request_count
     cache_key = f"naver:{query}"
@@ -506,8 +544,8 @@ def get_naver_api_results(query):
     enc_text = urllib.parse.quote(query)
     url = f"https://openapi.naver.com/v1/search/webkr?query={enc_text}&display=5&sort=date"
     request = urllib.request.Request(url)
-    request.add_header("X-Naver-Client-Id", os.getenv("NAVER_CLIENT_ID"))
-    request.add_header("X-Naver-Client-Secret", os.getenv("NAVER_CLIENT_SECRET"))
+    request.add_header("X-Naver-Client-Id", NAVER_CLIENT_ID)
+    request.add_header("X-Naver-Client-Secret", NAVER_CLIENT_SECRET)
     try:
         response = urllib.request.urlopen(request, timeout=3)
         naver_request_count += 1
@@ -563,19 +601,19 @@ base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
 def search_pubmed(query, max_results=5):
     search_url = f"{base_url}esearch.fcgi"
-    params = {"db": "pubmed", "term": query, "retmode": "json", "retmax": max_results, "api_key": os.getenv("NCBI_KEY")}
+    params = {"db": "pubmed", "term": query, "retmode": "json", "retmax": max_results, "api_key": NCBI_KEY}
     response = requests.get(search_url, params=params, timeout=3)
     return response.json()
 
 def get_pubmed_summaries(id_list):
     summary_url = f"{base_url}esummary.fcgi"
-    params = {"db": "pubmed", "id": ",".join(id_list), "retmode": "json", "api_key": os.getenv("NCBI_KEY")}
+    params = {"db": "pubmed", "id": ",".join(id_list), "retmode": "json", "api_key": NCBI_KEY}
     response = requests.get(summary_url, params=params, timeout=3)
     return response.json()
 
 def get_pubmed_abstract(id_list):
     fetch_url = f"{base_url}efetch.fcgi"
-    params = {"db": "pubmed", "id": ",".join(id_list), "retmode": "xml", "rettype": "abstract", "api_key": os.getenv("NCBI_KEY")}
+    params = {"db": "pubmed", "id": ",".join(id_list), "retmode": "xml", "rettype": "abstract", "api_key": NCBI_KEY}
     response = requests.get(fetch_url, params=params, timeout=3)
     return response.text
 
@@ -598,7 +636,6 @@ def parse_abstracts(xml_text):
         return {}
     return abstract_dict
 
-# 링크추가 테스트
 def get_pubmed_papers(query, max_results=5):
     cache_key = f"pubmed:{query}:{max_results}"
     cached = cache_handler.get(cache_key)
@@ -616,82 +653,13 @@ def get_pubmed_papers(query, max_results=5):
     
     response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
     response += "\n\n".join(
-        [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n🔗 **논문 링크**: [PubMed 페이지](https://pubmed.ncbi.nlm.nih.gov/{pmid}/)"
+        [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
          for i, pmid in enumerate(pubmed_ids, 1)]
     ) + "\n\n더 궁금한 점 있나요? 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
-    
-# def get_pubmed_papers(query, max_results=5):
-#     cache_key = f"pubmed:{query}:{max_results}"
-#     cached = cache_handler.get(cache_key)
-#     if cached:
-#         return cached
-    
-#     search_results = search_pubmed(query, max_results)
-#     pubmed_ids = search_results["esearchresult"]["idlist"]
-#     if not pubmed_ids:
-#         return "해당 키워드로 의학 논문을 찾을 수 없습니다."
-    
-#     summaries = get_pubmed_summaries(pubmed_ids)
-#     abstracts_xml = get_pubmed_abstract(pubmed_ids)
-#     abstract_dict = parse_abstracts(abstracts_xml)
-    
-#     response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
-#     response += "\n\n".join(
-#         [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
-#          for i, pmid in enumerate(pubmed_ids, 1)]
-#     ) + "\n\n더 궁금한 점 있나요? 😊"
-#     cache_handler.setex(cache_key, 3600, response)
-#     return response
 
-# 사용자 입력 전처리
-def preprocess_query(query):
-    normalized_query = repeat_normalize(query, num_repeats=2)
-    if l_tokenizer:
-        tokens = l_tokenizer.tokenize(normalized_query)
-    else:
-        tokens = normalized_query.split()
-    return tokens, normalized_query
-
-# 의도 분석
-GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
-GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
-
-@lru_cache(maxsize=100)
-def needs_search(query):
-    tokens, normalized_query = preprocess_query(query)
-    if "날씨" in tokens:
-        return "weather" if "내일" not in tokens else "tomorrow_weather"
-    if "시간" in tokens or "날짜" in tokens:
-        return "time"
-    if "리그순위" in tokens:
-        return "league_standings"
-    if "득점순위" in tokens or "리그득점순위" in tokens:
-        return "league_scorers"
-    if "약품검색" in tokens:
-        return "drug"
-    if "공학논문" in tokens or "arxiv" in tokens:
-        return "arxiv_search"
-    if "의학논문" in tokens:
-        return "pubmed_search"
-    if "검색" in tokens:
-        return "naver_search"
-    if "mbti" in tokens:
-        if "유형" in tokens or "설명" in tokens:
-            return "mbti_types"
-        return "mbti"
-    if "다중지능" in tokens or "multi_iq" in tokens:
-        if "유형" in tokens or "설명" in tokens:
-            return "multi_iq_types"
-        if "직업" in tokens or "추천" in tokens:
-            return "multi_iq_jobs"
-        return "multi_iq"
-    if any(t in GREETINGS for t in tokens):
-        return "conversation"
-    return "conversation"
-
-# 대화형 응답
+# 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
 async def get_conversational_response(query, chat_history):
     cache_key = f"conv:{needs_search(query)}:{query}"
@@ -699,57 +667,84 @@ async def get_conversational_response(query, chat_history):
     if cached:
         return cached
     
-    context_tokens = []
-    for msg in chat_history[-2:]:
-        if isinstance(msg["content"], str) and "더 궁금한 점 있나요?" not in msg["content"]:
-            tokens, _ = preprocess_query(msg["content"])
-            context_tokens.extend(tokens)
-    
     messages = [
-        {"role": "system", "content": "친절한 AI 챗봇입니다. 문맥을 고려해 응답합니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"},
-        {"role": "user", "content": f"이전 대화: {' '.join(context_tokens)}\n현재 질문: {query}"}
-    ]
+        {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"},
+        {"role": "user", "content": query}
+    ] + [{"role": msg["role"], "content": msg["content"]} 
+         for msg in chat_history[-2:] if "더 궁금한 점 있나요?" not in msg["content"]]
     
     loop = asyncio.get_event_loop()
     try:
         response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
             model="gpt-4o", messages=messages))
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
-    except Exception as e:
+    except (IndexError, Exception) as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
         result = "응답을 생성하는 중 문제가 발생했습니다."
-    
     conversation_cache.setex(cache_key, 600, result)
     return result
 
-# 쿼리 처리
+GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
+GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
+
+@lru_cache(maxsize=100)
+def needs_search(query):
+    query_lower = query.strip().lower().replace(" ", "")
+    if "날씨" in query_lower:
+        return "weather" if "내일" not in query_lower else "tomorrow_weather"
+    if "시간" in query_lower or "날짜" in query_lower:
+        return "time"
+    if "리그순위" in query_lower:
+        return "league_standings"
+    if "리그득점순위" in query_lower or "득점순위" in query_lower:
+        return "league_scorers"
+    if "약품검색" in query_lower:
+        return "drug"
+    if "공학논문" in query_lower or "arxiv" in query_lower:
+        return "arxiv_search"
+    if "의학논문" in query_lower:
+        return "pubmed_search"
+    if "검색" in query_lower:
+        return "naver_search"
+    if "mbti" in query_lower:
+        if "유형" in query_lower or "설명" in query_lower:
+            return "mbti_types"
+        return "mbti"
+    if "다중지능" in query_lower or "multi_iq" in query_lower:
+        if "유형" in query_lower or "설명" in query_lower:
+            return "multi_iq_types"
+        if "직업" in query_lower or "추천" in query_lower:
+            return "multi_iq_jobs"
+        return "multi_iq"
+    if any(greeting in query_lower for greeting in GREETINGS):
+        return "conversation"
+    return "conversation"
+
 def process_query(query):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
     if cached is not None:
         return cached
     
-    tokens, normalized_query = preprocess_query(query)
-    query_type = needs_search(normalized_query)
+    query_type = needs_search(query)
+    query_lower = query.strip().lower().replace(" ", "")
     
     with ThreadPoolExecutor() as executor:
         if query_type == "weather":
-            city = next((t for t in tokens if t.endswith("시") or t.endswith("군") or t in ["서울", "부산"]), "서울")
-            future = executor.submit(weather_api.get_city_weather, city)
+            future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
             result = future.result()
         elif query_type == "tomorrow_weather":
-            city = next((t for t in tokens if t.endswith("시") or t.endswith("군") or t in ["서울", "부산"]), "서울")
-            future = executor.submit(weather_api.get_forecast_by_day, city, 1)
+            future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
             result = future.result()
         elif query_type == "time":
-            if any(t in ["오늘", "현재", "금일"] for t in tokens):
+            if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
                 result = get_kst_time()
             else:
-                city = next((t for t in tokens if t.endswith("시") or t.endswith("군")), "서울")
+                city = extract_city_from_time_query(query)
                 future = executor.submit(get_time_by_city, city)
                 result = future.result()
         elif query_type == "league_standings":
-            league_key = extract_league_from_query(normalized_query)
+            league_key = extract_league_from_query(query)
             if league_key:
                 league_info = LEAGUE_MAPPING[league_key]
                 future = executor.submit(football_api.fetch_league_standings, league_info["code"], league_info["name"])
@@ -762,70 +757,79 @@ def process_query(query):
             else:
                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
         elif query_type == "league_scorers":
-            league_key = extract_league_from_query(normalized_query)
+            league_key = extract_league_from_query(query)
             if league_key:
                 league_info = LEAGUE_MAPPING[league_key]
                 future = executor.submit(football_api.fetch_league_scorers, league_info["code"], league_info["name"])
-                result = future.result()
-                result = result["error"] if "error" in result else {
-                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
-                    "table": result["data"],
-                    "footer": "더 궁금한 점 있나요? 😊"
-                }
+                try:
+                    result = future.result()
+                    result = result["error"] if "error" in result else {
+                        "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
+                        "table": result["data"],
+                        "footer": "더 궁금한 점 있나요? 😊"
+                    }
+                except Exception as e:
+                    result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
             else:
                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
         elif query_type == "drug":
-            future = executor.submit(get_drug_info, normalized_query)
+            future = executor.submit(get_drug_info, query)
             result = future.result()
         elif query_type == "arxiv_search":
-            keywords = normalized_query.replace("공학논문", "").replace("arxiv", "").strip()
+            keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
             future = executor.submit(get_arxiv_papers, keywords)
             result = future.result()
         elif query_type == "pubmed_search":
-            keywords = normalized_query.replace("의학논문", "").strip()
+            keywords = query.replace("의학논문", "").strip()
             future = executor.submit(get_pubmed_papers, keywords)
             result = future.result()
         elif query_type == "naver_search":
-            search_query = normalized_query.lower().replace("검색", "").strip()
+            search_query = query.lower().replace("검색", "").strip()
             future = executor.submit(get_naver_api_results, search_query)
             result = future.result()
         elif query_type == "mbti":
-            result = "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n" \
-                     "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
+            result = (
+                "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
+                "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
+                "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 💡"
+            )
         elif query_type == "mbti_types":
-            specific_type = normalized_query.replace("mbti", "").replace("유형", "").replace("설명", "").strip().upper()
+            specific_type = query_lower.replace("mbti", "").replace("유형", "").replace("설명", "").strip().upper()
             if specific_type in mbti_descriptions:
                 result = f"### 🎭 {specific_type} 한 줄 설명\n- ✅ **{specific_type}** {mbti_descriptions[specific_type]}"
             else:
                 result = mbti_full_description
         elif query_type == "multi_iq":
-            result = "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n" \
-                     "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
+            result = (
+                "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
+                "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
+                "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
+            )
         elif query_type == "multi_iq_types":
-            specific_type = normalized_query.replace("다중지능", "").replace("multi_iq", "").replace("유형", "").replace("설명", "").strip().replace(" ", "")
+            specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("유형", "").replace("설명", "").strip().replace(" ", "")
             if specific_type in multi_iq_descriptions:
                 result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 한 줄 설명\n- 📖 **{specific_type.replace('지능', ' 지능')}** {multi_iq_descriptions[specific_type]['description']}"
             else:
                 result = multi_iq_full_description
         elif query_type == "multi_iq_jobs":
-            specific_type = normalized_query.replace("다중지능", "").replace("multi_iq", "").replace("직업", "").replace("추천", "").strip().replace(" ", "")
+            specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("직업", "").replace("추천", "").strip().replace(" ", "")
             if specific_type in multi_iq_descriptions:
                 result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 추천 직업\n- 📖 **{specific_type.replace('지능', ' 지능')}**: {multi_iq_descriptions[specific_type]['description']}- **추천 직업**: {multi_iq_descriptions[specific_type]['jobs']}"
             else:
                 result = multi_iq_full_description
         elif query_type == "conversation":
-            if any(t in GREETINGS for t in tokens):
+            if query_lower in GREETINGS:
                 result = GREETING_RESPONSE
+            elif "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
+                result = get_kst_time()
             else:
-                result = asyncio.run(get_conversational_response(normalized_query, st.session_state.chat_history))
+                result = asyncio.run(get_conversational_response(query, st.session_state.chat_history))
         else:
             result = "아직 지원하지 않는 기능이에요. 😅"
-    
-    cache_handler.setex(cache_key, 600, result)
-    update_tokenizer(st.session_state.chat_history)
-    return result
+        
+        cache_handler.setex(cache_key, 600, result)
+        return result
 
-# UI
 def show_chat_dashboard():
     st.title("AI 챗봇 🤖")
     
@@ -904,7 +908,6 @@ def show_login_page():
 
 def main():
     init_session_state()
-    update_tokenizer(st.session_state.chat_history)
     if not st.session_state.is_logged_in:
         show_login_page()
     else:
