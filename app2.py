@@ -676,7 +676,7 @@ async def get_conversational_response(query, chat_history):
     loop = asyncio.get_event_loop()
     try:
         response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
-            model="gpt-4o", messages=messages))
+            model="gpt-4o-mini", messages=messages))
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
     except (IndexError, Exception) as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
