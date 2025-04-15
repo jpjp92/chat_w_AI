@@ -13,8 +13,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from googlesearch import search
 from g4f.client import Client
-from g4f.Provider import DeepInfraChat
-from g4f.Provider import PollinationsAI
+
 from timezonefinder import TimezoneFinder
 import re
 import json
