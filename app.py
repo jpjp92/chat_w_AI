@@ -381,7 +381,7 @@ class FootballAPI:
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs", "Blackbox"])  # 문제 제공자 제외
+client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "ChatGptEs", "Blackbox"])  # 문제 제공자 제외
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -676,7 +676,7 @@ async def get_conversational_response(query, chat_history):
     loop = asyncio.get_event_loop()
     try:
         response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
-            model="gpt-4o-mini", messages=messages))
+            model="gpt-4o", messages=messages))
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
     except (IndexError, Exception) as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
