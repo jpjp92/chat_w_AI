@@ -1,6 +1,6 @@
 supabase
 streamlit
-g4f==0.5.0.3
+g4f 0.5.0.2
 pytz
 requests
 beautifulsoup4
