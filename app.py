@@ -381,7 +381,7 @@ class FootballAPI:
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "ChatGptEs", "Blackbox"])  # 문제 제공자 제외
+client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "ChatGptEs"])  # 문제 제공자 제외
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
