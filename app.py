@@ -1,5 +1,3 @@
-
-
 # 환경 변수 및 설정
 from config.imports import *
 from config.env import *
@@ -394,7 +392,7 @@ def init_session_state():
     if "user_id" not in st.session_state:
         st.session_state.user_id = None
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 😊"}]
+        st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 도움말도 활용해 보세요 😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
 
