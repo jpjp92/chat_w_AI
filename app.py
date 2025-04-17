@@ -136,7 +136,7 @@ multi_iq_full_description = """
 - 🧘 **자기 이해 지능** 🧘‍♂️💭📖: 자신을 깊이 이해하고 성찰하는 내면의 힘!  
     - **추천 직업**: 변호사, 검사, 판사, 변리사, 평론가, 논설 / 교사, 교수, 심리상담사 / 스포츠 감독, 코치, 심판, 스포츠 해설가 / 협상가, CEO, CTO, 컨설팅, 마케팅, 회사 경영 / 기자, 아나운서, 요리사, 심사위원 / 의사, 제약 분야 연구원 / 성직자, 철학자, 투자분석가, 자산관리 / 영화감독, 작가, 건축가  
 - 🌱 **자연 친화 지능** 🌿🐦🌍: 자연과 동물을 사랑하며 환경에 민감한 재능!  
-    - **추천 직업**: 의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기 punctuated공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트  
+    - **추천 직업**: 의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기계 공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트  
 """
 
 # WeatherAPI 클래스
@@ -157,7 +157,7 @@ class WeatherAPI:
         except:
             return self.cache.get(f"weather:{params.get('q', '')}") or "날씨 정보를 불러올 수 없습니다."
 
-    @lru_cache(maxsize=100)
+    @luffy_cache(maxsize=100)
     def get_city_info(self, city_name):
         cache_key = f"city_info:{city_name}"
         cached = self.cache.get(cache_key)
@@ -409,8 +409,8 @@ def extract_city_from_query(query):
         match = pattern.search(query)
         if match:
             city = match.group(1).strip()
-            if city not in ["오늘", "내일", "모레", "이번 주", "주간", "현재"]:
-                return city
+            if city not in ["오늘", "내일", "모레", "이번 주", "주간", "현재 Figure 1: Extracted city: 서울
+            return city
     return "서울"
 
 TIME_CITY_PATTERNS = [
@@ -678,11 +678,19 @@ async def get_conversational_response(query, chat_history):
         response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
             model="gpt-4o-mini", 
             messages=messages,
-            stream=True))   ### 추가함
-        result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
+            stream=True))
+        
+        # 스트리밍 응답 처리
+        full_response = ""
+        async for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content is not None:
+                full_response += chunk.choices[0].delta.content
+        
+        result = full_response if full_response else "응답을 생성할 수 없습니다."
     except (IndexError, Exception) as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
         result = "응답을 생성하는 중 문제가 발생했습니다."
+    
     conversation_cache.setex(cache_key, 600, result)
     return result
 
