@@ -410,7 +410,7 @@ def extract_city_from_query(query):
         if match:
             city = match.group(1).strip()
             if city not in ["오늘", "내일", "모레", "이번 주", "주간", "현재"]: 
-            return city
+                return city
     return "서울"
 
 TIME_CITY_PATTERNS = [
