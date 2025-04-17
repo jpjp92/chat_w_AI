@@ -684,7 +684,7 @@ async def get_conversational_response(query, messages):
             messages=conversation_history,
             web_search=False,
             stream=True,
-            timeout=10  # 타임아웃 설정 추가
+            timeout=10
         )
         return response, True
     except Exception as e:
@@ -727,7 +727,7 @@ def needs_search(query):
         return "conversation"
     return "conversation"
 
-def process_query(query, messages):
+async def process_query(query, messages):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
     if cached is not None:
@@ -863,11 +863,11 @@ def process_query(query, messages):
                 return result, False
             else:
                 try:
-                    response, is_stream = asyncio.run(get_conversational_response(query, messages))
+                    response, is_stream = await get_conversational_response(query, messages)
                     if is_stream:
                         chatbot_response = ""
                         try:
-                            for chunk in response:
+                            async for chunk in response:
                                 if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
                                     content = chunk.choices[0].delta.content
                                     if content is not None:
@@ -882,10 +882,6 @@ def process_query(query, messages):
                         except Exception as e:
                             logger.error(f"Streaming response error for query: {query}: {str(e)}")
                             return f"스트리밍 응답 처리 중 오류: {str(e)} 😓", False
-                        finally:
-                            # Ensure async generator is properly closed
-                            if hasattr(response, '__aexit__'):
-                                await response.__aexit__(None, None, None)
                     else:
                         cache_handler.setex(cache_key, 600, response)
                         return response, is_stream
@@ -935,37 +931,17 @@ def show_chat_dashboard():
             placeholder.markdown("응답을 준비 중이에요.. ⏳")
             try:
                 start_time = time.time()
-                response, is_stream = process_query(user_prompt, st.session_state.messages)
+                # 비동기 함수 실행
+                response, is_stream = asyncio.run(process_query(user_prompt, st.session_state.messages))
                 time_taken = round(time.time() - start_time, 2)
                 
                 placeholder.empty()
                 if is_stream:
-                    chatbot_response = ""
+                    chatbot_response = response
                     message_placeholder = st.empty()
-                    try:
-                        for chunk in response:
-                            if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
-                                content = chunk.choices[0].delta.content
-                                if content is not None:
-                                    chatbot_response += content
-                                    message_placeholder.markdown(chatbot_response + "▌")
-                            else:
-                                logger.warning(f"예상치 못한 청크 구조: {chunk}")
-                        message_placeholder.markdown(chatbot_response)
-                        st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
-                        async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, chatbot_response, time_taken)
-                    except asyncio.CancelledError:
-                        logger.error(f"Streaming display cancelled for query: {user_prompt}")
-                        message_placeholder.markdown("응답이 취소되었습니다. 다시 시도해주세요. 😓")
-                        st.session_state.messages.append({"role": "assistant", "content": "응답이 취소되었습니다. 😓"})
-                    except Exception as e:
-                        logger.error(f"Streaming display error for query: {user_prompt}: {str(e)}")
-                        message_placeholder.markdown(f"응답 표시 중 오류: {str(e)} 😓")
-                        st.session_state.messages.append({"role": "assistant", "content": f"응답 표시 중 오류: {str(e)} 😓"})
-                    finally:
-                        # Ensure async generator is properly closed
-                        if hasattr(response, '__aexit__'):
-                            await response.__aexit__(None, None, None)
+                    message_placeholder.markdown(chatbot_response)
+                    st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
+                    async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, chatbot_response, time_taken)
                 else:
                     if isinstance(response, dict) and "table" in response:
                         st.markdown(f"### {response['header']}")
@@ -1011,7 +987,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 # # 환경 변수 및 설정
 # from config.imports import *
