@@ -13,7 +13,6 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from googlesearch import search
 from g4f.client import Client
-
 from timezonefinder import TimezoneFinder
 import re
 import json
@@ -31,6 +30,6 @@ from diskcache import Cache
 from functools import lru_cache
 import xml.etree.ElementTree as ET
 import asyncio
-from soynlp.word import WordExtractor
-from soynlp.tokenizer import LTokenizer
-from soynlp.normalizer import repeat_normalize
+# from soynlp.word import WordExtractor
+# from soynlp.tokenizer import LTokenizer
+# from soynlp.normalizer import repeat_normalize
