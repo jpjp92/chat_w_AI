@@ -18,6 +18,7 @@ import re
 import json
 import urllib.request
 import urllib.parse
+from urllib3.util.retry import Retry
 from langdetect import detect
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
