@@ -1,3 +1,4 @@
+
 # 라이브러리 설정
 from config.imports import *
 from config.env import *
@@ -157,7 +158,7 @@ class WeatherAPI:
         except:
             return self.cache.get(f"weather:{params.get('q', '')}") or "날씨 정보를 불러올 수 없습니다."
 
-    @luffy_cache(maxsize=100)
+    @lru_cache(maxsize=100)
     def get_city_info(self, city_name):
         cache_key = f"city_info:{city_name}"
         cached = self.cache.get(cache_key)
@@ -409,7 +410,7 @@ def extract_city_from_query(query):
         match = pattern.search(query)
         if match:
             city = match.group(1).strip()
-            if city not in ["오늘", "내일", "모레", "이번 주", "주간", "현재"]: 
+            if city not in ["오늘", "내일", "모레", "이번 주", "주간", "현재"]:
                 return city
     return "서울"
 
@@ -504,7 +505,7 @@ def get_drug_info(drug_query):
         return cached
     
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
-    params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'json'}
+    params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'borrow'}
     try:
         response = requests.get(url, params=params, timeout=3)
         response.raise_for_status()
