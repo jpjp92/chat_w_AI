@@ -687,6 +687,8 @@ def get_pubmed_papers(query, max_results=5):
 
 # 대화형 응답 (스트리밍 지원)
 conversation_cache = MemoryCache()
+# 대화형 응답 (스트리밍 지원)
+conversation_cache = MemoryCache()
 async def get_conversational_response(query, chat_history):
     cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
@@ -703,12 +705,21 @@ async def get_conversational_response(query, chat_history):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
-            stream=True  # 스트리밍 활성화
+            stream=True
         )
-        return response  # 스트리밍 객체 반환
+        # 스트리밍 응답을 문자열로 수집
+        full_response = ""
+        for chunk in response:
+            if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+                content = chunk.choices[0].delta.content
+                if content is not None:
+                    full_response += content
+        # 캐싱 가능한 문자열 반환
+        conversation_cache.setex(cache_key, 600, full_response)
+        return full_response
     except Exception as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
-        return [f"응답을 생성하는 중 문제가 발생했습니다: {str(e)} 😓"]
+        return f"응답을 생성하는 중 문제가 발생했습니다: {str(e)} 😓"
 
 GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
 GREETING_RESPONSE = ["안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"]
@@ -854,6 +865,7 @@ def process_query(query):
                 result = get_kst_time()
             else:
                 result = asyncio.run(get_conversational_response(query, st.session_state.chat_history))
+                # 스트리밍 응답은 이미 문자열로 변환됨
         else:
             result = ["아직 지원하지 않는 기능이에요. 😅"]
         
@@ -906,25 +918,21 @@ def show_chat_dashboard():
                     st.dataframe(response['table'], use_container_width=True, hide_index=True)
                     st.markdown(response['footer'])
                     chatbot_response = response
-                elif isinstance(response, list):  # 청크 기반 응답 (검색, 정적 데이터 등)
+                elif isinstance(response, list):  # 청크 기반 응답
                     for chunk in response:
                         chatbot_response += chunk
                         placeholder.markdown(chatbot_response + "▌")
-                        time.sleep(0.1)  # 자연스러운 스트리밍 효과
+                        time.sleep(0.1)
                     placeholder.markdown(chatbot_response)
-                elif needs_search(user_prompt) == "conversation" and not isinstance(response, str):  # 스트리밍 대화 응답
-                    for chunk in response:
-                        if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
-                            content = chunk.choices[0].delta.content
-                            if content is not None:
-                                chatbot_response += content
-                                placeholder.markdown(chatbot_response + "▌")
-                        else:
-                            logger.warning(f"예상치 못한 청크 구조: {chunk}")
-                    placeholder.markdown(chatbot_response)
-                else:  # 에러 메시지 등
+                else:  # 대화형 응답 (문자열)
                     chatbot_response = response
-                    st.markdown(response, unsafe_allow_html=True)
+                    # 대화형 응답을 청크로 나누어 표시
+                    chunks = split_text_to_chunks(response)
+                    for chunk in chunks:
+                        chatbot_response += chunk
+                        placeholder.markdown(chatbot_response + "▌")
+                        time.sleep(0.1)
+                    placeholder.markdown(chatbot_response)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": chatbot_response})
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, chatbot_response, time_taken)
