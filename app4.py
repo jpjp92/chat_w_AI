@@ -1,7 +1,7 @@
 import streamlit as st
 from g4f.client import Client
 
-st.title("스트리밍 챗봇")
+st.title("Chatbot")
 
 client = Client()
 
