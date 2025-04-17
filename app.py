@@ -1,4 +1,3 @@
-
 # 라이브러리 설정
 from config.imports import *
 from config.env import *
@@ -137,7 +136,7 @@ multi_iq_full_description = """
 - 🧘 **자기 이해 지능** 🧘‍♂️💭📖: 자신을 깊이 이해하고 성찰하는 내면의 힘!  
     - **추천 직업**: 변호사, 검사, 판사, 변리사, 평론가, 논설 / 교사, 교수, 심리상담사 / 스포츠 감독, 코치, 심판, 스포츠 해설가 / 협상가, CEO, CTO, 컨설팅, 마케팅, 회사 경영 / 기자, 아나운서, 요리사, 심사위원 / 의사, 제약 분야 연구원 / 성직자, 철학자, 투자분석가, 자산관리 / 영화감독, 작가, 건축가  
 - 🌱 **자연 친화 지능** 🌿🐦🌍: 자연과 동물을 사랑하며 환경에 민감한 재능!  
-    - **추천 직업**: 의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기계 공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트  
+    - **추천 직업**: 의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기 punctuated공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트  
 """
 
 # WeatherAPI 클래스
@@ -382,7 +381,7 @@ class FootballAPI:
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "ChatGptEs"])  # 문제 제공자 제외
+client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])  # 문제 제공자 제외
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -505,7 +504,7 @@ def get_drug_info(drug_query):
         return cached
     
     url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
-    params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'borrow'}
+    params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'json'}
     try:
         response = requests.get(url, params=params, timeout=3)
         response.raise_for_status()
@@ -677,21 +676,11 @@ async def get_conversational_response(query, chat_history):
     loop = asyncio.get_event_loop()
     try:
         response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
-            model="gpt-4o-mini", 
-            messages=messages,
-            stream=True))
-        
-        # 스트리밍 응답 처리
-        full_response = ""
-        async for chunk in response:
-            if chunk.choices and chunk.choices[0].delta.content is not None:
-                full_response += chunk.choices[0].delta.content
-        
-        result = full_response if full_response else "응답을 생성할 수 없습니다."
+            model="gpt-4o-mini", messages=messages))
+        result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
     except (IndexError, Exception) as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
         result = "응답을 생성하는 중 문제가 발생했습니다."
-    
     conversation_cache.setex(cache_key, 600, result)
     return result
 
