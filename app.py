@@ -472,24 +472,42 @@ def create_or_get_user(nickname):
     new_user = supabase.table("users").insert({"nickname": nickname, "created_at": datetime.now().isoformat()}).execute()
     return new_user.data[0]["id"], False
 
+
 def save_chat_history(user_id, session_id, question, answer, time_taken):
-    if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-        answer_to_save = {
-            "header": answer["header"],
-            "table": answer["table"].to_dict(orient="records"),
-            "footer": answer["footer"]
-        }
-    else:
-        answer_to_save = answer
-    
+    # generator이면 content를 병합해서 문자열로 변환
+    if hasattr(answer, '__iter__') and not isinstance(answer, (str, dict, list)):
+        try:
+            answer = ''.join([chunk.choices[0].delta.content for chunk in answer if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content])
+        except Exception as e:
+            answer = f"[streaming 응답 오류: {str(e)}]"
+
     supabase.table("chat_history").insert({
         "user_id": user_id,
         "session_id": session_id,
         "question": question,
-        "answer": answer_to_save,
+        "answer": answer,
         "time_taken": time_taken,
         "created_at": datetime.now().isoformat()
     }).execute()
+
+# def save_chat_history(user_id, session_id, question, answer, time_taken):
+#     if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
+#         answer_to_save = {
+#             "header": answer["header"],
+#             "table": answer["table"].to_dict(orient="records"),
+#             "footer": answer["footer"]
+#         }
+#     else:
+#         answer_to_save = answer
+    
+#     supabase.table("chat_history").insert({
+#         "user_id": user_id,
+#         "session_id": session_id,
+#         "question": question,
+#         "answer": answer_to_save,
+#         "time_taken": time_taken,
+#         "created_at": datetime.now().isoformat()
+#     }).execute()
 
 def async_save_chat_history(user_id, session_id, question, answer, time_taken):
     threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
