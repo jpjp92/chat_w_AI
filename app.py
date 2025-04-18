@@ -1663,54 +1663,22 @@ async def get_conversational_response(query, messages):
     cached = conversation_cache.get(cache_key)
     if cached:
         return cached, False
-
+    
     system_message = {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
     conversation_history = [system_message] + messages[-2:] + [{"role": "user", "content": query}]
-
+    
     try:
-        # 비동기 스트림 생성기
-        response_stream = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=conversation_history,
-            web_search=False,
-            stream=True
-        )
-
-        # 내부 async generator 래핑
-        async def stream_response():
-            try:
-                async for chunk in response_stream:
-                    yield chunk
-            finally:
-                await response_stream.aclose()
-
-        return stream_response(), True
-
+        async with aiohttp.ClientSession() as session:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=conversation_history,
+                web_search=False,
+                stream=True
+            )
+            return response, True
     except Exception as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
         return f"응답을 생성하는 중 문제가 발생했습니다: {str(e)} 😓", False
-
-# async def get_conversational_response(query, messages):
-#     cache_key = f"conv:{needs_search(query)}:{query}"
-#     cached = conversation_cache.get(cache_key)
-#     if cached:
-#         return cached, False
-    
-#     system_message = {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
-#     conversation_history = [system_message] + messages[-2:] + [{"role": "user", "content": query}]
-    
-#     try:
-#         async with aiohttp.ClientSession() as session:
-#             response = client.chat.completions.create(
-#                 model="gpt-4o-mini",
-#                 messages=conversation_history,
-#                 web_search=False,
-#                 stream=True
-#             )
-#             return response, True
-#     except Exception as e:
-#         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
-#         return f"응답을 생성하는 중 문제가 발생했습니다: {str(e)} 😓", False
 
 GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
 GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
