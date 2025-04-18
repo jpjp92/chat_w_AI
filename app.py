@@ -1663,22 +1663,54 @@ async def get_conversational_response(query, messages):
     cached = conversation_cache.get(cache_key)
     if cached:
         return cached, False
-    
+
     system_message = {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
     conversation_history = [system_message] + messages[-2:] + [{"role": "user", "content": query}]
-    
+
     try:
-        async with aiohttp.ClientSession() as session:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=conversation_history,
-                web_search=False,
-                stream=True
-            )
-            return response, True
+        # 비동기 스트림 생성기
+        response_stream = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=conversation_history,
+            web_search=False,
+            stream=True
+        )
+
+        # 내부 async generator 래핑
+        async def stream_response():
+            try:
+                async for chunk in response_stream:
+                    yield chunk
+            finally:
+                await response_stream.aclose()
+
+        return stream_response(), True
+
     except Exception as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
         return f"응답을 생성하는 중 문제가 발생했습니다: {str(e)} 😓", False
+
+# async def get_conversational_response(query, messages):
+#     cache_key = f"conv:{needs_search(query)}:{query}"
+#     cached = conversation_cache.get(cache_key)
+#     if cached:
+#         return cached, False
+    
+#     system_message = {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
+#     conversation_history = [system_message] + messages[-2:] + [{"role": "user", "content": query}]
+    
+#     try:
+#         async with aiohttp.ClientSession() as session:
+#             response = client.chat.completions.create(
+#                 model="gpt-4o-mini",
+#                 messages=conversation_history,
+#                 web_search=False,
+#                 stream=True
+#             )
+#             return response, True
+#     except Exception as e:
+#         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
+#         return f"응답을 생성하는 중 문제가 발생했습니다: {str(e)} 😓", False
 
 GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
 GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
@@ -1895,36 +1927,73 @@ def show_chat_dashboard():
                     start_time = time.time()
                     response, is_stream = asyncio.run(process_query(user_prompt, st.session_state.messages))
                     time_taken = round(time.time() - start_time, 2)
-                    
+
                     if is_stream:
                         chatbot_response = ""
                         message_placeholder = st.empty()
-                        for chunk in response:
-                            if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
-                                content = chunk.choices[0].delta.content
-                                if content is not None:
-                                    chatbot_response += content
-                                    message_placeholder.markdown(chatbot_response + "▌")
-                            else:
-                                logger.warning(f"예상치 못한 청크 구조: {chunk}")
-                        message_placeholder.markdown(chatbot_response)
-                        st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
-                    else:
-                        if isinstance(response, dict) and "table" in response:
-                            st.markdown(f"### {response['header']}")
-                            st.dataframe(response['table'], use_container_width=True, hide_index=True)
-                            st.markdown(response['footer'])
-                        else:
-                            st.markdown(response, unsafe_allow_html=True)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
                     
-                    async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
+                        try:
+                            async def handle_stream():
+                                nonlocal chatbot_response
+                                async for chunk in response:
+                                    if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                                        delta = chunk.choices[0].delta
+                                        if hasattr(delta, 'content') and delta.content:
+                                            chatbot_response += delta.content
+                                            message_placeholder.markdown(chatbot_response + "▌")
+                                    else:
+                                        logger.warning(f"예상치 못한 청크 구조: {chunk}")
+                                message_placeholder.markdown(chatbot_response)
+                    
+                            # 현재 streamlit 내부에서는 asyncio.run 사용이 제한됨
+                            asyncio.run(handle_stream())
+                    
+                            # ✅ stream 처리 완료 후 저장
+                            st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
+                            async_save_chat_history(
+                                st.session_state.user_id,
+                                st.session_state.session_id,
+                                user_prompt,
+                                chatbot_response,
+                                time_taken
+                            )
+                    
+                        except Exception as e:
+                            error_msg = f"스트리밍 중 문제가 발생했습니다: {str(e)} 😓"
+                            logger.error(error_msg, exc_info=True)
+                            st.markdown(error_msg, unsafe_allow_html=True)
+                            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+                    
+                #     if is_stream:
+                #         chatbot_response = ""
+                #         message_placeholder = st.empty()
+                #         for chunk in response:
+                #             if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+                #                 content = chunk.choices[0].delta.content
+                #                 if content is not None:
+                #                     chatbot_response += content
+                #                     message_placeholder.markdown(chatbot_response + "▌")
+                #             else:
+                #                 logger.warning(f"예상치 못한 청크 구조: {chunk}")
+                #         message_placeholder.markdown(chatbot_response)
+                #         st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
+                #     else:
+                #         if isinstance(response, dict) and "table" in response:
+                #             st.markdown(f"### {response['header']}")
+                #             st.dataframe(response['table'], use_container_width=True, hide_index=True)
+                #             st.markdown(response['footer'])
+                #         else:
+                #             st.markdown(response, unsafe_allow_html=True)
+                #         st.session_state.messages.append({"role": "assistant", "content": response})
+                    
+                #     async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
                 
-                except Exception as e:
-                    error_msg = f"응답을 준비하다 문제가 생겼어요: {str(e)} 😓"
-                    logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
-                    st.markdown(error_msg, unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                # except Exception as e:
+                #     error_msg = f"응답을 준비하다 문제가 생겼어요: {str(e)} 😓"
+                #     logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
+                #     st.markdown(error_msg, unsafe_allow_html=True)
+                #     st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
 def show_login_page():
     st.title("로그인 🤗")
