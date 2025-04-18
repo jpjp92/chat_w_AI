@@ -876,7 +876,7 @@ def process_query(query, messages):
             return result, False
 
 def show_chat_dashboard():
-    st.title("GPT4 🤖")
+    st.title("Chat with AI 🤖")
     
     if st.button("도움말 ℹ️"):
         st.info(
