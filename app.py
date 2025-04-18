@@ -878,6 +878,7 @@ def process_query(query, messages):
 def show_chat_dashboard():
     st.title("Chat with AI 🤖")
     
+    # 도움말 버튼
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n"
@@ -894,6 +895,7 @@ def show_chat_dashboard():
             "궁금한 점 있으면 질문해주세요! 😊"
         )
     
+    # 최근 메시지 표시
     for msg in st.session_state.messages[-10:]:
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
@@ -903,52 +905,55 @@ def show_chat_dashboard():
             else:
                 st.markdown(msg['content'], unsafe_allow_html=True)
     
+    # 사용자 입력 처리
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.session_state.messages.append({"role": "user", "content": user_prompt})
+        
         with st.chat_message("user"):
             st.markdown(user_prompt)
         
         with st.chat_message("assistant"):
-            placeholder = st.empty()
-            placeholder.markdown("응답을 준비 중이에요.. ⏳")
-            try:
-                start_time = time.time()
-                response, is_stream = process_query(user_prompt, st.session_state.messages)
-                time_taken = round(time.time() - start_time, 2)
-                
-                placeholder.empty()
-                if is_stream:
-                    chatbot_response = ""
-                    cache_key = f"query:{hash(user_prompt)}"
-                    message_placeholder = st.empty()
-                    for chunk in response:
-                        if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
-                            content = chunk.choices[0].delta.content
-                            if content is not None:
-                                chatbot_response += content
-                                message_placeholder.markdown(chatbot_response + "▌")
-                        else:
-                            logger.warning(f"예상치 못한 청크 구조: {chunk}")
-                    message_placeholder.markdown(chatbot_response)
-                    cache_handler.setex(cache_key, 600, chatbot_response)
-                    st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
-                else:
-                    if isinstance(response, dict) and "table" in response:
-                        st.markdown(f"### {response['header']}")
-                        st.dataframe(response['table'], use_container_width=True, hide_index=True)
-                        st.markdown(response['footer'])
+            # Spinner 적용
+            with st.spinner("응답을 준비 중입니다... ⏳"):
+                try:
+                    start_time = time.time()
+                    response, is_stream = process_query(user_prompt, st.session_state.messages)
+                    time_taken = round(time.time() - start_time, 2)
+                    
+                    # 스트리밍 응답 처리
+                    if is_stream:
+                        chatbot_response = ""
+                        message_placeholder = st.empty()
+                        for chunk in response:
+                            if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+                                content = chunk.choices[0].delta.content
+                                if content is not None:
+                                    chatbot_response += content
+                                    message_placeholder.markdown(chatbot_response + "▌")
+                            else:
+                                logger.warning(f"예상치 못한 청크 구조: {chunk}")
+                        message_placeholder.markdown(chatbot_response)
+                        st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
                     else:
-                        st.markdown(response, unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                        # 정적 응답 처리
+                        if isinstance(response, dict) and "table" in response:
+                            st.markdown(f"### {response['header']}")
+                            st.dataframe(response['table'], use_container_width=True, hide_index=True)
+                            st.markdown(response['footer'])
+                        else:
+                            st.markdown(response, unsafe_allow_html=True)
+                        st.session_state.messages.append({"role": "assistant", "content": response})
+                    
+                    # 대화 기록 비동기 저장
+                    async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
                 
-                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
-            
-            except Exception as e:
-                placeholder.empty()
-                error_msg = f"응답을 준비하다 문제가 생겼어요: {str(e)} 😓"
-                logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
-                st.markdown(error_msg, unsafe_allow_html=True)
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                except Exception as e:
+                    error_msg = f"응답을 준비하다 문제가 생겼어요: {str(e)} 😓"
+                    logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
+                    st.markdown(error_msg, unsafe_allow_html=True)
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+
 
 def show_login_page():
     st.title("로그인 🤗")
