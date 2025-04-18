@@ -1895,13 +1895,16 @@ def show_chat_dashboard():
             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n"
             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
             "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 부산 시간, 금일 날짜)\n"
-            "3. **리그순위** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위'\n"
+            "3. **리그순위** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위)\n"
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 타이레놀)\n"
-            "5. **공학논문** 📚: '공학논문 키워드', 6. **의학논문** 🩺: '의학논문 키워드'\n"
-            "7. **검색** 🌐, 8. **MBTI**, 9. **다중지능** 🎉\n\n"
+            "5. **공학논문** 📚: '공학논문 [키워드]'\n"
+            "6. **의학논문** 🩺: '의학논문 [키워드]'\n"
+            "7. **검색** 🌐: '검색 키워드'\n"
+            "8. **MBTI** ✨ 또는 **다중지능** 🎉\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
         )
 
+    # 최근 대화 표시
     for msg in st.session_state.messages[-10:]:
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
@@ -1911,6 +1914,7 @@ def show_chat_dashboard():
             else:
                 st.markdown(msg['content'], unsafe_allow_html=True)
 
+    # 사용자 입력 처리
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.session_state.messages.append({"role": "user", "content": user_prompt})
         
@@ -1919,57 +1923,67 @@ def show_chat_dashboard():
         
         with st.chat_message("assistant"):
             with st.spinner("응답을 준비 중입니다... ⏳"):
-                start_time = time.time()
-                response, is_stream = asyncio.run(process_query(user_prompt, st.session_state.messages))
-                time_taken = round(time.time() - start_time, 2)
+                try:
+                    start_time = time.time()
+                    response, is_stream = asyncio.run(process_query(user_prompt, st.session_state.messages))
+                    time_taken = round(time.time() - start_time, 2)
 
-                if is_stream:
-                    chatbot_response = ""
-                    message_placeholder = st.empty()
+                    if is_stream:
+                        # 일반 generator 처리
+                        chatbot_response = ""
+                        message_placeholder = st.empty()
 
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-
-                    async def collect_stream():
-                        nonlocal chatbot_response
                         try:
-                            async for chunk in response:
-                                if hasattr(chunk, 'choices') and chunk.choices[0].delta.content:
-                                    content = chunk.choices[0].delta.content
-                                    chatbot_response += content
-                                    message_placeholder.markdown(chatbot_response + "▌")
+                            for chunk in response:
+                                if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                                    delta = chunk.choices[0].delta
+                                    if hasattr(delta, 'content') and delta.content:
+                                        chatbot_response += delta.content
+                                        message_placeholder.markdown(chatbot_response + "▌")
+                                else:
+                                    logger.warning(f"예상치 못한 청크 구조: {chunk}")
+
+                            message_placeholder.markdown(chatbot_response)
                         except Exception as e:
-                            logger.error(f"스트리밍 중 예외 발생: {e}", exc_info=True)
-                            return f"⚠️ 오류 발생: {str(e)}"
-                        return chatbot_response
+                            error_msg = f"스트리밍 중 예외 발생: {str(e)} 😓"
+                            logger.error(error_msg, exc_info=True)
+                            st.markdown(error_msg, unsafe_allow_html=True)
+                            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                            return
 
-                    chatbot_response = loop.run_until_complete(collect_stream())
-                    loop.close()
-
-                    message_placeholder.markdown(chatbot_response)
-                    st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
-                    async_save_chat_history(
-                        st.session_state.user_id,
-                        st.session_state.session_id,
-                        user_prompt,
-                        chatbot_response,
-                        time_taken
-                    )
-                else:
-                    if isinstance(response, dict) and "table" in response:
-                        st.markdown(f"### {response['header']}")
-                        st.dataframe(response['table'], use_container_width=True, hide_index=True)
-                        st.markdown(response['footer'])
+                        # ✅ 정상 응답 저장
+                        st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
+                        async_save_chat_history(
+                            st.session_state.user_id,
+                            st.session_state.session_id,
+                            user_prompt,
+                            chatbot_response,
+                            time_taken
+                        )
                     else:
-                        st.markdown(response, unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    async_save_chat_history(
-                        st.session_state.user_id,
-                        st.session_state.session_id,
-                        user_prompt,
-                        response,
-                        time_taken
-                    )
+                        # 일반 응답
+                        if isinstance(response, dict) and "table" in response:
+                            st.markdown(f"### {response['header']}")
+                            st.dataframe(response['table'], use_container_width=True, hide_index=True)
+                            st.markdown(response['footer'])
+                        else:
+                            st.markdown(response, unsafe_allow_html=True)
+
+                        st.session_state.messages.append({"role": "assistant", "content": response})
+                        async_save_chat_history(
+                            st.session_state.user_id,
+                            st.session_state.session_id,
+                            user_prompt,
+                            response,
+                            time_taken
+                        )
+
+                except Exception as e:
+                    error_msg = f"응답 생성 중 오류 발생: {str(e)} 😓"
+                    logger.error(error_msg, exc_info=True)
+                    st.markdown(error_msg, unsafe_allow_html=True)
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
 
 # def show_chat_dashboard():
 #     st.title("Chat with AI 🤖")
