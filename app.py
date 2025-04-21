@@ -1,3 +1,4 @@
+```python
 import logging
 import os
 import time
@@ -891,6 +892,18 @@ async def process_query(query, messages):
         cache_handler.setex(cache_key, 600, result)
         return result, False
 
+async def handle_streaming_response(response, message_placeholder):
+    chatbot_response = ""
+    async for chunk in response:
+        if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+            content = chunk.choices[0].delta.content
+            if content is not None:
+                chatbot_response += content
+                message_placeholder.markdown(chatbot_response + "▌")
+        else:
+            logger.warning(f"예상치 못한 청크 구조: {chunk}")
+    return chatbot_response
+
 def show_chat_dashboard():
     st.title("Chat with AI 🤖")
     
@@ -936,16 +949,11 @@ def show_chat_dashboard():
                     time_taken = round(time.time() - start_time, 2)
                     
                     if is_stream:
-                        chatbot_response = ""
                         message_placeholder = st.empty()
-                        async for chunk in response:
-                            if hasattr(chunk, 'choices') and len(chunk.choices) > 0 and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
-                                content = chunk.choices[0].delta.content
-                                if content is not None:
-                                    chatbot_response += content
-                                    message_placeholder.markdown(chatbot_response + "▌")
-                            else:
-                                logger.warning(f"예상치 못한 청크 구조: {chunk}")
+                        chatbot_response = asyncio.run_coroutine_threadsafe(
+                            handle_streaming_response(response, message_placeholder),
+                            asyncio.get_event_loop()
+                        ).result()
                         message_placeholder.markdown(chatbot_response)
                         st.session_state.messages.append({"role": "assistant", "content": chatbot_response})
                         async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, chatbot_response, time_taken)
