@@ -394,10 +394,20 @@ def init_session_state():
         st.session_state.is_logged_in = False
     if "user_id" not in st.session_state:
         st.session_state.user_id = None
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+    if "messages" not in st.session_state:
+        st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
+
+# def init_session_state():
+#     if "is_logged_in" not in st.session_state:
+#         st.session_state.is_logged_in = False
+#     if "user_id" not in st.session_state:
+#         st.session_state.user_id = None
+#     if "chat_history" not in st.session_state:
+#         st.session_state.chat_history = []
+#     if "session_id" not in st.session_state:
+#         st.session_state.session_id = str(uuid.uuid4())
 
 # 도시 및 시간 추출
 CITY_PATTERNS = [
