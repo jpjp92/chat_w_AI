@@ -831,7 +831,7 @@ def process_query(query):
         return result
 
 def show_chat_dashboard():
-    st.title("AI 챗봇 🤖")
+    st.title("Chat with AI🤖")
     
     if st.button("도움말 ℹ️"):
         st.info(
