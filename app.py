@@ -1948,14 +1948,17 @@ def show_login_page():
 
 # 리소스 정리
 def cleanup():
-    loop = asyncio.get_event_loop()
-    tasks = asyncio.all_tasks(loop=loop)
-    for task in tasks:
-        task.cancel()
-    loop.run_until_complete(loop.shutdown_asyncgens())
-    loop.close()
+    # 이벤트 루프 닫기 및 모든 작업 취소 제거
+    logger.info("리소스 정리 스킵: Streamlit Cloud 환경")
+# def cleanup():
+#     loop = asyncio.get_event_loop()
+#     tasks = asyncio.all_tasks(loop=loop)
+#     for task in tasks:
+#         task.cancel()
+#     loop.run_until_complete(loop.shutdown_asyncgens())
+#     loop.close()
 
-atexit.register(cleanup)
+# atexit.register(cleanup)
 
 def main():
     init_session_state()
