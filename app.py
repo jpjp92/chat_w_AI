@@ -1658,7 +1658,16 @@ async def get_pubmed_papers(query, max_results=5):
 
 # 대화형 응답 (스트리밍 적용)
 conversation_cache = MemoryCache()
+
 async def get_conversational_response(query, messages):
+    cache_key = f"conv:{needs_search(query)}:{query}"
+    cached = conversation_cache.get(cache_key)
+    if cached:
+        return cached, False
+    
+    system_message = {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
+    conversation_history = [system_message] + messages[-2:] + [{"role": "user", "content": query}]
+    
     try:
         async with aiohttp.ClientSession() as session:
             response = client.chat.completions.create(
@@ -1668,33 +1677,9 @@ async def get_conversational_response(query, messages):
                 stream=True
             )
             return response, True
-    except asyncio.CancelledError:
-        logger.warning("Task was canceled.")
-        raise
     except Exception as e:
-        logger.error(f"Error generating response: {str(e)}")
-        return f"Error occurred: {str(e)} 😓", False
-# async def get_conversational_response(query, messages):
-#     cache_key = f"conv:{needs_search(query)}:{query}"
-#     cached = conversation_cache.get(cache_key)
-#     if cached:
-#         return cached, False
-    
-#     system_message = {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
-#     conversation_history = [system_message] + messages[-2:] + [{"role": "user", "content": query}]
-    
-#     try:
-#         async with aiohttp.ClientSession() as session:
-#             response = client.chat.completions.create(
-#                 model="gpt-4o-mini",
-#                 messages=conversation_history,
-#                 web_search=False,
-#                 stream=True
-#             )
-#             return response, True
-#     except Exception as e:
-#         logger.error(f"대화 응답 생성 중 오류: {str(e)}")
-#         return f"응답을 생성하는 중 문제가 발생했습니다: {str(e)} 😓", False
+        logger.error(f"대화 응답 생성 중 오류: {str(e)}")
+        return f"응답을 생성하는 중 문제가 발생했습니다: {str(e)} 😓", False
 
 GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
 GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
@@ -1963,9 +1948,9 @@ def show_login_page():
                 st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
 # 리소스 정리
-def cleanup():
-    # 이벤트 루프 닫기 및 모든 작업 취소 제거
-    logger.info("리소스 정리 스킵: Streamlit Cloud 환경")
+# def cleanup():
+#     # 이벤트 루프 닫기 및 모든 작업 취소 제거
+#     logger.info("리소스 정리 스킵: Streamlit Cloud 환경")
 # def cleanup():
 #     loop = asyncio.get_event_loop()
 #     tasks = asyncio.all_tasks(loop=loop)
