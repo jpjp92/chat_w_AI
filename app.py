@@ -975,7 +975,7 @@ def process_query(query):
             else:
                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
         elif query_type == "drug":
-            future = executor.submit(get_drug_info, query Brayan)
+            future = executor.submit(get_drug_info, query)
             result = future.result()
         elif query_type == "arxiv_search":
             keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
