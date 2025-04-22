@@ -28,6 +28,21 @@ class MemoryCache:
 
 cache_handler = MemoryCache()
 
+# 날짜 일괄적 수정 
+def format_date(fordate):
+    if pubdate == 'No date':
+        return '날짜 없음'
+    try:
+        # PubMed의 fordate를 파싱 (예: "2025 Apr 21")
+        date_obj = datetime.strptime(fordate, '%Y %b %d')
+        # YYYY.MM.DD 형식으로 변환
+        return date_obj.strftime('%Y.%m.%d')
+    except ValueError:
+        # 파싱 실패 시 원본 반환 또는 기본값
+        return fordate
+
+
+
 # MBTI 유형별 설명 딕셔너리
 mbti_descriptions = {
     "ISTJ": "(현실주의자) 🏛️📚🧑‍⚖️: 원칙을 중시하며 꼼꼼한 계획으로 목표를 달성!",
@@ -665,7 +680,8 @@ def get_pubmed_papers(query, max_results=5):
         [f"**논문 {i}**\n\n"
          f"🆔 **PMID**: {pmid}\n\n"
          f"📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n"
-         f"📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n"
+         # f"📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n"
+         f"📅 **출판일**: {format_date(summaries['result'][pmid].get('pubdate', 'No date'))}\n\n"
          f"✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n"
          f"📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n"
          f"🔗 **논문 페이지**: https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
@@ -673,6 +689,7 @@ def get_pubmed_papers(query, max_results=5):
     ) + "\n\n더 궁금한 점 있나요? 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
+    
     # response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
     # response += "\n\n".join(
     #     [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
