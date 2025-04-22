@@ -751,8 +751,10 @@ def needs_search(query):
         return "mbti_types"
     
     # 다중지능 관련
-    if "다중지능 검사" in query_lower:
-        return "multi_iq"
+    if "다중지능검사" in query_lower:
+        return "multi_iq_test"  # 새로운 타입 추가
+    # if "다중지능 검사" in query_lower:
+    #     return "multi_iq"
     if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower:
         return "multi_iq_types"
     if "다중지능직업" in query_lower or "다중지능추천" in query_lower:
