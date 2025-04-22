@@ -911,12 +911,26 @@ def needs_search(query):
         return "mbti_types"
     
     # 다중지능 관련
-    if "다중지능" in query_lower or "다중지능검사" in query_lower or "다중지능 검사" in query.strip().lower():
-        return "multi_iq"
-    if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower:
+    # 다중지능 관련
+    # 더 구체적인 조건을 먼저 배치
+    if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower or \
+       "다중지능 유형 설명" in query.strip().lower() or "다중지능 유형" in query.strip().lower():
         return "multi_iq_types"
-    if "다중지능직업" in query_lower or "다중지능추천" in query_lower:
+    if "다중지능직업" in query_lower or "다중지능추천" in query_lower or \
+       "다중지능 직업" in query.strip().lower() or "다중지능 추천" in query.strip().lower():
         return "multi_iq_jobs"
+    if "다중지능검사" in query_lower or "다중지능 검사" in query.strip().lower():
+        return "multi_iq"
+    if "다중지능" in query_lower:
+        return "multi_iq_full"  # 다중지능 단독 입력 시 전체 설명 반환
+
+    
+    # if "다중지능" in query_lower or "다중지능검사" in query_lower or "다중지능 검사" in query.strip().lower():
+    #     return "multi_iq"
+    # if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower:
+    #     return "multi_iq_types"
+    # if "다중지능직업" in query_lower or "다중지능추천" in query_lower:
+    #     return "multi_iq_jobs"
     
     if any(greeting in query_lower for greeting in GREETINGS):
         return "conversation"
