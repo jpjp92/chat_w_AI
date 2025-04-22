@@ -660,14 +660,26 @@ def get_pubmed_papers(query, max_results=5):
     summaries = get_pubmed_summaries(pubmed_ids)
     abstracts_xml = get_pubmed_abstract(pubmed_ids)
     abstract_dict = parse_abstracts(abstracts_xml)
-    
-    response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
+    response = "🩺 **PubMed 논문 검색 결과** 🩺\n\n"
     response += "\n\n".join(
-        [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
+        [f"**논문 {i}**\n\n"
+         f"🆔 **PMID**: {pmid}\n\n"
+         f"📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n"
+         f"📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n"
+         f"✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n"
+         f"📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n"
+         f"🔗 **논문 페이지**: https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
          for i, pmid in enumerate(pubmed_ids, 1)]
     ) + "\n\n더 궁금한 점 있나요? 😊"
     cache_handler.setex(cache_key, 3600, response)
     return response
+    # response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
+    # response += "\n\n".join(
+    #     [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
+    #      for i, pmid in enumerate(pubmed_ids, 1)]
+    # ) + "\n\n더 궁금한 점 있나요? 😊"
+    # cache_handler.setex(cache_key, 3600, response)
+    # return response
 
 # 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
