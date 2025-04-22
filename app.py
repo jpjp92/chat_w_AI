@@ -41,8 +41,6 @@ def format_date(fordate):
         # 파싱 실패 시 원본 반환 또는 기본값
         return fordate
 
-
-
 # MBTI 유형별 설명 딕셔너리
 mbti_descriptions = {
     "ISTJ": "(현실주의자) 🏛️📚🧑‍⚖️: 원칙을 중시하며 꼼꼼한 계획으로 목표를 달성!",
