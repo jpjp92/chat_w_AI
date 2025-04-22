@@ -681,7 +681,7 @@ def get_pubmed_papers(query, max_results=5):
          f"🆔 **PMID**: {pmid}\n\n"
          f"📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n"
          # f"📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n"
-         f"📅 **출판일**: {format_date(summaries['result'][pmid].get('fordate', 'No date'))}\n\n"
+         f"📅 **출판일**: {format_date(summaries['result'][pmid].get('pubdate', 'No date'))}\n\n"
          f"✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n"
          f"📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n"
          f"🔗 **논문 페이지**: https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
