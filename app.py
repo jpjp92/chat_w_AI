@@ -741,18 +741,33 @@ def needs_search(query):
         return "arxiv_search"
     if "의학논문" in query_lower:
         return "pubmed_search"
-    if "검색" in query_lower:
+    if "검색해줘" in query_lower or "검색해" in query_lower:
         return "naver_search"
-    if "mbti" in query_lower:
-        if "유형" in query_lower or "설명" in query_lower:
-            return "mbti_types"
+
+    # MBTI 관련
+    if "mbti검사" in query_lower:
         return "mbti"
-    if "다중지능" in query_lower or "multi_iq" in query_lower:
-        if "유형" in query_lower or "설명" in query_lower:
-            return "multi_iq_types"
-        if "직업" in query_lower or "추천" in query_lower:
-            return "multi_iq_jobs"
+    if "mbti유형설명" in query_lower or "mbti유형" in query_lower or "mbti설명" in query_lower:
+        return "mbti_types"
+    
+    # 다중지능 관련
+    if "다중지능 검사" in query_lower:
         return "multi_iq"
+    if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower:
+        return "multi_iq_types"
+    if "다중지능직업" in query_lower or "다중지능추천" in query_lower:
+        return "multi_iq_jobs"
+        
+    # if "mbti" in query_lower:
+    #     if "유형" in query_lower or "설명" in query_lower:
+    #         return "mbti_types"
+    #     return "mbti"
+    # if "다중지능" in query_lower or "multi_iq" in query_lower:
+    #     if "유형" in query_lower or "설명" in query_lower:
+    #         return "multi_iq_types"
+    #     if "직업" in query_lower or "추천" in query_lower:
+    #         return "multi_iq_jobs"
+    #     return "multi_iq"
     if any(greeting in query_lower for greeting in GREETINGS):
         return "conversation"
     return "conversation"
@@ -869,7 +884,6 @@ def process_query(query):
 
 def show_chat_dashboard():
     st.title("Chat with AI🤖")
-    
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n"
@@ -880,11 +894,26 @@ def show_chat_dashboard():
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **검색** 🌐: '검색 키워드' (예: 검색 최근 전시회 추천)\n"
-            "8. **MBTI** ✨: 'MBTI' 또는 'MBTI 유형' (예: MBTI 검사, INTJ 설명)\n"
-            "9. **다중지능** 🎉: '다중지능' 또는 '다중지능 유형' (예: 다중지능 검사, 언어지능 직업)\n\n"
+            "7. **검색** 🌐: '검색해 [키워드]' 또는 '검색해줘 [키워드]' (예: 검색해 최근 전시회 추천)\n"
+            "8. **MBTI** ✨: 'MBTI 검사', 'MBTI 유형 설명', 'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
+            "9. **다중지능** 🎉: '다중지능 검사', '다중지능 유형 설명', '다중지능 유형', '다중지능 설명', '다중지능 직업', '다중지능 추천' (예: 다중지능 검사, 언어지능 직업)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
         )
+    # if st.button("도움말 ℹ️"):
+    #     st.info(
+    #         "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n"
+    #         "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
+    #         "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 부산 시간, 금일 날짜)\n"
+    #         "3. **리그순위** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
+    #         "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
+    #         "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
+    #         "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
+    #         "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
+    #         "7. **검색** 🌐: '검색 키워드' (예: 검색 최근 전시회 추천)\n"
+    #         "8. **MBTI** ✨: 'MBTI' 또는 'MBTI 유형' (예: MBTI 검사, INTJ 설명)\n"
+    #         "9. **다중지능** 🎉: '다중지능' 또는 '다중지능 유형' (예: 다중지능 검사, 언어지능 직업)\n\n"
+    #         "궁금한 점 있으면 질문해주세요! 😊"
+    #     )
     
     for msg in st.session_state.chat_history[-10:]:
         with st.chat_message(msg['role']):
