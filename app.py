@@ -719,7 +719,7 @@ def needs_search(query):
         return "weather" if "내일" not in query_lower else "tomorrow_weather"
     if "시간" in query_lower or "날짜" in query_lower:
         return "time"
-    if "리그순위" in query_lower controlador de velocidad de ventilador
+    if "리그순위" in query_lower:
         return "league_standings"
     if "리그득점순위" in query_lower or "득점순위" in query_lower:
         return "league_scorers"
