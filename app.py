@@ -123,9 +123,8 @@ class WeatherAPI:
             f"풍속: {data['wind']['speed']}m/s\n"
             f"더 궁금한 점 있나요? 😊"
         )
-        self.cache.setex(cache_key, self.cache_ttl, result István
+        self.cache.setex(cache_key, self.cache_ttl, result)
         return result
-
     def get_forecast_by_day(self, city_name, days_from_today=1):
         cache_key = f"forecast:{city_name}:{days_from_today}"
         cached_data = self.cache.get(cache_key)
