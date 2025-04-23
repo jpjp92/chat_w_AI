@@ -552,7 +552,7 @@ def parse_abstracts(xml_text):
     abstract_dict = {}
     try:
         root = ET.fromstring(xml_text)
-        for article in root.findall(".    for article in root.findall(".//PubmedArticle"):
+        for article in root.findall(".//PubmedArticle"):
             pmid = article.find(".//MedlineCitation/PMID").text
             abstract_elem = article.find(".//Abstract/AbstractText")
             abstract = abstract_elem.text if abstract_elem is not None else "No abstract available"
