@@ -1,3 +1,5 @@
+### 수정 테스트 
+
 # 라이브러리 설정
 from config.imports import *
 from config.env import *
@@ -404,48 +406,55 @@ def create_or_get_user(nickname):
     new_user = supabase.table("users").insert({"nickname": nickname, "created_at": datetime.now().isoformat()}).execute()
     return new_user.data[0]["id"], False
 
-# 수정: 백그라운드 대화 저장 함수
+# 동기 저장 함수
+def save_chat_history(user_id, session_id, question, answer, time_taken):
+    if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
+        answer_to_save = {
+            "header": answer["header"],
+            "table": answer["table"].to_dict(orient="records"),
+            "footer": answer["footer"]
+        }
+    else:
+        answer_to_save = answer
+    
+    supabase.table("chat_history").insert({
+        "user_id": user_id,
+        "session_id": session_id,
+        "question": question,
+        "answer": answer_to_save,
+        "time_taken": time_taken,
+        "created_at": datetime.now().isoformat()
+    }).execute()
+
+# 백그라운드 대화 저장 함수 (동기 Supabase 지원)
 async def save_chat_history_background(user_id, session_id, question, answer, time_taken):
     """백그라운드에서 대화 기록 저장"""
     try:
         start_time = time.time()
-        if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-            answer_to_save = {
-                "header": answer["header"],
-                "table": answer["table"].to_dict(orient="records"),
-                "footer": answer["footer"]
-            }
-        else:
-            answer_to_save = answer
-        
-        await supabase.table("chat_history").insert({
-            "user_id": user_id,
-            "session_id": session_id,
-            "question": question,
-            "answer": answer_to_save,
-            "time_taken": time_taken,
-            "created_at": datetime.now().isoformat()
-        }).execute()
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, save_chat_history, user_id, session_id, question, answer, time_taken)
         logger.info(f"Supabase save took {time.time() - start_time} seconds")
     except Exception as e:
         logger.error(f"Failed to save chat history: {e}")
 
-# 수정: 배치 대화 저장 함수
+# 배치 대화 저장 함수
 async def batch_save_chat_history(records):
     """배치 대화 저장"""
     try:
         start_time = time.time()
-        await supabase.table("chat_history").insert(records).execute()
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: supabase.table("chat_history").insert(records).execute())
         logger.info(f"Batch save of {len(records)} records took {time.time() - start_time} seconds")
     except Exception as e:
         logger.error(f"Batch save failed: {e}")
         for record in records:
             try:
-                await supabase.table("chat_history").insert(record).execute()
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, lambda: supabase.table("chat_history").insert(record).execute())
             except Exception as e:
                 logger.error(f"Individual save failed: {e}")
 
-# 추가: 대화 기록 큐에 추가
+# 대화 기록 큐에 추가
 async def enqueue_chat_history(user_id, session_id, question, answer, time_taken):
     """대화 기록 큐에 추가"""
     if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
@@ -468,7 +477,7 @@ async def enqueue_chat_history(user_id, session_id, question, answer, time_taken
     chat_history_queue.append(record)
     logger.info("Chat history enqueued")
 
-# 추가: 배치 저장 워커
+# 배치 저장 워커
 async def batch_save_worker():
     """배치 저장 워커"""
     while True:
@@ -477,27 +486,18 @@ async def batch_save_worker():
             await batch_save_chat_history(records)
         await asyncio.sleep(BATCH_INTERVAL)
 
-# 기존: 동기 저장 함수 (배치 저장으로 대체하므로 사용 안 함, 유지)
-def save_chat_history(user_id, session_id, question, answer, time_taken):
-    if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-        answer_to_save = {
-            "header": answer["header"],
-            "table": answer["table"].to_dict(orient="records"),
-            "footer": answer["footer"]
-        }
-    else:
-        answer_to_save = answer
-    
-    supabase.table("chat_history").insert({
-        "user_id": user_id,
-        "session_id": session_id,
-        "question": question,
-        "answer": answer_to_save,
-        "time_taken": time_taken,
-        "created_at": datetime.now().isoformat()
-    }).execute()
+# 수정: 배치 워커를 별도 스레드에서 실행
+def run_batch_save_worker():
+    """배치 저장 워커를 별도 스레드에서 실행"""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(batch_save_worker())
+    finally:
+        loop.close()
 
-# 기존: 스레드 기반 비동기 저장 (배치 저장으로 대체하므로 사용 안 함, 유지)
+# 기존: 스레드 기반 비동기 저장 (배치 저장으로 대체, 유지)
 def async_save_chat_history(user_id, session_id, question, answer, time_taken):
     threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
 
@@ -696,7 +696,7 @@ async def get_conversational_response(query, chat_history):
     conversation_cache.setex(cache_key, 600, result)
     return result
 
-# 추가: 캐시 확인 비동기 함수
+# 캐시 확인 비동기 함수
 async def check_cache(query):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
@@ -751,9 +751,8 @@ def needs_search(query):
         return "conversation"
     return "conversation"
 
-# 수정: 비동기 쿼리 처리 함수
+# 비동기 쿼리 처리 함수
 async def process_query(query):
-    # 캐시 확인
     cached = await check_cache(query)
     if cached is not None:
         return cached
@@ -870,7 +869,7 @@ def show_chat_dashboard():
             "챗봇과 더 쉽게 대화하는 방법이에요! :\n"
             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
             "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 마드리드 시간, 금일 날짜)\n"
-            "3. **검색** 🌐: '[키워드] 검색해' 또는 '[키워드] 검색해줘' (예: 2025년 서울 전시회 검색해줘)\n"
+            "3. **검색** 🌐: '[키워드] 검색해' 또는 '[키워드] 검색해줘' (예: 2025년 서울 전시회 검색해줐"
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
@@ -898,7 +897,12 @@ def show_chat_dashboard():
             placeholder.markdown("응답을 준비 중이에요.. ⏳")
             try:
                 start_time = time.time()
-                response = asyncio.run(process_query(user_prompt))  # 수정: 비동기 호출
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    response = loop.run_until_complete(process_query(user_prompt))
+                finally:
+                    loop.close()
                 time_taken = round(time.time() - start_time, 2)
                 
                 placeholder.empty()
@@ -910,8 +914,12 @@ def show_chat_dashboard():
                     st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.messages.append({"role": "assistant", "content": response})
-                # 수정: 배치 저장 큐에 추가
-                asyncio.run(enqueue_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken))
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(enqueue_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken))
+                finally:
+                    loop.close()
             
             except Exception as e:
                 placeholder.empty()
@@ -944,8 +952,8 @@ def main():
     if not st.session_state.is_logged_in:
         show_login_page()
     else:
-        # 추가: 배치 워커 시작
-        asyncio.run_coroutine_threadsafe(batch_save_worker(), asyncio.get_event_loop())
+        # 수정: 배치 워커를 별도 스레드에서 시작
+        threading.Thread(target=run_batch_save_worker, daemon=True).start()
         show_chat_dashboard()
 
 if __name__ == "__main__":
