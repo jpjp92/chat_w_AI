@@ -1,4 +1,6 @@
+# git push test
 # 라이브러리 설정
+import pandas as pd 
 from config.imports import *
 from config.env import *
 
