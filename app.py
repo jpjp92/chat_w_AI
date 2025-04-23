@@ -1,5 +1,4 @@
-### 수정 테스트 
-
+### 테스트 테스트 3
 # 라이브러리 설정
 from config.imports import *
 from config.env import *
@@ -685,8 +684,12 @@ async def get_conversational_response(query, chat_history):
          for msg in chat_history[-2:] if "더 궁금한 점 있나요?" not in msg["content"]]
     
     try:
+        loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
-            client.chat.completions.create(model="gpt-4o-mini", messages=messages),
+            loop.run_in_executor(
+                None,
+                lambda: client.chat.completions.create(model="gpt-4o-mini", messages=messages)
+            ),
             timeout=10
         )
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
@@ -716,7 +719,7 @@ def needs_search(query):
         return "weather" if "내일" not in query_lower else "tomorrow_weather"
     if "시간" in query_lower or "날짜" in query_lower:
         return "time"
-    if "리그순위" in query_lower:
+    if "리그순위" in query_lower controlador de velocidad de ventilador
         return "league_standings"
     if "리그득점순위" in query_lower or "득점순위" in query_lower:
         return "league_scorers"
@@ -869,7 +872,7 @@ def show_chat_dashboard():
             "챗봇과 더 쉽게 대화하는 방법이에요! :\n"
             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
             "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 마드리드 시간, 금일 날짜)\n"
-            "3. **검색** 🌐: '[키워드] 검색해' 또는 '[키워드] 검색해줘' (예: 2025년 서울 전시회 검색해줐"
+            "3. **검색** 🌐: '[키워드] 검색해' 또는 '[키워드] 검색해줘' (예: 2025년 서울 전시회 검색해줘)\n"
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
