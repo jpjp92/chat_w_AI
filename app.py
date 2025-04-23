@@ -1,16 +1,14 @@
-# git push test
-# 라이브러리 설정
-import pandas as pd 
+# set lib
 from config.imports import *
 from config.env import *
 
-# 로깅 설정
+# set logger
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
 logger = logging.getLogger("HybridChat")
 logging.getLogger("streamlit").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# 캐시 설정
+# set cach
 cache = Cache("cache_directory")
 
 class MemoryCache:
