@@ -396,7 +396,7 @@ def select_best_provider_with_priority():
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # 앱 시작 시 한 번만 실행하도록 수정
 # 전역 변수로 선언된 client 객체를 초기화할 때만 사용
-client = select_best_provider_with_priority()
+# client = select_best_provider_with_priority()
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -413,7 +413,7 @@ def init_session_state():
         st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-    # 프로바이더 클라이언트 세션 저장
+    # 프로바이더 클라이언트 세션 저장 (여기서만!)
     if "client" not in st.session_state:
         st.session_state.client = select_best_provider_with_priority()
 
@@ -699,8 +699,11 @@ async def get_conversational_response(query, chat_history):
     loop = asyncio.get_event_loop()
     try:
         # st.session_state.client 사용
-        response = await loop.run_in_executor(None, lambda: st.session_state.client.chat.completions.create(
-            model="gpt-4o-mini", messages=messages))
+        response = await loop.run_in_executor(
+            None, lambda: st.session_state.client.chat.completions.create(
+                model="gpt-4o-mini", messages=messages
+            )
+        )
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
     except (IndexError, Exception) as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
