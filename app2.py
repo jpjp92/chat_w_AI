@@ -1,14 +1,14 @@
-# 라이브러리 설정
+# set lib
 from config.imports import *
 from config.env import *
 
-# 로깅 설정
+# set logger
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
 logger = logging.getLogger("HybridChat")
 logging.getLogger("streamlit").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# 캐시 설정
+# set cach
 cache = Cache("cache_directory")
 
 class MemoryCache:
@@ -33,126 +33,36 @@ def format_date(fordate):
     if fordate == 'No date':
         return '날짜 없음'
     try:
-        # PubMed의 fordate를 파싱 (예: "2025 Apr 21")
         date_obj = datetime.strptime(fordate, '%Y %b %d')
-        # YYYY.MM.DD 형식으로 변환
         return date_obj.strftime('%Y.%m.%d')
     except ValueError:
-        # 파싱 실패 시 원본 반환 또는 기본값
         return fordate
 
+# JSON 파일에서 MBTI 및 다중지능 데이터 로드 (캐싱 적용)
+def load_personality_data():
+    cache_key = "personality_data"
+    cached_data = cache_handler.get(cache_key)
+    if cached_data:
+        return cached_data
+    
+    try:
+        with open("config/personality_multi_data.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        cache_handler.setex(cache_key, 86400, data)  # 24시간 캐싱
+        return data
+    except FileNotFoundError:
+        logger.error("personality_multi_data.json 파일을 찾을 수 없습니다.")
+        raise
+    except json.JSONDecodeError:
+        logger.error("personality_multi_data.json 파일의 형식이 잘못되었습니다.")
+        raise
 
-
-# MBTI 유형별 설명 딕셔너리
-mbti_descriptions = {
-    "ISTJ": "(현실주의자) 🏛️📚🧑‍⚖️: 원칙을 중시하며 꼼꼼한 계획으로 목표를 달성!",
-    "ISFJ": "(따뜻한 수호자) 🛡️🧸💖: 타인을 배려하며 헌신적인 도움을 주는 성격!",
-    "INFJ": "(신비로운 조언자) 🌿🔮📖: 깊은 통찰력으로 사람들에게 영감을 주는 이상주의자!",
-    "INTJ": "(전략가) 🧠♟️📈: 미래를 설계하며 목표를 향해 나아가는 마스터마인드!",
-    "ISTP": "(만능 재주꾼) 🔧🕶️🏍️: 문제를 실질적으로 해결하는 실용적인 모험가!",
-    "ISFP": "(예술가) 🎨🎵🦋: 감성을 표현하며 자유로운 삶을 추구하는 예술가!",
-    "INFP": "(이상주의자) 🌌📜🕊️: 내면의 가치를 중시하며 세상을 더 나은 곳으로 만드는 몽상가!",
-    "INTP": "(논리적인 철학자) 🤔📖⚙️: 호기심 많고 논리적으로 세상을 탐구하는 사색가!",
-    "ESTP": "(모험가) 🏎️🔥🎤: 순간을 즐기며 도전과 모험을 사랑하는 활동가!",
-    "ESFP": "(사교적인 연예인) 🎭🎤🎊: 사람들과 함께하며 분위기를 띄우는 파티의 중심!",
-    "ENFP": "(자유로운 영혼) 🌈🚀💡: 창의적인 아이디어로 세상을 밝히는 열정적인 영혼!",
-    "ENTP": "(토론가) 🗣️⚡♟️: 새로운 아이디어를 탐구하며 논쟁을 즐기는 혁신가!",
-    "ESTJ": "(엄격한 관리자) 🏗️📊🛠️: 체계적으로 목표를 달성하는 리더십의 대가!",
-    "ESFJ": "(친절한 외교관) 💐🤗🏡: 사람들을 연결하며 따뜻한 공동체를 만드는 외교관!",
-    "ENFJ": "(열정적인 리더) 🌟🎤🫶: 타인을 이끌며 긍정적인 변화를 만드는 카리스마 리더!",
-    "ENTJ": "(야망가) 👑📈🔥: 목표를 향해 돌진하며 큰 그림을 그리는 지휘관!"
-}
-
-# 다중지능 유형별 설명 및 직업 딕셔너리
-multi_iq_descriptions = {
-    "언어지능": {
-        "description": "📝📚📢: 말과 글을 통해 생각을 표현하는 데 탁월!\n",
-        "jobs": "소설가, 시인, 작가, 논설 / 동화 작가, 방송작가, 영화대본작가, 웹툰 작가 / 아나운서, 리포터, 성우 / 교사, 교수, 강사, 독서 지도사 / 언어치료사, 심리치료사, 구연동화가"
-    },
-    "논리수학지능": {
-        "description": "🧮📊🧠: 분석적 사고와 문제 해결 능력이 뛰어남!\n",
-        "jobs": "과학자, 물리학자, 수학자 / 의료공학, 전자공학, 컴퓨터 공학, 항공우주공학 / 애널리스트, 경영 컨설팅, 회계사, 세무사 / 투자분석가, M&A 전문가 / IT 컨설팅, 컴퓨터 프로그래머, web 개발 / 통신 신호처리, 통계학, AI 개발, 정보처리, 빅데이터 업무 / 은행원, 금융기관, 강사, 비평가, 논설 / 변호사, 변리사, 검사, 판사 / 의사, 건축가, 설계사"
-    },
-    "공간지능": {
-        "description": "🎨📸🏛️: 그림과 디자인으로 공간을 아름답게 표현!\n",
-        "jobs": "사진사, 촬영기사, 만화가, 애니메이션, 화가, 아티스트 / 건축 설계, 인테리어, 디자이너 / 지도 제작, 엔지니어, 발명가 / 전자공학, 기계공학, 통신공학, 산업공학, 로봇 개발 / 영화감독, 방송 피디, 푸드스타일리스트 / 광고 제작, 인쇄 업무"
-    },
-    "음악지능": {
-        "description": "🎶🎧🎸: 소리와 리듬을 느끼고 창조하는 음악적 재능!\n",
-        "jobs": "음악교사, 음향사, 작곡가, 작사가, 편곡가, 가수, 성악가 / 악기 연주 / 동시통역사, 성우 / 뮤지컬 배우 / 발레, 무용 / 음향 부문, 연예 기획사 / DJ, 개인 음악 방송, 가수 매니지먼트"
-    },
-    "신체운동지능": {
-        "description": "🏀🤸‍♂️🏆: 몸을 활용해 스포츠와 움직임에서 두각!\n",
-        "jobs": "외과의사, 치기공사, 한의사, 수의사, 간호사, 대체의학 / 물리치료사, 작업치료사 / 악기 연주, 성악가, 가수, 무용, 연극 / 스포츠, 체육교사, 모델 / 경찰, 경호원, 군인, 소방관 / 농업, 임업, 수산업, 축산업 / 공예, 액세서리 제작, 가구 제작"
-    },
-    "대인관계지능": {
-        "description": "🤝🗣️💬: 사람들과 소통하며 관계를 잘 맺는 능력!\n",
-        "jobs": "변호사, 검사, 판사, 법무사 / 교사, 교수, 강사 / 홍보 업무, 마케팅 / 지배인, 비서, 승무원, 판매업무 / 기자, 리포터, 보험서비스 / 외교관, 국제공무원, 경찰 / 병원코디네이터, 간호사 / 호텔리어, 학습지 교사, 웨딩플래너, 웃음치료사, 성직자"
-    },
-    "자기이해지능": {
-        "description": "🧘‍♂️💭📖: 자신을 깊이 이해하고 성찰하는 내면의 힘!\n",
-        "jobs": "변호사, 검사, 판사, 변리사, 평론가, 논설 / 교사, 교수, 심리상담사 / 스포츠 감독, 코치, 심판, 스포츠 해설가 / 협상가, CEO, CTO, 컨설팅, 마케팅, 회사 경영 / 기자, 아나운서, 요리사, 심사위원 / 의사, 제약 분야 연구원 / 성직자, 철학자, 투자분석가, 자산관리 / 영화감독, 작가, 건축가"
-    },
-    "자연친화지능": {
-        "description": "🌿🐦🌍: 자연과 동물을 사랑하며 환경에 민감한 재능!\n",
-        "jobs": "의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기계 공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트"
-    }
-}
-
-# MBTI 전체 설명
-mbti_full_description = """
-### 📝 MBTI 유형별 한 줄 설명
-#### 🔥 외향형 (E) vs ❄️ 내향형 (I)  
-- **E (외향형)** 🎉🗣️🚀🌞: 사람들과 어울리며 에너지를 얻는 사교적인 성격!  
-- **I (내향형)** 📚🛋️🌙🤫: 혼자만의 시간을 즐기며 내면에 집중하는 성격!  
-#### 📊 직관형 (N) vs 🧐 감각형 (S)  
-- **N (직관형)** 💡✨🎨🔮: 창의적이고 큰 그림을 보며 아이디어를 중시!  
-- **S (감각형)** 🔎📏🛠️🍽️: 현실적이고 구체적인 정보를 바탕으로 행동!  
-#### 🤝 감정형 (F) vs ⚖️ 사고형 (T)  
-- **F (감정형)** ❤️🥰🌸🫂: 공감과 사람 중심으로 따뜻한 결정을 내림!  
-- **T (사고형)** 🧠⚙️📊📏: 논리와 객관적 판단으로 문제를 해결!  
-#### ⏳ 판단형 (J) vs 🌊 인식형 (P)  
-- **J (계획형)** 📅📌📝✅: 체계적이고 계획적으로 일을 처리하는 스타일!  
-- **P (즉흥형)** 🎭🎢🌪️🌍: 유연하고 변화에 잘 적응하는 자유로운 스타일!  
-#### 🎭 MBTI 유형별 한 줄 설명  
-- ✅ **ISTJ** (현실주의자) 🏛️📚🧑‍⚖️: 원칙을 중시하며 꼼꼼한 계획으로 목표를 달성!  
-- ✅ **ISFJ** (따뜻한 수호자) 🛡️🧸💖: 타인을 배려하며 헌신적인 도움을 주는 성격!  
-- ✅ **INFJ** (신비로운 조언자) 🌿🔮📖: 깊은 통찰력으로 사람들에게 영감을 주는 이상주의자!  
-- ✅ **INTJ** (전략가) 🧠♟️📈: 미래를 설계하며 목표를 향해 나아가는 마스터마인드!  
-- ✅ **ISTP** (만능 재주꾼) 🔧🕶️🏍️: 문제를 실질적으로 해결하는 실용적인 모험가!  
-- ✅ **ISFP** (예술가) 🎨🎵🦋: 감성을 표현하며 자유로운 삶을 추구하는 예술가!  
-- ✅ **INFP** (이상주의자) 🌌📜🕊️: 내면의 가치를 중시하며 세상을 더 나은 곳으로 만드는 몽상가!  
-- ✅ **INTP** (논리적인 철학자) 🤔📖⚙️: 호기심 많고 논리적으로 세상을 탐구하는 사색가!  
-- ✅ **ESTP** (모험가) 🏎️🔥🎤: 순간을 즐기며 도전과 모험을 사랑하는 활동가!  
-- ✅ **ESFP** (사교적인 연예인) 🎭🎤🎊: 사람들과 함께하며 분위기를 띄우는 파티의 중심!  
-- ✅ **ENFP** (자유로운 영혼) 🌈🚀💡: 창의적인 아이디어로 세상을 밝히는 열정적인 영혼!  
-- ✅ **ENTP** (토론가) 🗣️⚡♟️: 새로운 아이디어를 탐구하며 논쟁을 즐기는 혁신가!  
-- ✅ **ESTJ** (엄격한 관리자) 🏗️📊🛠️: 체계적으로 목표를 달성하는 리더십의 대가!  
-- ✅ **ESFJ** (친절한 외교관) 💐🤗🏡: 사람들을 연결하며 따뜻한 공동체를 만드는 외교관!  
-- ✅ **ENFJ** (열정적인 리더) 🌟🎤🫶: 타인을 이끌며 긍정적인 변화를 만드는 카리스마 리더!  
-- ✅ **ENTJ** (야망가) 👑📈🔥: 목표를 향해 돌진하며 큰 그림을 그리는 지휘관!
-"""
-
-# 다중지능 전체 설명
-multi_iq_full_description = """
-### 🎨 다중지능 유형별 한 줄 설명 및 추천 직업  
-- 📖 **언어 지능** 📝📚📢: 말과 글을 통해 생각을 표현하는 데 탁월!  
-    - **추천 직업**: 소설가, 시인, 작가, 논설 / 동화 작가, 방송작가, 영화대본작가, 웹툰 작가 / 아나운서, 리포터, 성우 / 교사, 교수, 강사, 독서 지도사 / 언어치료사, 심리치료사, 구연동화가  
-- 🔢 **논리-수학 지능** 🧮📊🧠: 분석적 사고와 문제 해결 능력이 뛰어남!  
-    - **추천 직업**: 과학자, 물리학자, 수학자 / 의료공학, 전자공학, 컴퓨터 공학, 항공우주공학 / 애널리스트, 경영 컨설팅, 회계사, 세무사 / 투자분석가, M&A 전문가 / IT 컨설팅, 컴퓨터 프로그래머, web 개발 / 통신 신호처리, 통계학, AI 개발, 정보처리, 빅데이터 업무 / 은행원, 금융기관, 강사, 비평가, 논설 / 변호사, 변리사, 검사, 판사 / 의사, 건축가, 설계사  
-- 🎨 **공간 지능** 🎨📸🏛️: 그림과 디자인으로 공간을 아름답게 표현!  
-    - **추천 직업**: 사진사, 촬영기사, 만화가, 애니메이션, 화가, 아티스트 / 건축 설계, 인테리어, 디자이너 / 지도 제작, 엔지니어, 발명가 / 전자공학, 기계공학, 통신공학, 산업공학, 로봇 개발 / 영화감독, 방송 피디, 푸드스타일리스트 / 광고 제작, 인쇄 업무  
-- 🎵 **음악 지능** 🎶🎧🎸: 소리와 리듬을 느끼고 창조하는 음악적 재능!  
-    - **추천 직업**: 음악교사, 음향사, 작곡가, 작사가, 편곡가, 가수, 성악가 / 악기 연주 / 동시통역사, 성우 / 뮤지컬 배우 / 발레, 무용 / 음향 부문, 연예 기획사 / DJ, 개인 음악 방송, 가수 매니지먼트  
-- 🏃 **신체-운동 지능** 🏀🤸‍♂️🏆: 몸을 활용해 스포츠와 움직임에서 두각!  
-    - **추천 직업**: 외과의사, 치기공사, 한의사, 수의사, 간호사, 대체의학 / 물리치료사, 작업치료사 / 악기 연주, 성악가, 가수, 무용, 연극 / 스포츠, 체육교사, 모델 / 경찰, 경호원, 군인, 소방관 / 농업, 임업, 수산업, 축산업 / 공예, 액세서리 제작, 가구 제작  
-- 🤝 **대인관계 지능** 🤝🗣️💬: 사람들과 소통하며 관계를 잘 맺는 능력!  
-    - **추천 직업**: 변호사, 검사, 판사, 법무사 / 교사, 교수, 강사 / 홍보 업무, 마케팅 / 지배인, 비서, 승무원, 판매업무 / 기자, 리포터, 보험서비스 / 외교관, 국제공무원, 경찰 / 병원코디네이터, 간호사 / 호텔리어, 학습지 교사, 웨딩플래너, 웃음치료사, 성직자  
-- 🧘 **자기 이해 지능** 🧘‍♂️💭📖: 자신을 깊이 이해하고 성찰하는 내면의 힘!  
-    - **추천 직업**: 변호사, 검사, 판사, 변리사, 평론가, 논설 / 교사, 교수, 심리상담사 / 스포츠 감독, 코치, 심판, 스포츠 해설가 / 협상가, CEO, CTO, 컨설팅, 마케팅, 회사 경영 / 기자, 아나운서, 요리사, 심사위원 / 의사, 제약 분야 연구원 / 성직자, 철학자, 투자분석가, 자산관리 / 영화감독, 작가, 건축가  
-- 🌱 **자연 친화 지능** 🌿🐦🌍: 자연과 동물을 사랑하며 환경에 민감한 재능!  
-    - **추천 직업**: 의사, 간호사, 물리치료, 임상병리 / 수의사, 동물 사육, 곤충 사육 / 건축 설계, 감리, 측량사, 조경 디자인 / 천문학자, 지질학자 / 생명공학, 기 punctuated공학, 생물공학, 전자공학 / 의사, 간호사, 약제사, 임상병리 / 특수작물 재배, 농업, 임업, 축산업, 원예, 플로리스트  
-"""
+# 데이터 로드
+personality_data = load_personality_data()
+mbti_descriptions = personality_data["mbti_descriptions"]
+multi_iq_descriptions = personality_data["multi_iq_descriptions"]
+mbti_full_description = personality_data["mbti_full_description"]
+multi_iq_full_description = personality_data["multi_iq_full_description"]
 
 # WeatherAPI 클래스
 class WeatherAPI:
@@ -215,7 +125,6 @@ class WeatherAPI:
         )
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
-
     def get_forecast_by_day(self, city_name, days_from_today=1):
         cache_key = f"forecast:{city_name}:{days_from_today}"
         cached_data = self.cache.get(cache_key)
@@ -322,13 +231,13 @@ class FootballAPI:
         headers = {'X-Auth-Token': self.api_key}
         
         try:
-            time.sleep(1)  # API 요청 간격 조절
+            time.sleep(1)
             response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             data = response.json()
             
             standings = data['standings'][0]['table'] if league_code not in ["CL"] else data['standings']
-            if league_code in ["CL"]:  # 챔피언스 리그는 그룹 스테이지 처리
+            if league_code in ["CL"]:
                 standings_data = []
                 for group in standings:
                     for team in group['table']:
@@ -346,7 +255,7 @@ class FootballAPI:
                             '포인트': team['points']
                         })
                 df = pd.DataFrame(standings_data)
-            else:  # 일반 리그
+            else:
                 df = pd.DataFrame([
                     {
                         '순위': team['position'],
@@ -379,13 +288,13 @@ class FootballAPI:
         headers = {'X-Auth-Token': self.api_key}
         
         try:
-            time.sleep(1)  # API 요청 간격 조절
+            time.sleep(1)
             response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             data = response.json()
             
             scorers = [{"순위": i+1, "선수": s['player']['name'], "팀": s['team']['name'], "득점": s['goals']} 
-                       for i, s in enumerate(data['scorers'][:10])]  # 상위 10명
+                       for i, s in enumerate(data['scorers'][:10])]
             df = pd.DataFrame(scorers)
             result = {"league_name": league_name, "data": df}
             self.cache.setex(cache_key, self.cache_ttl, result)
@@ -394,9 +303,37 @@ class FootballAPI:
         except requests.exceptions.RequestException as e:
             return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
 
+    def fetch_championsleague_knockout_matches(self):
+        """
+        챔피언스리그의 knockout(토너먼트) 스테이지 경기 결과를 반환합니다.
+        """
+        url = f"{self.base_url}/CL/matches"
+        headers = {'X-Auth-Token': self.api_key}
+        try:
+            response = requests.get(url, headers=headers, timeout=3)
+            response.raise_for_status()
+            data = response.json()
+            # knockout 스테이지만 필터링
+            knockout_matches = [
+                m for m in data['matches']
+                if m['stage'] in ['LAST_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL']
+            ]
+            # 원하는 정보만 추출
+            results = []
+            for m in knockout_matches:
+                results.append({
+                    "라운드": m['stage'],
+                    "날짜": m['utcDate'][:10],
+                    "홈팀": m['homeTeam']['name'],
+                    "원정팀": m['awayTeam']['name'],
+                    "스코어": f"{m['score']['fullTime']['homeTeam']} : {m['score']['fullTime']['awayTeam']}"
+                })
+            return results
+        except Exception as e:
+            return f"챔피언스리그 토너먼트 경기 결과를 가져오는 중 오류: {str(e)}"
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])  # 문제 제공자 제외
+client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -413,16 +350,6 @@ def init_session_state():
         st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-
-# def init_session_state():
-#     if "is_logged_in" not in st.session_state:
-#         st.session_state.is_logged_in = False
-#     if "user_id" not in st.session_state:
-#         st.session_state.user_id = None
-#     if "chat_history" not in st.session_state:
-#         st.session_state.chat_history = []
-#     if "session_id" not in st.session_state:
-#         st.session_state.session_id = str(uuid.uuid4())
 
 # 도시 및 시간 추출
 CITY_PATTERNS = [
@@ -680,7 +607,6 @@ def get_pubmed_papers(query, max_results=5):
         [f"**논문 {i}**\n\n"
          f"🆔 **PMID**: {pmid}\n\n"
          f"📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n"
-         # f"📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n"
          f"📅 **출판일**: {format_date(summaries['result'][pmid].get('pubdate', 'No date'))}\n\n"
          f"✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n"
          f"📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n"
@@ -690,14 +616,6 @@ def get_pubmed_papers(query, max_results=5):
     cache_handler.setex(cache_key, 3600, response)
     return response
     
-    # response = "📚 **PubMed 논문 검색 결과** 📚\n\n"
-    # response += "\n\n".join(
-    #     [f"**논문 {i}**\n\n🆔 **PMID**: {pmid}\n\n📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n📅 **출판일**: {summaries['result'][pmid].get('pubdate', 'No date')}\n\n✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}"
-    #      for i, pmid in enumerate(pubmed_ids, 1)]
-    # ) + "\n\n더 궁금한 점 있나요? 😊"
-    # cache_handler.setex(cache_key, 3600, response)
-    # return response
-
 # 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
 async def get_conversational_response(query, chat_history):
@@ -743,18 +661,27 @@ def needs_search(query):
         return "arxiv_search"
     if "의학논문" in query_lower:
         return "pubmed_search"
-    if "검색" in query_lower:
+    if "검색해줘" in query_lower or "검색해" in query_lower:
         return "naver_search"
-    if "mbti" in query_lower:
-        if "유형" in query_lower or "설명" in query_lower:
-            return "mbti_types"
+
+    # MBTI 관련
+    if "mbti검사" in query_lower:
         return "mbti"
-    if "다중지능" in query_lower or "multi_iq" in query_lower:
-        if "유형" in query_lower or "설명" in query_lower:
-            return "multi_iq_types"
-        if "직업" in query_lower or "추천" in query_lower:
-            return "multi_iq_jobs"
+    if "mbti유형설명" in query_lower or "mbti유형" in query_lower or "mbti설명" in query_lower:
+        return "mbti_types"
+    
+    # 다중지능 관련
+    if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower or \
+       "다중지능 유형 설명" in query.strip().lower() or "다중지능 유형" in query.strip().lower():
+        return "multi_iq_types"
+    if "다중지능직업" in query_lower or "다중지능추천" in query_lower or \
+       "다중지능 직업" in query.strip().lower() or "다중지능 추천" in query.strip().lower():
+        return "multi_iq_jobs"
+    if "다중지능검사" in query_lower or "다중지능 검사" in query.strip().lower():
         return "multi_iq"
+    if "다중지능" in query_lower:
+        return "multi_iq_full"
+    
     if any(greeting in query_lower for greeting in GREETINGS):
         return "conversation"
     return "conversation"
@@ -856,13 +783,13 @@ def process_query(query):
                 result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 추천 직업\n- 📖 **{specific_type.replace('지능', ' 지능')}**: {multi_iq_descriptions[specific_type]['description']}- **추천 직업**: {multi_iq_descriptions[specific_type]['jobs']}"
             else:
                 result = multi_iq_full_description
+        elif query_type == "multi_iq_full":
+            result = multi_iq_full_description
         elif query_type == "conversation":
             if query_lower in GREETINGS:
                 result = GREETING_RESPONSE
-            elif "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
-                result = get_kst_time()
             else:
-                result = asyncio.run(get_conversational_response(query, st.session_state.chat_history))
+                result = asyncio.run(get_conversational_response(query, st.session_state.messages))
         else:
             result = "아직 지원하지 않는 기능이에요. 😅"
         
@@ -871,24 +798,23 @@ def process_query(query):
 
 def show_chat_dashboard():
     st.title("Chat with AI🤖")
-    
     if st.button("도움말 ℹ️"):
         st.info(
-            "챗봇과 더 쉽게 대화하는 방법이에요! 👇:\n"
-            "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨)\n"
-            "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 부산 시간, 금일 날짜)\n"
-            "3. **리그순위** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
-            "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
+            "챗봇과 더 쉽게 대화하는 방법이에요! :\n"
+            "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
+            "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 마드리드 시간, 금일 날짜)\n"
+            "3. **검색** 🌐: '[키워드] 검색해' 또는 '[키워드] 검색해줘' (예: 2025년 서울 전시회 검색해줘)\n"
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **검색** 🌐: '검색 키워드' (예: 검색 최근 전시회 추천)\n"
-            "8. **MBTI** ✨: 'MBTI' 또는 'MBTI 유형' (예: MBTI 검사, INTJ 설명)\n"
-            "9. **다중지능** 🎉: '다중지능' 또는 '다중지능 유형' (예: 다중지능 검사, 언어지능 직업)\n\n"
+            "7. **리그순위** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
+            "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
+            "8. **MBTI** ✨: 'MBTI 검사',  'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
+            "9. **다중지능** 🎉: '다중지능 검사', '다중지능 유형', '다중지능 직업', (예: 다중지능 검사, 언어지능 직업)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
         )
-    
-    for msg in st.session_state.chat_history[-10:]:
+   
+    for msg in st.session_state.messages[-10:]:
         with st.chat_message(msg['role']):
             if isinstance(msg['content'], dict) and "table" in msg['content']:
                 st.markdown(f"### {msg['content']['header']}")
@@ -899,7 +825,7 @@ def show_chat_dashboard():
     
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.chat_message("user").markdown(user_prompt)
-        st.session_state.chat_history.append({"role": "user", "content": user_prompt})
+        st.session_state.messages.append({"role": "user", "content": user_prompt})
         with st.chat_message("assistant"):
             placeholder = st.empty()
             placeholder.markdown("응답을 준비 중이에요.. ⏳")
@@ -916,15 +842,15 @@ def show_chat_dashboard():
                 else:
                     st.markdown(response, unsafe_allow_html=True)
                 
-                st.session_state.chat_history.append({"role": "assistant", "content": response})
+                st.session_state.messages.append({"role": "assistant", "content": response})
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
             
             except Exception as e:
                 placeholder.empty()
-                error_msg = f"응답을 준비하다 문제가 생겼어요: {str(e)} 😓"
+                error_msg = f"응답을 준비하다 문제: {str(e)} 😓"
                 logger.error(f"대화 처리 중 오류: {str(e)}", exc_info=True)
                 st.markdown(error_msg, unsafe_allow_html=True)
-                st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
 def show_login_page():
     st.title("로그인 🤗")
@@ -937,7 +863,6 @@ def show_login_page():
                 user_id, is_existing = create_or_get_user(nickname)
                 st.session_state.user_id = user_id
                 st.session_state.is_logged_in = True
-                st.session_state.chat_history = []
                 st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 도움말도 활용해 보세요 😊"}]
                 st.session_state.session_id = str(uuid.uuid4())
                 st.toast(f"환영합니다, {nickname}님! 🎉")
@@ -955,3 +880,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+    
