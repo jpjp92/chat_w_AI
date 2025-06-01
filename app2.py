@@ -324,8 +324,17 @@ class FootballAPI:
             for m in knockout_matches:
                 home = m.get('homeTeam', {}).get('name', '미정')
                 away = m.get('awayTeam', {}).get('name', '미정')
-                score_home = m.get('score', {}).get('fullTime', {}).get('homeTeam')
-                score_away = m.get('score', {}).get('fullTime', {}).get('awayTeam')
+                
+                # 스코어 확인 (fullTime → extraTime → aggregate 순으로 확인)
+                score_home = m.get('score', {}).get('fullTime', {}).get('home')
+                score_away = m.get('score', {}).get('fullTime', {}).get('away')
+                if score_home is None or score_away is None:
+                    score_home = m.get('score', {}).get('extraTime', {}).get('home')
+                    score_away = m.get('score', {}).get('extraTime', {}).get('away')
+                if score_home is None or score_away is None:
+                    score_home = m.get('score', {}).get('aggregate', {}).get('home')
+                    score_away = m.get('score', {}).get('aggregate', {}).get('away')
+                
                 score_str = (
                     f"{score_home if score_home is not None else '-'} : {score_away if score_away is not None else '-'}"
                 )
