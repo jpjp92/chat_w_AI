@@ -798,6 +798,47 @@ def needs_search(query):
         return "conversation"
     return "conversation"
 
+def is_time_query(query):
+    """시간 관련 질문인지 정확하게 판단"""
+    
+    # 긍정적 시간 패턴들
+    positive_patterns = [
+        r'(서울|도쿄|뉴욕|런던|파리|베를린|마드리드|로마|밀라노|시드니|홍콩|싱가포르|모스크바|두바이|라스베이거스|시카고|토론토|멜버른)\s*(시간|time)',
+        r'(현재|지금)\s*(시간|time)',
+        r'몇\s*시',
+        r'(오늘|현재|지금|금일)\s*(날짜|date)',
+        r'what\s*time',
+        r'시간\s*(알려|궁금)',
+        r'몇시인지',
+        r'time\s*in'
+    ]
+    
+    # 부정적 컨텍스트
+    negative_patterns = [
+        r'실시간.*?(축구|야구|농구|경기|스포츠|뉴스|주식|코인|정보)',
+        r'시간.*?(부족|없어|모자라|부족해|없다|남아)',
+        r'언제.*?시간',
+        r'시간대.*?날씨',
+        r'시간당',
+        r'시간.*?(걸려|소요|필요)',
+        r'몇.*?시간.*?(후|뒤|전)',
+        r'시간.*?(맞춰|맞추|조정)',
+        r'시간표',
+        r'시간.*?(예약|약속|일정)'
+    ]
+    
+    # 부정적 컨텍스트 확인
+    for pattern in negative_patterns:
+        if re.search(pattern, query):
+            return False
+    
+    # 긍정적 패턴 확인
+    for pattern in positive_patterns:
+        if re.search(pattern, query):
+            return True
+    
+    return False
+
 def process_query(query):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
@@ -938,8 +979,8 @@ def show_chat_dashboard():
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
             "7. **축구 리그 정보** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
             "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
+            "   - **챔피언스리그 리그 단계계**: '챔피언스리그 리그 순위' 또는 'UCL 리그순위'로 확인\n"
             "   - **챔피언스리그 토너먼트**: '챔피언스리그 토너먼트' 또는 'UCL 16강'(예: 챔피언스리그 16강)\n"
-            "   - **챔피언스리그 리그 스테이지**: '챔피언스리그 리그 순위' 또는 'UCL 리그순위'로 그룹 스테이지 순위를 확인\n"
             "8. **MBTI** ✨: 'MBTI 검사',  'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
             "9. **다중지능** 🎉: '다중지능 검사', '다중지능 유형', '다중지능 직업', (예: 다중지능 검사, 언어지능 직업)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
