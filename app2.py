@@ -655,6 +655,9 @@ def needs_search(query):
         return "league_standings"
     if "리그득점순위" in query_lower or "득점순위" in query_lower:
         return "league_scorers"
+    if ("챔피언스리그" in query_lower or "ucl" in query_lower) and (
+        "토너먼트" in query_lower or "knockout" in query_lower or "16강" in query_lower or "8강" in query_lower or "4강" in query_lower or "결승" in query_lower):
+        return "cl_knockout"
     if "약품검색" in query_lower:
         return "drug"
     if "공학논문" in query_lower or "arxiv" in query_lower:
@@ -738,6 +741,23 @@ def process_query(query):
                     result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
             else:
                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
+        elif query_type == "cl_knockout":
+            future = executor.submit(football_api.fetch_championsleague_knockout_matches)
+            results = future.result()
+            if isinstance(results, str):
+                result = results
+            else:
+                if not results:
+                    result = "챔피언스리그 토너먼트 경기 결과가 없습니다."
+                else:
+                    df = pd.DataFrame(results)
+                    result = {
+                        "header": "챔피언스리그 Knockout Stage 결과",
+                        "table": df,
+                        "footer": "더 궁금한 점 있나요? 😊"
+                    }
+        
+                
         elif query_type == "drug":
             future = executor.submit(get_drug_info, query)
             result = future.result()
@@ -880,5 +900,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
-    
