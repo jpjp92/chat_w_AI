@@ -339,9 +339,31 @@ class FootballAPI:
             return results
         except Exception as e:
             return f"챔피언스리그 토너먼트 경기 결과를 가져오는 중 오류: {str(e)}"
+# 최적의 프로바이더 선택 함수
+def select_best_provider_with_priority():
+    """
+    우선순위에 따라 가장 적합한 프로바이더를 선택합니다.
+    """
+    providers = ["GeekGpt", "Liaobots", "Raycast", "Phind"]  # 우선순위 설정
+    for provider in providers:
+        try:
+            client = Client(include_providers=[provider])
+            # 테스트 요청 (챗봇의 역할에 맞는 메시지 사용)
+            client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "당신은 친절한 AI 챗봇입니다. 사용자의 질문에 적절히 응답하세요."},
+                ]
+            )
+            logger.info(f"선택된 프로바이더: {provider}")
+            return client
+        except Exception as e:
+            logger.warning(f"{provider} 프로바이더를 사용할 수 없습니다: {str(e)}")
+    raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
+
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])
+client = select_best_provider_with_priority()  # 최적의 프로바이더 선택
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
