@@ -313,20 +313,25 @@ class FootballAPI:
             response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             data = response.json()
-            # knockout 스테이지만 필터링
             knockout_matches = [
                 m for m in data['matches']
-                if m['stage'] in ['LAST_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL']
+                if m.get('stage') in ['LAST_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL']
             ]
-            # 원하는 정보만 추출
             results = []
             for m in knockout_matches:
+                home = m.get('homeTeam', {}).get('name', '미정')
+                away = m.get('awayTeam', {}).get('name', '미정')
+                score_home = m.get('score', {}).get('fullTime', {}).get('homeTeam')
+                score_away = m.get('score', {}).get('fullTime', {}).get('awayTeam')
+                score_str = (
+                    f"{score_home if score_home is not None else '-'} : {score_away if score_away is not None else '-'}"
+                )
                 results.append({
-                    "라운드": m['stage'],
-                    "날짜": m['utcDate'][:10],
-                    "홈팀": m['homeTeam']['name'],
-                    "원정팀": m['awayTeam']['name'],
-                    "스코어": f"{m['score']['fullTime']['homeTeam']} : {m['score']['fullTime']['awayTeam']}"
+                    "라운드": m.get('stage', '미정'),
+                    "날짜": m.get('utcDate', '')[:10] if m.get('utcDate') else '미정',
+                    "홈팀": home,
+                    "원정팀": away,
+                    "스코어": score_str
                 })
             return results
         except Exception as e:
