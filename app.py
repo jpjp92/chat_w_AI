@@ -1006,15 +1006,16 @@ def process_query(query):
             else:
                 result = "🎭 **문화 행사 정보** 🎭\n\n"
                 for i, event in enumerate(events, 1):
-                    # 이미지 URL을 클릭 가능한 링크로 변경
+                    # 이미지 URL과 링크를 클릭 가능한 링크로 변경
                     image_link = f"[🖼️ 이미지 보기]({event['image']})" if event['image'] != '정보 없음' else "🖼️ 이미지 없음"
+                    web_link = f"[🔗 웹사이트]({event['link']})" if event['link'] != '정보 없음' else "🔗 링크 없음"
                     
                     result += (
-                        f"### {i}. {event['title']}\n"
-                        f"📅 **날짜**: {event['date']}\n"
-                        f"📍 **장소**: {event['place']} ({event['district']})\n"
-                        f"💰 **요금**: {event['fee']} ({event['is_free']})\n"
-                        f"🔗 **링크**: [{event['link']}]({event['link']}) | {image_link}\n"
+                        f"### {i}. {event['title']}\n\n"
+                        f"📅 **날짜**: {event['date']}\n\n"
+                        f"📍 **장소**: {event['place']} ({event['district']})\n\n"
+                        f"💰 **요금**: {event['fee']} ({event['is_free']})\n\n"
+                        f"{web_link} | {image_link}\n\n"
                         f"---\n\n"
                     )
                 result += "더 궁금한 점 있나요? 😊"
