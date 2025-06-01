@@ -16,6 +16,7 @@
   🔍 Search : Naver API, googlesearch
   📚 Paper Search : arxiv, pubmed
   ⚽ Football : football-data.org
+  🎭 Culture : Seoul Open API
 ```
 🔄 **In-progress** <br>
 ```

@@ -1000,22 +1000,22 @@ def process_query(query):
             future = executor.submit(get_future_events, CULTURE_API_KEY, target_district)
             events = future.result()
             if isinstance(events, str):  # 오류 메시지 반환
-                return events[:10]  # 최대 10개의 이벤트만 반환
+                return events
             elif not events:  # 결과가 없을 경우
                 result = "해당 조건에 맞는 문화 행사가 없습니다."
             else:
                 result = "🎭 **문화 행사 정보** 🎭\n\n"
-                for event in events:
+                for i, event in enumerate(events, 1):
                     # 이미지 URL을 클릭 가능한 링크로 변경
                     image_link = f"[🖼️ 이미지 보기]({event['image']})" if event['image'] != '정보 없음' else "🖼️ 이미지 없음"
                     
                     result += (
-                        f"📌 **제목**: {event['title']}\n\n"
-                        f"📅 **날짜**: {event['date']}\n\n"
-                        f"📍 **장소**: {event['place']} ({event['district']})\n\n"
-                        f"💰 **요금**: {event['fee']} ({event['is_free']})\n\n"
-                        f"🔗 **링크**: {event['link']}\n\n"
-                        f"{image_link}\n\n"
+                        f"### {i}. {event['title']}\n"
+                        f"📅 **날짜**: {event['date']}\n"
+                        f"📍 **장소**: {event['place']} ({event['district']})\n"
+                        f"💰 **요금**: {event['fee']} ({event['is_free']})\n"
+                        f"🔗 **링크**: [{event['link']}]({event['link']}) | {image_link}\n"
+                        f"---\n\n"
                     )
                 result += "더 궁금한 점 있나요? 😊"
                 
