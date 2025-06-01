@@ -759,7 +759,8 @@ def needs_search(query):
     if "날씨" in query_lower:
         return "weather" if "내일" not in query_lower else "tomorrow_weather"
     if "시간" in query_lower or "날짜" in query_lower:
-        return "time"
+        if is_time_query(query_lower):
+            return "time"
     if "리그순위" in query_lower:
         return "league_standings"
     if "리그득점순위" in query_lower or "득점순위" in query_lower:
@@ -797,6 +798,47 @@ def needs_search(query):
     if any(greeting in query_lower for greeting in GREETINGS):
         return "conversation"
     return "conversation"
+
+def is_time_query(query):
+    """시간 관련 질문인지 정확하게 판단"""
+    
+    # 긍정적 시간 패턴들
+    positive_patterns = [
+        r'(서울|도쿄|뉴욕|런던|파리|베를린|마드리드|로마|밀라노|시드니|홍콩|싱가포르|모스크바|두바이|라스베이거스|시카고|토론토|멜버른)\s*(시간|time)',
+        r'(현재|지금)\s*(시간|time)',
+        r'몇\s*시',
+        r'(오늘|현재|지금|금일)\s*(날짜|date)',
+        r'what\s*time',
+        r'시간\s*(알려|궁금)',
+        r'몇시인지',
+        r'time\s*in'
+    ]
+    
+    # 부정적 컨텍스트
+    negative_patterns = [
+        r'실시간.*?(축구|야구|농구|경기|스포츠|뉴스|주식|코인|정보)',
+        r'시간.*?(부족|없어|모자라|부족해|없다|남아)',
+        r'언제.*?시간',
+        r'시간대.*?날씨',
+        r'시간당',
+        r'시간.*?(걸려|소요|필요)',
+        r'몇.*?시간.*?(후|뒤|전)',
+        r'시간.*?(맞춰|맞추|조정)',
+        r'시간표',
+        r'시간.*?(예약|약속|일정)'
+    ]
+    
+    # 부정적 컨텍스트 확인
+    for pattern in negative_patterns:
+        if re.search(pattern, query):
+            return False
+    
+    # 긍정적 패턴 확인
+    for pattern in positive_patterns:
+        if re.search(pattern, query):
+            return True
+    
+    return False
 
 def process_query(query):
     cache_key = f"query:{hash(query)}"
