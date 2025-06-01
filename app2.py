@@ -316,6 +316,10 @@ class FootballAPI:
             response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             data = response.json()
+            
+            # 디버깅용 - API 응답 확인
+            # print(json.dumps(data['matches'][0], indent=2, ensure_ascii=False))
+            
             knockout_matches = [
                 m for m in data['matches']
                 if m.get('stage') in KNOCKOUT_STAGES
@@ -325,25 +329,40 @@ class FootballAPI:
                 home = m.get('homeTeam', {}).get('name', '미정')
                 away = m.get('awayTeam', {}).get('name', '미정')
                 
-                # 스코어 확인 (fullTime → extraTime → aggregate 순으로 확인)
+                # 스코어 확인 (fullTime → halfTime → extraTime → penalties 순으로 확인)
                 score_home = m.get('score', {}).get('fullTime', {}).get('home')
                 score_away = m.get('score', {}).get('fullTime', {}).get('away')
+                
+                if score_home is None or score_away is None:
+                    score_home = m.get('score', {}).get('halfTime', {}).get('home')
+                    score_away = m.get('score', {}).get('halfTime', {}).get('away')
+                
                 if score_home is None or score_away is None:
                     score_home = m.get('score', {}).get('extraTime', {}).get('home')
                     score_away = m.get('score', {}).get('extraTime', {}).get('away')
-                if score_home is None or score_away is None:
-                    score_home = m.get('score', {}).get('aggregate', {}).get('home')
-                    score_away = m.get('score', {}).get('aggregate', {}).get('away')
                 
-                score_str = (
-                    f"{score_home if score_home is not None else '-'} : {score_away if score_away is not None else '-'}"
-                )
+                if score_home is None or score_away is None:
+                    score_home = m.get('score', {}).get('penalties', {}).get('home')
+                    score_away = m.get('score', {}).get('penalties', {}).get('away')
+            
+                # 경기 상태 확인
+                match_status = m.get('status', '')
+                
+                # 스코어 문자열 생성
+                if match_status == 'FINISHED':
+                    score_str = f"{score_home if score_home is not None else 0} : {score_away if score_away is not None else 0}"
+                elif match_status == 'SCHEDULED':
+                    score_str = "예정된 경기"
+                else:
+                    score_str = f"{score_home if score_home is not None else '-'} : {score_away if score_away is not None else '-'}"
+                
                 results.append({
                     "라운드": m.get('stage', '미정'),
                     "날짜": m.get('utcDate', '')[:10] if m.get('utcDate') else '미정',
                     "홈팀": home,
                     "원정팀": away,
-                    "스코어": score_str
+                    "스코어": score_str,
+                    "상태": match_status
                 })
             return results
         except Exception as e:
