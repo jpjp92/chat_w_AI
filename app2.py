@@ -702,6 +702,18 @@ def get_pubmed_papers(query, max_results=5):
     
 # 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
+_client_instance = None
+
+def get_client():
+    global _client_instance
+    if _client_instance is None:
+        client, provider_name = select_random_available_provider()
+        _client_instance = client
+        # 세션 상태가 사용 가능한 컨텍스트에서만 업데이트
+        if hasattr(st, 'session_state'):
+            st.session_state.provider_name = provider_name
+    return _client_instance
+
 async def get_conversational_response(query, chat_history):
     cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
@@ -714,16 +726,21 @@ async def get_conversational_response(query, chat_history):
     ] + [{"role": msg["role"], "content": msg["content"]} 
          for msg in chat_history[-2:] if "더 궁금한 점 있나요?" not in msg["content"]]
     
-    loop = asyncio.get_event_loop()
+    # 비동기 실행 전에 client 객체를 미리 가져옴
     try:
-        # st.session_state.client 사용
+        if not hasattr(st, 'session_state') or 'client' not in st.session_state:
+            client, _ = select_random_available_provider()
+        else:
+            client = st.session_state.client
+            
+        loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
-            None, lambda: st.session_state.client.chat.completions.create(
+            None, lambda: client.chat.completions.create(
                 model="gpt-4o-mini", messages=messages
             )
         )
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
-    except (IndexError, Exception) as e:
+    except Exception as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
         result = "응답을 생성하는 중 문제가 발생했습니다."
     conversation_cache.setex(cache_key, 600, result)
