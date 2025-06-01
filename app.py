@@ -1007,11 +1007,11 @@ def process_query(query):
                 result = "🎭 **문화 행사 정보** 🎭\n\n"
                 for event in events:
                     result += (
-                        f"📌 **제목**: {event['title']}\n"
-                        f"📅 **날짜**: {event['date']}\n"
-                        f"📍 **장소**: {event['place']} ({event['district']})\n"
-                        f"💰 **요금**: {event['fee']} ({event['is_free']})\n"
-                        f"🔗 **링크**: {event['link']}\n"
+                        f"📌 **제목**: {event['title']}\n\n"
+                        f"📅 **날짜**: {event['date']}\n\n"
+                        f"📍 **장소**: {event['place']} ({event['district']})\n\n"
+                        f"💰 **요금**: {event['fee']} ({event['is_free']})\n\n"
+                        f"🔗 **링크**: {event['link']}\n\n"
                         f"🖼️ **이미지**: {event['image']}\n\n"
                     )
                 result += "더 궁금한 점 있나요? 😊"
