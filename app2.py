@@ -312,16 +312,17 @@ class FootballAPI:
         """
         url = f"{self.base_url}/CL/matches"
         headers = {'X-Auth-Token': self.api_key}
-        KNOCKOUT_STAGES = [
-            "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL", "THIRD_PLACE"
-        ]
+        KNOCKOUT_STAGES = {
+            "LAST_16": "16강",
+            "QUARTER_FINALS": "8강",
+            "SEMI_FINALS": "준결승",
+            "FINAL": "결승",
+            "THIRD_PLACE": "3위 결정전"
+        }
         try:
             response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             data = response.json()
-            
-            # 디버깅용 - API 응답 확인
-            # print(json.dumps(data['matches'][0], indent=2, ensure_ascii=False))
             
             knockout_matches = [
                 m for m in data['matches']
@@ -359,8 +360,11 @@ class FootballAPI:
                 else:
                     score_str = f"{score_home if score_home is not None else '-'} : {score_away if score_away is not None else '-'}"
                 
+                # 라운드 이름 변환
+                stage = KNOCKOUT_STAGES.get(m.get('stage', ''), '미정')
+                
                 results.append({
-                    "라운드": m.get('stage', '미정'),
+                    "라운드": stage,
                     "날짜": m.get('utcDate', '')[:10] if m.get('utcDate') else '미정',
                     "홈팀": home,
                     "원정팀": away,
@@ -932,8 +936,10 @@ def show_chat_dashboard():
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **리그순위** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
+            "7. **축구 리그 정보** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
             "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
+            "   - **챔피언스리그 토너먼트**: '챔피언스리그 토너먼트' 또는 'UCL 16강' 등으로 검색해 보세요! (예: 챔피언스리그 16강)\n"
+            "   - **챔피언스리그 리그 스테이지**: '챔피언스리그 리그 순위' 또는 'UCL 리그순위'로 그룹 스테이지 순위를 확인할 수 있어요! (예: 챔피언스리그 리그순위)\n"
             "8. **MBTI** ✨: 'MBTI 검사',  'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
             "9. **다중지능** 🎉: '다중지능 검사', '다중지능 유형', '다중지능 직업', (예: 다중지능 검사, 언어지능 직업)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
