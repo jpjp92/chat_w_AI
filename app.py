@@ -123,6 +123,7 @@ class WeatherAPI:
             f"풍속: {data['wind']['speed']}m/s\n"
             f"더 궁금한 점 있나요? 😊"
         )
+        # 캐시 TTL 값 확인 및 조정
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
     def get_forecast_by_day(self, city_name, days_from_today=1):
@@ -157,6 +158,7 @@ class WeatherAPI:
                 )
         
         result = forecast_text + "더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
+        # 캐시 TTL 값 확인 및 조정
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
@@ -210,6 +212,7 @@ class WeatherAPI:
             )
         
         result = forecast_text + "\n더 궁금한 점 있나요? 😊"
+        # 캐시 TTL 값 확인 및 조정
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
@@ -232,7 +235,7 @@ class FootballAPI:
         
         try:
             time.sleep(1)
-            response = requests.get(url, headers=headers, timeout=3)
+            response = requests.get(url, headers=headers, timeout=2)
             response.raise_for_status()
             data = response.json()
             
@@ -289,7 +292,7 @@ class FootballAPI:
         
         try:
             time.sleep(1)
-            response = requests.get(url, headers=headers, timeout=3)
+            response = requests.get(url, headers=headers, timeout=2)
             response.raise_for_status()
             data = response.json()
             
@@ -303,9 +306,118 @@ class FootballAPI:
         except requests.exceptions.RequestException as e:
             return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
 
+    def fetch_championsleague_knockout_matches(self):
+        """
+        챔피언스리그의 knockout(토너먼트) 스테이지 경기 결과를 반환합니다.
+        """
+        url = f"{self.base_url}/CL/matches"
+        headers = {'X-Auth-Token': self.api_key}
+        KNOCKOUT_STAGES = {
+            "LAST_16": "16강",
+            "QUARTER_FINALS": "8강",
+            "SEMI_FINALS": "준결승",
+            "FINAL": "결승",
+            "THIRD_PLACE": "3위 결정전"
+        }
+        try:
+            response = requests.get(url, headers=headers, timeout=3)
+            response.raise_for_status()
+            data = response.json()
+            
+            knockout_matches = [
+                m for m in data['matches']
+                if m.get('stage') in KNOCKOUT_STAGES
+            ]
+            results = []
+            for m in knockout_matches:
+                home = m.get('homeTeam', {}).get('name', '미정')
+                away = m.get('awayTeam', {}).get('name', '미정')
+                
+                # 스코어 확인 (fullTime → halfTime → extraTime → penalties 순으로 확인)
+                score_home = m.get('score', {}).get('fullTime', {}).get('home')
+                score_away = m.get('score', {}).get('fullTime', {}).get('away')
+                
+                if score_home is None or score_away is None:
+                    score_home = m.get('score', {}).get('halfTime', {}).get('home')
+                    score_away = m.get('score', {}).get('halfTime', {}).get('away')
+                
+                if score_home is None or score_away is None:
+                    score_home = m.get('score', {}).get('extraTime', {}).get('home')
+                    score_away = m.get('score', {}).get('extraTime', {}).get('away')
+                
+                if score_home is None or score_away is None:
+                    score_home = m.get('score', {}).get('penalties', {}).get('home')
+                    score_away = m.get('score', {}).get('penalties', {}).get('away')
+            
+                # 경기 상태 확인
+                match_status = m.get('status', '')
+                
+                # 스코어 문자열 생성
+                if match_status == 'FINISHED':
+                    score_str = f"{score_home if score_home is not None else 0} : {score_away if score_away is not None else 0}"
+                elif match_status == 'SCHEDULED':
+                    score_str = "예정된 경기"
+                else:
+                    score_str = f"{score_home if score_home is not None else '-'} : {score_away if score_away is not None else '-'}"
+                
+                # 라운드 이름 변환
+                stage = KNOCKOUT_STAGES.get(m.get('stage', ''), '미정')
+                
+                results.append({
+                    "라운드": stage,
+                    "날짜": m.get('utcDate', '')[:10] if m.get('utcDate') else '미정',
+                    "홈팀": home,
+                    "원정팀": away,
+                    "스코어": score_str,
+                    "상태": match_status
+                })
+            return results
+        except Exception as e:
+            return f"챔피언스리그 토너먼트 경기 결과를 가져오는 중 오류: {str(e)}"
+# 최적의 프로바이더 선택 함수
+def select_best_provider_with_priority():
+    """
+    우선순위에 따라 가장 적합한 프로바이더를 선택합니다.
+    """
+    providers = ["GeekGpt", "Liaobots", "Raycast", "Phind"]  # 우선순위 설정
+    for provider in providers:
+        try:
+            client = Client(include_providers=[provider])
+            # 테스트 요청 (챗봇의 역할에 맞는 메시지 사용)
+            client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "당신은 친절한 AI 챗봇입니다. 사용자의 질문에 적절히 응답하세요."},
+                ]
+            )
+            logger.info(f"선택된 프로바이더: {provider}")
+            return client
+        except Exception as e:
+            logger.warning(f"{provider} 프로바이더를 사용할 수 없습니다: {str(e)}")
+    raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
+
+def select_random_available_provider():
+    providers = ["GeekGpt", "Liaobots", "Raycast"]
+    random.shuffle(providers)  # 랜덤 순서로 섞기
+    for provider in providers:
+        try:
+            client = Client(include_providers=[provider])
+            # 실제로 간단한 테스트 요청
+            client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "system", "content": "테스트 메시지입니다."}]
+            )
+            logger.info(f"선택된 프로바이더(랜덤): {provider}")
+            return client, provider
+        except Exception as e:
+            logger.warning(f"{provider} 프로바이더를 사용할 수 없습니다: {str(e)}")
+    raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
+
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = Client(exclude_providers=["OpenaiChat", "Copilot", "Liaobots", "Jmuz", "PollinationsAI", "ChatGptEs"])
+# 앱 시작 시 한 번만 실행하도록 수정
+# 전역 변수로 선언된 client 객체를 초기화할 때만 사용
+# client = select_best_provider_with_priority()
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -322,6 +434,10 @@ def init_session_state():
         st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
+    if "client" not in st.session_state or "provider_name" not in st.session_state:
+        client, provider_name = select_random_available_provider()
+        st.session_state.client = client
+        st.session_state.provider_name = provider_name
 
 # 도시 및 시간 추출
 CITY_PATTERNS = [
@@ -590,6 +706,18 @@ def get_pubmed_papers(query, max_results=5):
     
 # 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
+_client_instance = None
+
+def get_client():
+    global _client_instance
+    if _client_instance is None:
+        client, provider_name = select_random_available_provider()
+        _client_instance = client
+        # 세션 상태가 사용 가능한 컨텍스트에서만 업데이트
+        if hasattr(st, 'session_state'):
+            st.session_state.provider_name = provider_name
+    return _client_instance
+
 async def get_conversational_response(query, chat_history):
     cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
@@ -602,12 +730,21 @@ async def get_conversational_response(query, chat_history):
     ] + [{"role": msg["role"], "content": msg["content"]} 
          for msg in chat_history[-2:] if "더 궁금한 점 있나요?" not in msg["content"]]
     
-    loop = asyncio.get_event_loop()
+    # 비동기 실행 전에 client 객체를 미리 가져옴
     try:
-        response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
-            model="gpt-4o-mini", messages=messages))
+        if not hasattr(st, 'session_state') or 'client' not in st.session_state:
+            client, _ = select_random_available_provider()
+        else:
+            client = st.session_state.client
+            
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None, lambda: client.chat.completions.create(
+                model="gpt-4o-mini", messages=messages
+            )
+        )
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
-    except (IndexError, Exception) as e:
+    except Exception as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
         result = "응답을 생성하는 중 문제가 발생했습니다."
     conversation_cache.setex(cache_key, 600, result)
@@ -627,6 +764,9 @@ def needs_search(query):
         return "league_standings"
     if "리그득점순위" in query_lower or "득점순위" in query_lower:
         return "league_scorers"
+    if ("챔피언스리그" in query_lower or "ucl" in query_lower) and (
+        "토너먼트" in query_lower or "knockout" in query_lower or "16강" in query_lower or "8강" in query_lower or "4강" in query_lower or "결승" in query_lower):
+        return "cl_knockout"
     if "약품검색" in query_lower:
         return "drug"
     if "공학논문" in query_lower or "arxiv" in query_lower:
@@ -710,6 +850,23 @@ def process_query(query):
                     result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
             else:
                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
+        elif query_type == "cl_knockout":
+            future = executor.submit(football_api.fetch_championsleague_knockout_matches)
+            results = future.result()
+            if isinstance(results, str):
+                result = results
+            else:
+                if not results:
+                    result = "챔피언스리그 토너먼트 경기 결과가 없습니다."
+                else:
+                    df = pd.DataFrame(results)
+                    result = {
+                        "header": "챔피언스리그 Knockout Stage 결과",
+                        "table": df,
+                        "footer": "더 궁금한 점 있나요? 😊"
+                    }
+        
+                
         elif query_type == "drug":
             future = executor.submit(get_drug_info, query)
             result = future.result()
@@ -779,8 +936,10 @@ def show_chat_dashboard():
             "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
             "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
             "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **리그순위** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
+            "7. **축구 리그 정보** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
             "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
+            "   - **챔피언스리그 토너먼트**: '챔피언스리그 토너먼트' 또는 'UCL 16강' 등으로 검색해 보세요! (예: 챔피언스리그 16강)\n"
+            "   - **챔피언스리그 리그 스테이지**: '챔피언스리그 리그 순위' 또는 'UCL 리그순위'로 그룹 스테이지 순위를 확인할 수 있어요! (예: 챔피언스리그 리그순위)\n"
             "8. **MBTI** ✨: 'MBTI 검사',  'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
             "9. **다중지능** 🎉: '다중지능 검사', '다중지능 유형', '다중지능 직업', (예: 다중지능 검사, 언어지능 직업)\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
@@ -844,7 +1003,7 @@ def show_login_page():
                 st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
 def main():
-    init_session_state()
+    init_session_state()  # 반드시 첫 줄에서 호출
     if not st.session_state.is_logged_in:
         show_login_page()
     else:
