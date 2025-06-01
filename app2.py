@@ -392,6 +392,23 @@ def select_best_provider_with_priority():
             logger.warning(f"{provider} 프로바이더를 사용할 수 없습니다: {str(e)}")
     raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
 
+def select_random_available_provider():
+    providers = ["GeekGpt", "Liaobots", "Raycast"]
+    random.shuffle(providers)  # 랜덤 순서로 섞기
+    for provider in providers:
+        try:
+            client = Client(include_providers=[provider])
+            # 실제로 간단한 테스트 요청
+            client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "system", "content": "테스트 메시지입니다."}]
+            )
+            logger.info(f"선택된 프로바이더(랜덤): {provider}")
+            return client, provider
+        except Exception as e:
+            logger.warning(f"{provider} 프로바이더를 사용할 수 없습니다: {str(e)}")
+    raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
+
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # 앱 시작 시 한 번만 실행하도록 수정
@@ -413,9 +430,10 @@ def init_session_state():
         st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-    # 프로바이더 클라이언트 세션 저장 (여기서만!)
-    if "client" not in st.session_state:
-        st.session_state.client = select_best_provider_with_priority()
+    if "client" not in st.session_state or "provider_name" not in st.session_state:
+        client, provider_name = select_random_available_provider()
+        st.session_state.client = client
+        st.session_state.provider_name = provider_name
 
 # 도시 및 시간 추출
 CITY_PATTERNS = [
@@ -962,7 +980,7 @@ def show_login_page():
                 st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
 def main():
-    init_session_state()
+    init_session_state()  # 반드시 첫 줄에서 호출
     if not st.session_state.is_logged_in:
         show_login_page()
     else:
