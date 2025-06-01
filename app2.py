@@ -309,13 +309,16 @@ class FootballAPI:
         """
         url = f"{self.base_url}/CL/matches"
         headers = {'X-Auth-Token': self.api_key}
+        KNOCKOUT_STAGES = [
+            "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL", "THIRD_PLACE"
+        ]
         try:
             response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             data = response.json()
             knockout_matches = [
                 m for m in data['matches']
-                if m.get('stage') in ['LAST_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL']
+                if m.get('stage') in KNOCKOUT_STAGES
             ]
             results = []
             for m in knockout_matches:
