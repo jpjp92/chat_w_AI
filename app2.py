@@ -123,6 +123,7 @@ class WeatherAPI:
             f"풍속: {data['wind']['speed']}m/s\n"
             f"더 궁금한 점 있나요? 😊"
         )
+        # 캐시 TTL 값 확인 및 조정
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
     def get_forecast_by_day(self, city_name, days_from_today=1):
@@ -157,6 +158,7 @@ class WeatherAPI:
                 )
         
         result = forecast_text + "더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
+        # 캐시 TTL 값 확인 및 조정
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
@@ -210,6 +212,7 @@ class WeatherAPI:
             )
         
         result = forecast_text + "\n더 궁금한 점 있나요? 😊"
+        # 캐시 TTL 값 확인 및 조정
         self.cache.setex(cache_key, self.cache_ttl, result)
         return result
 
@@ -232,7 +235,7 @@ class FootballAPI:
         
         try:
             time.sleep(1)
-            response = requests.get(url, headers=headers, timeout=3)
+            response = requests.get(url, headers=headers, timeout=2)
             response.raise_for_status()
             data = response.json()
             
@@ -289,7 +292,7 @@ class FootballAPI:
         
         try:
             time.sleep(1)
-            response = requests.get(url, headers=headers, timeout=3)
+            response = requests.get(url, headers=headers, timeout=2)
             response.raise_for_status()
             data = response.json()
             
@@ -391,7 +394,9 @@ def select_best_provider_with_priority():
 
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-client = select_best_provider_with_priority()  # 최적의 프로바이더 선택
+# 앱 시작 시 한 번만 실행하도록 수정
+# 전역 변수로 선언된 client 객체를 초기화할 때만 사용
+client = select_best_provider_with_priority()
 weather_api = WeatherAPI()
 football_api = FootballAPI(api_key=SPORTS_API_KEY)
 naver_request_count = 0
@@ -408,6 +413,9 @@ def init_session_state():
         st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
+    # 프로바이더 클라이언트 세션 저장
+    if "client" not in st.session_state:
+        st.session_state.client = select_best_provider_with_priority()
 
 # 도시 및 시간 추출
 CITY_PATTERNS = [
@@ -690,7 +698,8 @@ async def get_conversational_response(query, chat_history):
     
     loop = asyncio.get_event_loop()
     try:
-        response = await loop.run_in_executor(None, lambda: client.chat.completions.create(
+        # st.session_state.client 사용
+        response = await loop.run_in_executor(None, lambda: st.session_state.client.chat.completions.create(
             model="gpt-4o-mini", messages=messages))
         result = response.choices[0].message.content if response.choices else "응답을 생성할 수 없습니다."
     except (IndexError, Exception) as e:
