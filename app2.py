@@ -466,6 +466,7 @@ def extract_city_from_time_query(query):
                 return city
     return "서울"
 
+# 축구리그 
 LEAGUE_MAPPING = {
     "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
     "laliga": {"name": "라리가 (스페인)", "code": "PD"},
@@ -490,6 +491,90 @@ def extract_league_from_query(query):
             return league_key
     return None
 
+# 문화 행사 관련 함수 
+def fetch_xml(api_key: str) -> ET.Element:
+    """API 키를 사용하여 XML 데이터를 가져옵니다."""
+    url = f"http://openapi.seoul.go.kr:8088/{api_key}/xml/culturalEventInfo/1/100/"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+        return root
+    except requests.exceptions.RequestException as e:
+        logger.error(f"문화행사 API 호출 실패: {e}")
+        return None
+
+def select_target_district(root: ET.Element, target_district: str = ""):
+    """
+    target_district가 빈 문자열이면 XML에서 모든 구를 추출하여
+    랜덤으로 5개 선택한 후 선택된 구 목록(리스트)을 반환합니다.
+    target_district에 값이 있다면 그대로 반환합니다.
+    """
+    if target_district:
+        return target_district
+    districts = {row.findtext('GUNAME', default='정보 없음') for row in root.findall('.//row')}
+    districts = [d for d in districts if d != "정보 없음"]
+    if districts:
+        selected_districts = random.sample(districts, min(5, len(districts)))
+        return selected_districts
+    else:
+        return None
+
+def extract_event_date(date_str: str):
+    """
+    날짜 문자열에서 시작일만 추출하여 datetime.date 객체로 반환합니다.
+    파싱에 실패하면 None을 반환합니다.
+    """
+    date_match = re.match(r"(\d{4}[-./]\d{2}[-./]\d{2})", date_str)
+    if not date_match:
+        return None
+    date_part = date_match.group(1).replace('.', '-').replace('/', '-')
+    try:
+        event_date = datetime.strptime(date_part, "%Y-%m-%d").date()
+        return event_date
+    except Exception:
+        return None
+
+def get_future_events(api_key: str, target_district: str = ""):
+    """API 키와 target_district(빈 문자열이면 랜덤 선택)를 받아 미래 행사를 반환합니다."""
+    root = fetch_xml(api_key)
+    today = datetime.today().date()
+    selected_district = select_target_district(root, target_district)
+    if not selected_district:
+        return "구 정보가 없습니다."
+    
+    events = []
+    for row in root.findall('.//row'):
+        district = row.findtext('GUNAME', default='정보 없음')
+        date_str = row.findtext('DATE', default='정보 없음')
+        event_date = extract_event_date(date_str)
+        if not event_date or event_date <= today:
+            continue
+        # selected_district가 리스트이면 포함 여부, 문자열이면 동일 여부를 비교
+        if isinstance(selected_district, list):
+            if district not in selected_district:
+                continue
+        else:
+            if district != selected_district:
+                continue
+        title = row.findtext('TITLE', default='정보 없음')
+        place = row.findtext('PLACE', default='정보 없음')
+        fee = row.findtext('USE_FEE', default='정보 없음')
+        is_free = row.findtext('IS_FREE', default='정보 없음')
+        link = row.findtext('HMPG_ADDR', default='정보 없음')
+        image = row.findtext('MAIN_IMG', default='정보 없음')
+        events.append({
+            "title": title,
+            "date": date_str,
+            "place": place,
+            "district": district,
+            "fee": fee,
+            "is_free": is_free,
+            "link": link,
+            "image": image
+        })
+    return events[:10]  # 최대 10개의 이벤트만 반환
+# 시간 관련 함수
 def get_kst_time():
     kst_timezone = pytz.timezone("Asia/Seoul")
     kst_time = datetime.now(kst_timezone)
@@ -761,6 +846,8 @@ def needs_search(query):
     if "시간" in query_lower or "날짜" in query_lower:
         if is_time_query(query_lower):
             return "time"
+    if "문화행사" in query_lower:
+        return "cultural_event"
     if "리그순위" in query_lower:
         return "league_standings"
     if "리그득점순위" in query_lower or "득점순위" in query_lower:
@@ -907,7 +994,31 @@ def process_query(query):
                         "table": df,
                         "footer": "더 궁금한 점 있나요? 😊"
                     }
-        
+        elif query_type == "cultural_event":
+            # 문화행사 처리 로직
+            target_district = query.replace("문화행사", "").strip()  # "문화행사" 키워드 제거
+            future = executor.submit(get_future_events, CULTURE_API_KEY, target_district)
+            events = future.result()
+            if isinstance(events, str):  # 오류 메시지 반환
+                return events
+            elif not events:  # 결과가 없을 경우
+                result = "해당 조건에 맞는 문화 행사가 없습니다."
+            else:
+                result = "🎭 **문화 행사 정보** 🎭\n\n"
+                for i, event in enumerate(events, 1):
+                    # 이미지 URL과 링크를 클릭 가능한 링크로 변경
+                    image_link = f"[🖼️ 이미지 보기]({event['image']})" if event['image'] != '정보 없음' else "🖼️ 이미지 없음"
+                    web_link = f"[🔗 웹사이트]({event['link']})" if event['link'] != '정보 없음' else "🔗 링크 없음"
+                    
+                    result += (
+                        f"### {i}. {event['title']}\n\n"
+                        f"📅 **날짜**: {event['date']}\n\n"
+                        f"📍 **장소**: {event['place']} ({event['district']})\n\n"
+                        f"💰 **요금**: {event['fee']} ({event['is_free']})\n\n"
+                        f"{web_link} | {image_link}\n\n"
+                        f"---\n\n"
+                    )
+                result += "더 궁금한 점 있나요? 😊"
                 
         elif query_type == "drug":
             future = executor.submit(get_drug_info, query)
@@ -984,6 +1095,8 @@ def show_chat_dashboard():
             "   - **챔피언스리그 토너먼트**: '챔피언스리그 토너먼트' 또는 'UCL 16강'(예: 챔피언스리그 16강)\n"
             "8. **MBTI** ✨: 'MBTI 검사',  'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
             "9. **다중지능** 🎉: '다중지능 검사', '다중지능 유형', '다중지능 직업', (예: 다중지능 검사, 언어지능 직업)\n\n"
+            "10. **문화행사** 🎭: '[지역구] 문화행사' 또는 '문화행사' (예: 강남구 문화행사, 문화행사)\n\n"
+
             "궁금한 점 있으면 질문해주세요! 😊"
         )
    
