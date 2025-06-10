@@ -1137,19 +1137,20 @@ def show_chat_dashboard():
                     st.markdown(f"✅ **약품명**: {response['name']}")
                     st.markdown(f"✅ **제조사**: {response['company']}")
                     
-                    st.markdown(f"✅ **효능**: {response['efficacy_summary']}")
+                    # 요약 정보만 표시하고 전체 내용은 expander에만 표시하도록 수정
+                    st.markdown(f"✅ **효능 요약**: {response['efficacy_summary']}")
                     with st.expander("**전체 효능 내용 보기**"):
+                        # 요약과 다른 내용만 표시하거나, 전체 내용을 표시
                         st.markdown(response['efficacy_full'])
                         
-                    st.markdown(f"✅ **용법용량**: {response['usage_summary']}")
+                    st.markdown(f"✅ **용법용량 요약**: {response['usage_summary']}")
                     with st.expander("**전체 용법용량 내용 보기**"):
                         st.markdown(response['usage_full'])
                         
-                    st.markdown(f"✅ **주의사항**: {response['caution_summary']}")
+                    st.markdown(f"✅ **주의사항 요약**: {response['caution_summary']}")
                     with st.expander("**전체 주의사항 내용 보기**"):
                         st.markdown(response['caution_full'])
-                        
-                    st.markdown("더 궁금한 점 있나요? 😊")
+                
                 else:
                     if isinstance(response, dict) and "table" in response:
                         st.markdown(f"### {response['header']}")
