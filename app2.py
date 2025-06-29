@@ -636,17 +636,28 @@ def get_drug_info(drug_query):
         data = response.json()
         if 'body' in data and 'items' in data['body'] and data['body']['items']:
             item = data['body']['items'][0]
-            efcy = item.get('efcyQesitm', '정보 없음')[:150] + ("..." if len(item.get('efcyQesitm', '')) > 150 else "")
-            use_method = item.get('useMethodQesitm', '정보 없음')[:150] + ("..." if len(item.get('useMethodQesitm', '')) > 150 else "")
-            atpn = item.get('atpnQesitm', '정보 없음')[:150] + ("..." if len(item.get('atpnQesitm', '')) > 150 else "")
             
+            # 전체 내용 및 요약 내용 저장
+            efcy_full = item.get('efcyQesitm', '정보 없음')
+            efcy_summary = efcy_full[:150] + ("..." if len(efcy_full) > 150 else "")
+            
+            use_method_full = item.get('useMethodQesitm', '정보 없음')
+            use_method_summary = use_method_full[:150] + ("..." if len(use_method_full) > 150 else "")
+            
+            atpn_full = item.get('atpnQesitm', '정보 없음')
+            atpn_summary = atpn_full[:150] + ("..." if len(atpn_full) > 150 else "")
+            
+            # 마크다운에서 details/summary 태그를 사용하여 접었다 펼치는 효과 구현
             result = (
                 f"💊 **의약품 정보** 💊\n\n"
                 f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
                 f"✅ **제조사**: {item.get('entpName', '정보 없음')}\n\n"
-                f"✅ **효능**: {efcy}\n\n"
-                f"✅ **용법용량**: {use_method}\n\n"
-                f"✅ **주의사항**: {atpn}\n\n"
+                f"✅ **효능**: {efcy_summary}\n"
+                f"<details><summary>**전체 내용 보기**</summary>\n{efcy_full}\n</details>\n\n"
+                f"✅ **용법용량**: {use_method_summary}\n"
+                f"<details><summary>**전체 내용 보기**</summary>\n{use_method_full}\n</details>\n\n"
+                f"✅ **주의사항**: {atpn_summary}\n"
+                f"<details><summary>**전체 내용 보기**</summary>\n{atpn_full}\n</details>\n\n"
                 f"더 궁금한 점 있나요? 😊"
             )
             cache_handler.setex(cache_key, 86400, result)
@@ -1121,12 +1132,32 @@ def show_chat_dashboard():
                 time_taken = round(time.time() - start_time, 2)
                 
                 placeholder.empty()
-                if isinstance(response, dict) and "table" in response:
-                    st.markdown(f"### {response['header']}")
-                    st.dataframe(response['table'], use_container_width=True, hide_index=True)
-                    st.markdown(response['footer'])
+                if isinstance(response, dict) and response.get("type") == "drug_info":
+                    st.markdown(f"💊 **의약품 정보** 💊")
+                    st.markdown(f"✅ **약품명**: {response['name']}")
+                    st.markdown(f"✅ **제조사**: {response['company']}")
+                    
+                    # 요약 정보만 표시하고 전체 내용은 expander에만 표시하도록 수정
+                    st.markdown(f"✅ **효능 요약**: {response['efficacy_summary']}")
+                    with st.expander("**전체 효능 내용 보기**"):
+                        # 요약과 다른 내용만 표시하거나, 전체 내용을 표시
+                        st.markdown(response['efficacy_full'])
+                        
+                    st.markdown(f"✅ **용법용량 요약**: {response['usage_summary']}")
+                    with st.expander("**전체 용법용량 내용 보기**"):
+                        st.markdown(response['usage_full'])
+                        
+                    st.markdown(f"✅ **주의사항 요약**: {response['caution_summary']}")
+                    with st.expander("**전체 주의사항 내용 보기**"):
+                        st.markdown(response['caution_full'])
+                
                 else:
-                    st.markdown(response, unsafe_allow_html=True)
+                    if isinstance(response, dict) and "table" in response:
+                        st.markdown(f"### {response['header']}")
+                        st.dataframe(response['table'], use_container_width=True, hide_index=True)
+                        st.markdown(response['footer'])
+                    else:
+                        st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)

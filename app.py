@@ -424,7 +424,7 @@ naver_request_count = 0
 NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
-# 세션 상태 초기화
+# 세션 상태 초기화 부분에 검색 결과 컨텍스트 추가
 def init_session_state():
     if "is_logged_in" not in st.session_state:
         st.session_state.is_logged_in = False
@@ -438,6 +438,11 @@ def init_session_state():
         client, provider_name = select_random_available_provider()
         st.session_state.client = client
         st.session_state.provider_name = provider_name
+    # 검색 결과 컨텍스트 저장을 위한 변수 추가
+    if "search_contexts" not in st.session_state:
+        st.session_state.search_contexts = {}
+    if "current_context" not in st.session_state:
+        st.session_state.current_context = None
 
 # 도시 및 시간 추출
 CITY_PATTERNS = [
@@ -814,6 +819,7 @@ def get_client():
             st.session_state.provider_name = provider_name
     return _client_instance
 
+# 대화형 응답 함수 수정
 async def get_conversational_response(query, chat_history):
     cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
@@ -821,10 +827,68 @@ async def get_conversational_response(query, chat_history):
         return cached
     
     messages = [
-        {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"},
-        {"role": "user", "content": query}
-    ] + [{"role": msg["role"], "content": msg["content"]} 
-         for msg in chat_history[-2:] if "더 궁금한 점 있나요?" not in msg["content"]]
+        {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
+    ]
+    
+    # 현재 대화 컨텍스트가 있는지 확인
+    current_context = None
+    if hasattr(st, 'session_state') and 'current_context' in st.session_state:
+        current_context_id = st.session_state.current_context
+        if current_context_id and current_context_id in st.session_state.search_contexts:
+            current_context = st.session_state.search_contexts[current_context_id]
+    
+    # 검색 컨텍스트가 있으면 시스템 프롬프트에 추가
+    if current_context:
+        context_type = current_context["type"]
+        context_query = current_context["query"]
+        context_result = current_context["result"]
+        
+        # 컨텍스트 유형에 따라 다른 지시 추가
+        if context_type == "naver_search":
+            # 테이블 데이터인 경우 처리
+            if isinstance(context_result, dict) and "table" in context_result:
+                table_json = context_result["table"].to_json(orient="records")
+                context_desc = f"사용자가 '{context_query}'에 대해 검색했고, 다음 테이블 형태의 결과를 받았습니다: {table_json}"
+            else:
+                # 정규 표현식으로 웹 검색 결과만 추출
+                cleaned_results = re.findall(r"\*\*결과 \d+\*\*\s*\n\n📄 \*\*제목\*\*: (.*?)\n\n📝 \*\*내용\*\*: (.*?)(?=\n\n🔗|\n\n더 궁금한)", context_result, re.DOTALL)
+                context_desc = f"사용자가 '{context_query}'에 대해 웹 검색을 했고, 다음 결과를 받았습니다:\n\n"
+                for i, (title, content) in enumerate(cleaned_results, 1):
+                    context_desc += f"{i}. 제목: {title}\n   내용: {content}\n\n"
+        
+        # 다른 유형의 컨텍스트 처리 (약품 정보, 논문 등)
+        elif context_type == "drug":
+            # 약품 정보일 경우
+            context_desc = f"사용자가 '{context_query}' 약품에 대한 정보를 검색했습니다. 약품 정보를 기반으로 사용자의 질문에 답변해주세요."
+        
+        elif context_type == "arxiv_search":
+            # arXiv 논문 검색일 경우
+            context_desc = f"사용자가 '{context_query}' 키워드로 arXiv 논문을 검색했습니다. 논문 검색 결과를 기반으로 사용자의 질문에 답변해주세요."
+        
+        elif context_type == "pubmed_search":
+            # PubMed 논문 검색일 경우
+            context_desc = f"사용자가 '{context_query}' 키워드로 PubMed 의학논문을 검색했습니다. 의학논문 검색 결과를 기반으로 사용자의 질문에 답변해주세요."
+        
+        else:
+            # 기타 컨텍스트
+            context_desc = f"사용자가 '{context_query}'에 대해 검색했습니다. 검색 결과를 기반으로 사용자의 질문에 답변해주세요."
+        
+        # 공통 지시사항
+        system_prompt = (
+            "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절).\n\n"
+            f"{context_desc}\n\n"
+            "사용자의 후속 질문은 이 검색 결과에 관한 것일 수 있습니다. 검색 결과의 내용을 기반으로 답변하세요.\n"
+            "요약을 요청받으면 중요한 정보를 간결하게 요약하고, 설명을 요청받으면 더 자세한 정보를 제공하세요.\n"
+            "검색 결과에 관련 정보가 없다면 정직하게 모른다고 답변하세요."
+        )
+        messages[0]["content"] = system_prompt
+    
+    # 최근 대화 기록 추가
+    messages.extend([{"role": msg["role"], "content": msg["content"]} 
+                    for msg in chat_history[-4:] if "더 궁금한 점 있나요?" not in msg["content"]])
+    
+    # 현재 질문 추가
+    messages.append({"role": "user", "content": query})
     
     # 비동기 실행 전에 client 객체를 미리 가져옴
     try:
@@ -1034,18 +1098,75 @@ def process_query(query):
         elif query_type == "drug":
             future = executor.submit(get_drug_info, query)
             result = future.result()
+            
+            # 약물 정보 검색 결과를 컨텍스트에 저장
+            context_id = str(uuid.uuid4())
+            st.session_state.search_contexts[context_id] = {
+                "type": "drug",
+                "query": query,
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+            st.session_state.current_context = context_id
+            
+            # 멀티턴 대화를 위한 안내 추가
+            if isinstance(result, str):
+                result += "\n\n💡 약물 정보에 대해 더 질문하시면 답변해드릴게요. 예를 들어 '이 약의 부작용을 요약해줘' 또는 '복용법에 대해 자세히 설명해줘' 등의 질문을 해보세요."
+            
         elif query_type == "arxiv_search":
             keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
             future = executor.submit(get_arxiv_papers, keywords)
             result = future.result()
+            
+            # arXiv 논문 검색 결과를 컨텍스트에 저장
+            context_id = str(uuid.uuid4())
+            st.session_state.search_contexts[context_id] = {
+                "type": "arxiv_search",
+                "query": keywords,
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+            st.session_state.current_context = context_id
+            
+            # 멀티턴 대화를 위한 안내 추가
+            if isinstance(result, str):
+                result += "\n\n💡 논문 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어 '첫 번째 논문을 요약해줘' 또는 '이 연구의 중요성을 설명해줘' 등의 질문을 해보세요."
+            
         elif query_type == "pubmed_search":
             keywords = query.replace("의학논문", "").strip()
             future = executor.submit(get_pubmed_papers, keywords)
             result = future.result()
+            
+            # PubMed 논문 검색 결과를 컨텍스트에 저장
+            context_id = str(uuid.uuid4())
+            st.session_state.search_contexts[context_id] = {
+                "type": "pubmed_search",
+                "query": keywords,
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+            st.session_state.current_context = context_id
+            
+            # 멀티턴 대화를 위한 안내 추가
+            if isinstance(result, str):
+                result += "\n\n💡 의학논문 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어 '이 연구의 임상적 의미를 설명해줘' 또는 '연구 방법론에 대해 자세히 알려줘' 등의 질문을 해보세요."
         elif query_type == "naver_search":
             search_query = query.lower().replace("검색", "").strip()
             future = executor.submit(get_naver_api_results, search_query)
             result = future.result()
+            
+            # 검색 결과를 컨텍스트에 저장
+            context_id = str(uuid.uuid4())
+            st.session_state.search_contexts[context_id] = {
+                "type": "naver_search",
+                "query": search_query,
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+            st.session_state.current_context = context_id
+            
+            # 멀티턴 대화를 위한 안내 추가
+            result += "\n\n💡 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어 '이 내용을 요약해줘' 또는 '첫 번째 결과에 대해 자세히 설명해줘' 등의 질문을 해보세요."
         elif query_type == "mbti":
             result = (
                 "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
@@ -1089,6 +1210,29 @@ def process_query(query):
         cache_handler.setex(cache_key, 600, result)
         return result
 
+# 후속 질문인지 확인하고 컨텍스트를 유지하는 함수
+def is_followup_question(query):
+    """후속 질문인지 확인하고, 컨텍스트를 유지해야 하는지 결정합니다."""
+    
+    # 후속 질문 패턴
+    followup_patterns = [
+        r'이에 대해|이것에 대해|관련해서|더 자세히|요약해?줘',
+        r'설명해?줘|알려?줘|어떤|왜|이유|뭐야|뭐지|뭐임',
+        r'이게 무슨|이건 무슨|무슨 의미|의미가 뭐|첫 번째|두 번째|세 번째',
+        r'다시 설명|다시 알려줘|한 번 더|더 알려줘|추가 정보|추가로|구체적',
+        r'같은 주제|계속|그리고|그 다음|추가 질문|연관된'
+    ]
+    
+    # 검색 요청이 아니고, 후속 질문 패턴과 일치하면 컨텍스트 유지
+    if not needs_search(query):
+        for pattern in followup_patterns:
+            if re.search(pattern, query, re.IGNORECASE):
+                return True
+    
+    # 그 외에는 새로운 질문으로 처리
+    return False
+
+# 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
 def show_chat_dashboard():
     st.title("Chat with AI🤖")
     if st.button("도움말 ℹ️"):
@@ -1123,41 +1267,31 @@ def show_chat_dashboard():
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.chat_message("user").markdown(user_prompt)
         st.session_state.messages.append({"role": "user", "content": user_prompt})
+        
         with st.chat_message("assistant"):
             placeholder = st.empty()
             placeholder.markdown("응답을 준비 중이에요.. ⏳")
             try:
                 start_time = time.time()
-                response = process_query(user_prompt)
+                
+                # 후속 질문인지 확인
+                if is_followup_question(user_prompt) and st.session_state.current_context:
+                    # 후속 질문으로 판단되면 기존 컨텍스트 유지하고 LLM에 전달
+                    response = asyncio.run(get_conversational_response(user_prompt, st.session_state.messages))
+                else:
+                    # 새로운 질문이면 컨텍스트 초기화하고 일반 처리
+                    if needs_search(user_prompt) is None:
+                        st.session_state.current_context = None
+                    response = process_query(user_prompt)
+                
                 time_taken = round(time.time() - start_time, 2)
                 
-                placeholder.empty()
-                if isinstance(response, dict) and response.get("type") == "drug_info":
-                    st.markdown(f"💊 **의약품 정보** 💊")
-                    st.markdown(f"✅ **약품명**: {response['name']}")
-                    st.markdown(f"✅ **제조사**: {response['company']}")
-                    
-                    # 요약 정보만 표시하고 전체 내용은 expander에만 표시하도록 수정
-                    st.markdown(f"✅ **효능 요약**: {response['efficacy_summary']}")
-                    with st.expander("**전체 효능 내용 보기**"):
-                        # 요약과 다른 내용만 표시하거나, 전체 내용을 표시
-                        st.markdown(response['efficacy_full'])
-                        
-                    st.markdown(f"✅ **용법용량 요약**: {response['usage_summary']}")
-                    with st.expander("**전체 용법용량 내용 보기**"):
-                        st.markdown(response['usage_full'])
-                        
-                    st.markdown(f"✅ **주의사항 요약**: {response['caution_summary']}")
-                    with st.expander("**전체 주의사항 내용 보기**"):
-                        st.markdown(response['caution_full'])
-                
+                if isinstance(response, dict) and "table" in response:
+                    st.markdown(f"### {response['header']}")
+                    st.dataframe(response['table'], use_container_width=True, hide_index=True)
+                    st.markdown(response['footer'])
                 else:
-                    if isinstance(response, dict) and "table" in response:
-                        st.markdown(f"### {response['header']}")
-                        st.dataframe(response['table'], use_container_width=True, hide_index=True)
-                        st.markdown(response['footer'])
-                    else:
-                        st.markdown(response, unsafe_allow_html=True)
+                    st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
@@ -1174,26 +1308,3 @@ def show_login_page():
     with st.form("login_form"):
         nickname = st.text_input("닉네임", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")
-        
-        if submit_button and nickname:
-            try:
-                user_id, is_existing = create_or_get_user(nickname)
-                st.session_state.user_id = user_id
-                st.session_state.is_logged_in = True
-                st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 도움말도 활용해 보세요 😊"}]
-                st.session_state.session_id = str(uuid.uuid4())
-                st.toast(f"환영합니다, {nickname}님! 🎉")
-                time.sleep(1)
-                st.rerun()
-            except Exception:
-                st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
-
-def main():
-    init_session_state()  # 반드시 첫 줄에서 호출
-    if not st.session_state.is_logged_in:
-        show_login_page()
-    else:
-        show_chat_dashboard()
-
-if __name__ == "__main__":
-    main()
