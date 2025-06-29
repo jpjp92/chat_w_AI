@@ -1395,7 +1395,7 @@ def is_numbered_link_request(query, search_context):
 
 # 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
 def show_chat_dashboard():
-    st.title("Chat with AI🤖")
+    st.title("Chat with AI 🤖")
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇과 더 쉽게 대화하는 방법이에요! :\n"
