@@ -2,6 +2,127 @@
 from config.imports import *
 from config.env import *
 
+# 웹페이지 내용을 가져오는 함수
+def fetch_webpage_content(url):
+    """웹페이지의 텍스트 내용을 가져옵니다"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        response.encoding = response.apparent_encoding
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 불필요한 태그 제거
+        for script in soup(["script", "style", "nav", "footer", "aside", "header"]):
+            script.decompose()
+        
+        # 메인 콘텐츠 추출 시도
+        main_content = None
+        content_selectors = [
+            'article', 'main', '.content', '.post-content', 
+            '.article-content', '.entry-content', '.post-body'
+        ]
+        
+        for selector in content_selectors:
+            main_content = soup.select_one(selector)
+            if main_content:
+                break
+        
+        if not main_content:
+            main_content = soup.find('body')
+        
+        if main_content:
+            text = main_content.get_text(separator=' ', strip=True)
+            # 텍스트 정리
+            text = re.sub(r'\s+', ' ', text)  # 연속된 공백을 하나로
+            text = re.sub(r'\n+', '\n', text)  # 연속된 줄바꿈을 하나로
+            
+            # 너무 긴 텍스트는 제한 (토큰 제한 고려)
+            if len(text) > 8000:
+                text = text[:8000] + "..."
+            
+            return text
+        
+        return "내용을 추출할 수 없습니다."
+        
+    except requests.exceptions.RequestException as e:
+        return f"웹페이지 요청 오류: {str(e)}"
+    except Exception as e:
+        return f"내용 추출 오류: {str(e)}"
+
+def summarize_webpage_content(url, user_query=""):
+    """웹페이지 내용을 요약합니다"""
+    try:
+        content = fetch_webpage_content(url)
+        
+        if content.startswith(("웹페이지 요청 오류", "내용 추출 오류", "내용을 추출할 수 없습니다")):
+            return content
+        
+        # LLM을 사용해 내용 요약
+        if hasattr(st, 'session_state') and 'client' in st.session_state:
+            client = st.session_state.client
+        else:
+            client, _ = select_random_available_provider()
+        
+        prompt = f"""
+다음 웹페이지의 내용을 한국어로 요약해주세요.
+
+웹페이지 URL: {url}
+사용자 질문: {user_query if user_query else "전체 내용 요약"}
+
+웹페이지 내용:
+{content}
+
+요약 지침:
+1. 주요 핵심 내용을 3-5개 포인트로 정리
+2. 중요한 정보나 수치가 있다면 포함
+3. 사용자가 특정 질문을 했다면 그에 맞춰 요약
+4. 이모지를 적절히 사용하여 가독성 향상
+5. 출처 URL도 함께 제공
+
+형식:
+📄 **웹페이지 요약**
+
+🔗 **출처**: {url}
+
+📝 **주요 내용**:
+- 핵심 포인트 1
+- 핵심 포인트 2
+- ...
+
+💡 **결론**: 간단한 결론이나 핵심 메시지
+"""
+
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "당신은 웹페이지 내용을 정확하고 간결하게 요약하는 전문가입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1500,
+                temperature=0.3
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            logger.error(f"요약 생성 중 오류: {str(e)}")
+            return f"요약 생성 중 오류가 발생했습니다: {str(e)}"
+        
+    except Exception as e:
+        return f"웹페이지 요약 중 오류: {str(e)}"
+
+def extract_urls_from_text(text):
+    """텍스트에서 URL을 추출합니다"""
+    url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    urls = re.findall(url_pattern, text)
+    return urls
+
 # set logger
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
 logger = logging.getLogger("HybridChat")
@@ -826,6 +947,14 @@ async def get_conversational_response(query, chat_history):
     if cached:
         return cached
     
+    # URL 요약 요청인지 확인
+    is_url_request, url = is_url_summarization_request(query)
+    if is_url_request:
+        # URL 요약 처리
+        summary = summarize_webpage_content(url, query)
+        conversation_cache.setex(cache_key, 600, summary)
+        return summary
+    
     messages = [
         {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
     ]
@@ -855,23 +984,17 @@ async def get_conversational_response(query, chat_history):
                 context_desc = f"사용자가 '{context_query}'에 대해 웹 검색을 했고, 다음 결과를 받았습니다:\n\n"
                 for i, (title, content) in enumerate(cleaned_results, 1):
                     context_desc += f"{i}. 제목: {title}\n   내용: {content}\n\n"
+                
+                # 검색 결과에서 URL을 추출하여 웹페이지 요약 제안
+                urls_in_context = extract_urls_from_text(context_result)
+                if urls_in_context and any(keyword in query.lower() for keyword in ['링크', '사이트', '웹페이지', '주소', 'url', '들어가']):
+                    context_desc += f"\n검색 결과에 다음 링크들이 있습니다: {', '.join(urls_in_context[:3])}\n"
+                    context_desc += "특정 링크의 전체 내용이 궁금하시면 'URL + 요약해줘' 형태로 질문해주세요."
         
         # 다른 유형의 컨텍스트 처리 (약품 정보, 논문 등)
         elif context_type == "drug":
             # 약품 정보일 경우
             context_desc = f"사용자가 '{context_query}' 약품에 대한 정보를 검색했습니다. 약품 정보를 기반으로 사용자의 질문에 답변해주세요."
-        
-        elif context_type == "arxiv_search":
-            # arXiv 논문 검색일 경우
-            context_desc = f"사용자가 '{context_query}' 키워드로 arXiv 논문을 검색했습니다. 논문 검색 결과를 기반으로 사용자의 질문에 답변해주세요."
-        
-        elif context_type == "pubmed_search":
-            # PubMed 논문 검색일 경우
-            context_desc = f"사용자가 '{context_query}' 키워드로 PubMed 의학논문을 검색했습니다. 의학논문 검색 결과를 기반으로 사용자의 질문에 답변해주세요."
-        
-        else:
-            # 기타 컨텍스트
-            context_desc = f"사용자가 '{context_query}'에 대해 검색했습니다. 검색 결과를 기반으로 사용자의 질문에 답변해주세요."
         
         # 공통 지시사항
         system_prompt = (
@@ -879,7 +1002,8 @@ async def get_conversational_response(query, chat_history):
             f"{context_desc}\n\n"
             "사용자의 후속 질문은 이 검색 결과에 관한 것일 수 있습니다. 검색 결과의 내용을 기반으로 답변하세요.\n"
             "요약을 요청받으면 중요한 정보를 간결하게 요약하고, 설명을 요청받으면 더 자세한 정보를 제공하세요.\n"
-            "검색 결과에 관련 정보가 없다면 정직하게 모른다고 답변하세요."
+            "검색 결과에 관련 정보가 없다면 정직하게 모른다고 답변하세요.\n"
+            "URL이나 링크에 대한 질문을 받으면, 해당 링크의 전체 내용을 확인하고 싶다면 'URL + 요약해줘' 형태로 질문하라고 안내해주세요."
         )
         messages[0]["content"] = system_prompt
     
@@ -1098,58 +1222,14 @@ def process_query(query):
         elif query_type == "drug":
             future = executor.submit(get_drug_info, query)
             result = future.result()
-            
-            # 약물 정보 검색 결과를 컨텍스트에 저장
-            context_id = str(uuid.uuid4())
-            st.session_state.search_contexts[context_id] = {
-                "type": "drug",
-                "query": query,
-                "result": result,
-                "timestamp": datetime.now().isoformat()
-            }
-            st.session_state.current_context = context_id
-            
-            # 멀티턴 대화를 위한 안내 추가
-            if isinstance(result, str):
-                result += "\n\n💡 약물 정보에 대해 더 질문하시면 답변해드릴게요. 예를 들어 '이 약의 부작용을 요약해줘' 또는 '복용법에 대해 자세히 설명해줘' 등의 질문을 해보세요."
-            
         elif query_type == "arxiv_search":
             keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
             future = executor.submit(get_arxiv_papers, keywords)
             result = future.result()
-            
-            # arXiv 논문 검색 결과를 컨텍스트에 저장
-            context_id = str(uuid.uuid4())
-            st.session_state.search_contexts[context_id] = {
-                "type": "arxiv_search",
-                "query": keywords,
-                "result": result,
-                "timestamp": datetime.now().isoformat()
-            }
-            st.session_state.current_context = context_id
-            
-            # 멀티턴 대화를 위한 안내 추가
-            if isinstance(result, str):
-                result += "\n\n💡 논문 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어 '첫 번째 논문을 요약해줘' 또는 '이 연구의 중요성을 설명해줘' 등의 질문을 해보세요."
-            
         elif query_type == "pubmed_search":
             keywords = query.replace("의학논문", "").strip()
             future = executor.submit(get_pubmed_papers, keywords)
             result = future.result()
-            
-            # PubMed 논문 검색 결과를 컨텍스트에 저장
-            context_id = str(uuid.uuid4())
-            st.session_state.search_contexts[context_id] = {
-                "type": "pubmed_search",
-                "query": keywords,
-                "result": result,
-                "timestamp": datetime.now().isoformat()
-            }
-            st.session_state.current_context = context_id
-            
-            # 멀티턴 대화를 위한 안내 추가
-            if isinstance(result, str):
-                result += "\n\n💡 의학논문 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어 '이 연구의 임상적 의미를 설명해줘' 또는 '연구 방법론에 대해 자세히 알려줘' 등의 질문을 해보세요."
         elif query_type == "naver_search":
             search_query = query.lower().replace("검색", "").strip()
             future = executor.submit(get_naver_api_results, search_query)
@@ -1166,7 +1246,10 @@ def process_query(query):
             st.session_state.current_context = context_id
             
             # 멀티턴 대화를 위한 안내 추가
-            result += "\n\n💡 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어 '이 내용을 요약해줘' 또는 '첫 번째 결과에 대해 자세히 설명해줘' 등의 질문을 해보세요."
+            result += "\n\n💡 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어:\n"
+            result += "- '이 내용을 요약해줘'\n"
+            result += "- '첫 번째 결과에 대해 자세히 설명해줘'\n"
+            result += "- 'URL 요약해줘' (특정 링크의 전체 내용 확인)"
         elif query_type == "mbti":
             result = (
                 "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
@@ -1220,7 +1303,8 @@ def is_followup_question(query):
         r'설명해?줘|알려?줘|어떤|왜|이유|뭐야|뭐지|뭐임',
         r'이게 무슨|이건 무슨|무슨 의미|의미가 뭐|첫 번째|두 번째|세 번째',
         r'다시 설명|다시 알려줘|한 번 더|더 알려줘|추가 정보|추가로|구체적',
-        r'같은 주제|계속|그리고|그 다음|추가 질문|연관된'
+        r'같은 주제|계속|그리고|그 다음|추가 질문|연관된',
+        r'링크|사이트|웹페이지|이 주소|url'
     ]
     
     # 검색 요청이 아니고, 후속 질문 패턴과 일치하면 컨텍스트 유지
@@ -1229,8 +1313,22 @@ def is_followup_question(query):
             if re.search(pattern, query, re.IGNORECASE):
                 return True
     
+    # URL이 포함된 경우도 후속 질문으로 처리
+    if extract_urls_from_text(query):
+        return True
+    
     # 그 외에는 새로운 질문으로 처리
     return False
+
+def is_url_summarization_request(query):
+    """URL 요약 요청인지 확인합니다"""
+    urls = extract_urls_from_text(query)
+    if urls:
+        summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석']
+        for keyword in summary_keywords:
+            if keyword in query:
+                return True, urls[0]  # 첫 번째 URL 반환
+    return False, None
 
 # 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
 def show_chat_dashboard():
