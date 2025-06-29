@@ -1471,13 +1471,17 @@ def show_login_page():
         submit_button = st.form_submit_button("시작하기 🚀")
 
         if submit_button and nickname:
-            if save_user(nickname):
+            try:
+                user_id, is_existing = create_or_get_user(nickname)
+                st.session_state.user_id = user_id
                 st.session_state.is_logged_in = True
-                st.session_state.user_id = nickname
-                st.success(f"환영합니다, {nickname}님! 🎉")
+                st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 도움말도 활용해 보세요 😊"}]
+                st.session_state.session_id = str(uuid.uuid4())
+                st.toast(f"환영합니다, {nickname}님! 🎉")
+                time.sleep(1)
                 st.rerun()
-            else:
-                st.error("로그인 중 문제가 발생했습니다. 😓")
+            except Exception:
+                st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
 
 # 메인 실행 부분
 def main():
