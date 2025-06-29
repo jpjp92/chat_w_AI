@@ -947,7 +947,21 @@ async def get_conversational_response(query, chat_history):
     if cached:
         return cached
     
-    # URL 요약 요청인지 확인
+    # 현재 검색 컨텍스트 가져오기
+    current_context = None
+    if hasattr(st, 'session_state') and 'current_context' in st.session_state:
+        current_context_id = st.session_state.current_context
+        if current_context_id and current_context_id in st.session_state.search_contexts:
+            current_context = st.session_state.search_contexts[current_context_id]
+    
+    # 순서 기반 링크 요청 확인 (예: 3번째 링크 요약해줘)
+    is_numbered_request, numbered_url = is_numbered_link_request(query, current_context)
+    if is_numbered_request:
+        summary = summarize_webpage_content(numbered_url, query)
+        conversation_cache.setex(cache_key, 600, summary)
+        return summary
+    
+    # 일반 URL 요약 요청 확인
     is_url_request, url = is_url_summarization_request(query)
     if is_url_request:
         # URL 요약 처리
@@ -987,9 +1001,11 @@ async def get_conversational_response(query, chat_history):
                 
                 # 검색 결과에서 URL을 추출하여 웹페이지 요약 제안
                 urls_in_context = extract_urls_from_text(context_result)
-                if urls_in_context and any(keyword in query.lower() for keyword in ['링크', '사이트', '웹페이지', '주소', 'url', '들어가']):
-                    context_desc += f"\n검색 결과에 다음 링크들이 있습니다: {', '.join(urls_in_context[:3])}\n"
-                    context_desc += "특정 링크의 전체 내용이 궁금하시면 'URL + 요약해줘' 형태로 질문해주세요."
+                if urls_in_context:
+                    context_desc += f"\n\n검색 결과에 총 {len(urls_in_context)}개의 링크가 있습니다.\n"
+                    context_desc += "특정 링크의 전체 내용이 궁금하시면 다음과 같이 질문해주세요:\n"
+                    context_desc += "- '첫 번째 링크 요약해줘' 또는 '3번째 링크 요약해줘'\n"
+                    context_desc += "- 'URL + 요약해줘' 형태로 직접 URL 지정"
         
         # 다른 유형의 컨텍스트 처리 (약품 정보, 논문 등)
         elif context_type == "drug":
@@ -1003,7 +1019,8 @@ async def get_conversational_response(query, chat_history):
             "사용자의 후속 질문은 이 검색 결과에 관한 것일 수 있습니다. 검색 결과의 내용을 기반으로 답변하세요.\n"
             "요약을 요청받으면 중요한 정보를 간결하게 요약하고, 설명을 요청받으면 더 자세한 정보를 제공하세요.\n"
             "검색 결과에 관련 정보가 없다면 정직하게 모른다고 답변하세요.\n"
-            "URL이나 링크에 대한 질문을 받으면, 해당 링크의 전체 내용을 확인하고 싶다면 'URL + 요약해줘' 형태로 질문하라고 안내해주세요."
+            "사용자가 '첫 번째 링크', '3번째 링크' 등 순서로 링크를 언급하면 해당 순서의 웹페이지 전체 내용을 요약해드린다고 안내하세요.\n"
+            "URL이나 링크에 대한 질문을 받으면, 해당 링크의 전체 내용을 확인하고 싶다면 '순서 + 링크 요약해줘' 또는 'URL + 요약해줘' 형태로 질문하라고 안내해주세요."
         )
         messages[0]["content"] = system_prompt
     
@@ -1247,8 +1264,9 @@ def process_query(query):
             
             # 멀티턴 대화를 위한 안내 추가
             result += "\n\n💡 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어:\n"
-            result += "- '이 내용을 요약해줘'\n"
+            result += "- '이 내용을 요약해줘' (전체 검색 결과 요약)\n"
             result += "- '첫 번째 결과에 대해 자세히 설명해줘'\n"
+            result += "- '3번째 링크 요약해줘' (해당 순서 웹페이지 전체 내용 요약)\n"
             result += "- 'URL 요약해줘' (특정 링크의 전체 내용 확인)"
         elif query_type == "mbti":
             result = (
@@ -1328,6 +1346,51 @@ def is_url_summarization_request(query):
         for keyword in summary_keywords:
             if keyword in query:
                 return True, urls[0]  # 첫 번째 URL 반환
+    return False, None
+
+def is_numbered_link_request(query, search_context):
+    """순서 기반 링크 요청인지 확인합니다 (예: 3번째 링크 요약해줘)"""
+    if not search_context or search_context.get("type") != "naver_search":
+        return False, None
+    
+    # 순서 관련 패턴 매칭
+    patterns = [
+        r'(\d+)번째\s*(?:링크|결과|사이트)',
+        r'(\d+)번\s*(?:링크|결과|사이트)', 
+        r'(\d+)\.?\s*(?:링크|결과|사이트)',
+        r'첫\s*번째\s*(?:링크|결과|사이트)',
+        r'두\s*번째\s*(?:링크|결과|사이트)',
+        r'세\s*번째\s*(?:링크|결과|사이트)',
+        r'네\s*번째\s*(?:링크|결과|사이트)',
+        r'다섯\s*번째\s*(?:링크|결과|사이트)'
+    ]
+    
+    # 숫자를 한글로 변환
+    korean_numbers = {'첫': 1, '두': 2, '세': 3, '네': 4, '다섯': 5}
+    
+    for pattern in patterns:
+        match = re.search(pattern, query, re.IGNORECASE)
+        if match:
+            if match.group(1).isdigit():
+                number = int(match.group(1))
+            else:
+                # 한글 숫자 처리
+                for korean, num in korean_numbers.items():
+                    if korean in query:
+                        number = num
+                        break
+                else:
+                    continue
+            
+            # 검색 결과에서 해당 순서의 URL 추출
+            search_result = search_context.get("result", "")
+            urls = extract_urls_from_text(search_result)
+            
+            if urls and len(urls) >= number:
+                summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석']
+                if any(keyword in query for keyword in summary_keywords):
+                    return True, urls[number - 1]  # 0부터 시작하므로 -1
+    
     return False, None
 
 # 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
