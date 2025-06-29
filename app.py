@@ -1469,3 +1469,24 @@ def show_login_page():
     with st.form("login_form"):
         nickname = st.text_input("닉네임", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")
+
+        if submit_button and nickname:
+            if save_user(nickname):
+                st.session_state.is_logged_in = True
+                st.session_state.user_id = nickname
+                st.success(f"환영합니다, {nickname}님! 🎉")
+                st.rerun()
+            else:
+                st.error("로그인 중 문제가 발생했습니다. 😓")
+
+# 메인 실행 부분
+def main():
+    init_session_state()
+    
+    if not st.session_state.is_logged_in:
+        show_login_page()
+    else:
+        show_chat_dashboard()
+
+if __name__ == "__main__":
+    main()
