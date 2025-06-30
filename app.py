@@ -2,126 +2,32 @@
 from config.imports import *
 from config.env import *
 
-# 웹페이지 내용을 가져오는 함수
-def fetch_webpage_content(url):
-    """웹페이지의 텍스트 내용을 가져옵니다"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        response.encoding = response.apparent_encoding
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 불필요한 태그 제거
-        for script in soup(["script", "style", "nav", "footer", "aside", "header"]):
-            script.decompose()
-        
-        # 메인 콘텐츠 추출 시도
-        main_content = None
-        content_selectors = [
-            'article', 'main', '.content', '.post-content', 
-            '.article-content', '.entry-content', '.post-body'
-        ]
-        
-        for selector in content_selectors:
-            main_content = soup.select_one(selector)
-            if main_content:
-                break
-        
-        if not main_content:
-            main_content = soup.find('body')
-        
-        if main_content:
-            text = main_content.get_text(separator=' ', strip=True)
-            # 텍스트 정리
-            text = re.sub(r'\s+', ' ', text)  # 연속된 공백을 하나로
-            text = re.sub(r'\n+', '\n', text)  # 연속된 줄바꿈을 하나로
-            
-            # 너무 긴 텍스트는 제한 (토큰 제한 고려)
-            if len(text) > 8000:
-                text = text[:8000] + "..."
-            
-            return text
-        
-        return "내용을 추출할 수 없습니다."
-        
-    except requests.exceptions.RequestException as e:
-        return f"웹페이지 요청 오류: {str(e)}"
-    except Exception as e:
-        return f"내용 추출 오류: {str(e)}"
-
-def summarize_webpage_content(url, user_query=""):
-    """웹페이지 내용을 요약합니다"""
-    try:
-        content = fetch_webpage_content(url)
-        
-        if content.startswith(("웹페이지 요청 오류", "내용 추출 오류", "내용을 추출할 수 없습니다")):
-            return content
-        
-        # LLM을 사용해 내용 요약
-        if hasattr(st, 'session_state') and 'client' in st.session_state:
-            client = st.session_state.client
-        else:
-            client, _ = select_random_available_provider()
-        
-        prompt = f"""
-다음 웹페이지의 내용을 한국어로 요약해주세요.
-
-웹페이지 URL: {url}
-사용자 질문: {user_query if user_query else "전체 내용 요약"}
-
-웹페이지 내용:
-{content}
-
-요약 지침:
-1. 주요 핵심 내용을 3-5개 포인트로 정리
-2. 중요한 정보나 수치가 있다면 포함
-3. 사용자가 특정 질문을 했다면 그에 맞춰 요약
-4. 이모지를 적절히 사용하여 가독성 향상
-5. 출처 URL도 함께 제공
-
-형식:
-📄 **웹페이지 요약**
-
-🔗 **출처**: {url}
-
-📝 **주요 내용**:
-- 핵심 포인트 1
-- 핵심 포인트 2
-- ...
-
-💡 **결론**: 간단한 결론이나 핵심 메시지
-"""
-
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "당신은 웹페이지 내용을 정확하고 간결하게 요약하는 전문가입니다."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500,
-                temperature=0.3
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"요약 생성 중 오류: {str(e)}")
-            return f"요약 생성 중 오류가 발생했습니다: {str(e)}"
-        
-    except Exception as e:
-        return f"웹페이지 요약 중 오류: {str(e)}"
-
-def extract_urls_from_text(text):
-    """텍스트에서 URL을 추출합니다"""
-    url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
-    urls = re.findall(url_pattern, text)
-    return urls
+# Import utils modules
+from utils.webpage_analyzer import (
+    fetch_webpage_content, 
+    summarize_webpage_content, 
+    extract_urls_from_text,
+    is_url_summarization_request,
+    is_numbered_link_request,
+    is_followup_question
+)
+from utils.providers import (
+    select_best_provider_with_priority,
+    select_random_available_provider,
+    get_client
+)
+from utils.query_analyzer import (
+    needs_search,
+    extract_city_from_query,
+    extract_city_from_time_query,
+    extract_league_from_query,
+    is_drug_inquiry,
+    extract_drug_name,
+    is_paper_search,
+    extract_keywords_for_paper_search,
+    is_time_query,
+    LEAGUE_MAPPING
+)
 
 # set logger
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
@@ -495,45 +401,6 @@ class FootballAPI:
             return results
         except Exception as e:
             return f"챔피언스리그 토너먼트 경기 결과를 가져오는 중 오류: {str(e)}"
-# 최적의 프로바이더 선택 함수
-def select_best_provider_with_priority():
-    """
-    우선순위에 따라 가장 적합한 프로바이더를 선택합니다.
-    """
-    providers = ["GeekGpt", "Liaobots", "Raycast", "Phind"]  # 우선순위 설정
-    for provider in providers:
-        try:
-            client = Client(include_providers=[provider])
-            # 테스트 요청 (챗봇의 역할에 맞는 메시지 사용)
-            client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "당신은 친절한 AI 챗봇입니다. 사용자의 질문에 적절히 응답하세요."},
-                ]
-            )
-            logger.info(f"선택된 프로바이더: {provider}")
-            return client
-        except Exception as e:
-            logger.warning(f"{provider} 프로바이더를 사용할 수 없습니다: {str(e)}")
-    raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
-
-def select_random_available_provider():
-    providers = ["GeekGpt", "Liaobots", "Raycast"]
-    random.shuffle(providers)  # 랜덤 순서로 섞기
-    for provider in providers:
-        try:
-            client = Client(include_providers=[provider])
-            # 실제로 간단한 테스트 요청
-            client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "system", "content": "테스트 메시지입니다."}]
-            )
-            logger.info(f"선택된 프로바이더(랜덤): {provider}")
-            return client, provider
-        except Exception as e:
-            logger.warning(f"{provider} 프로바이더를 사용할 수 없습니다: {str(e)}")
-    raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
-
 # 초기화
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # 앱 시작 시 한 번만 실행하도록 수정
@@ -564,58 +431,6 @@ def init_session_state():
         st.session_state.search_contexts = {}
     if "current_context" not in st.session_state:
         st.session_state.current_context = None
-
-# 도시 및 시간 추출
-CITY_PATTERNS = [
-    re.compile(r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)의?\s*날씨', re.IGNORECASE),
-    re.compile(r'(?:오늘|내일|모레|이번 주|주간)?\s*([가-힣a-zA-Z\s]{2,20}(?:시|군|city)?)\s*날씨', re.IGNORECASE),
-]
-def extract_city_from_query(query):
-    for pattern in CITY_PATTERNS:
-        match = pattern.search(query)
-        if match:
-            city = match.group(1).strip()
-            if city not in ["오늘", "내일", "모레", "이번 주", "주간", "현재"]:
-                return city
-    return "서울"
-
-TIME_CITY_PATTERNS = [
-    re.compile(r'([가-힣a-zA-Z]{2,20}(?:시|군)?)의?\s*시간'),
-    re.compile(r'([가-힣a-zA-Z]{2,20}(?:시|군)?)\s*시간'),
-]
-def extract_city_from_time_query(query):
-    for pattern in TIME_CITY_PATTERNS:
-        match = pattern.search(query)
-        if match:
-            city = match.group(1).strip()
-            if city != "현재":
-                return city
-    return "서울"
-
-# 축구리그 
-LEAGUE_MAPPING = {
-    "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
-    "laliga": {"name": "라리가 (스페인)", "code": "PD"},
-    "bundesliga": {"name": "분데스리가 (독일)", "code": "BL1"},
-    "seriea": {"name": "세리에 A (이탈리아)", "code": "SA"},
-    "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"},
-    "championsleague": {"name": "챔피언스 리그", "code": "CL"}
-}
-
-def extract_league_from_query(query):
-    query_lower = query.lower().replace(" ", "")
-    league_keywords = {
-        "epl": ["epl", "프리미어리그"],
-        "laliga": ["laliga", "라리가"],
-        "bundesliga": ["bundesliga", "분데스리가"],
-        "seriea": ["seriea", "세리에a"],
-        "ligue1": ["ligue1", "리그1"],
-        "championsleague": ["championsleague", "챔피언스리그", "ucl"]
-    }
-    for league_key, keywords in league_keywords.items():
-        if any(keyword in query_lower for keyword in keywords):
-            return league_key
-    return None
 
 # 문화 행사 관련 함수 
 def fetch_xml(api_key: str) -> ET.Element:
@@ -930,16 +745,6 @@ def get_pubmed_papers(query, max_results=5):
 conversation_cache = MemoryCache()
 _client_instance = None
 
-def get_client():
-    global _client_instance
-    if _client_instance is None:
-        client, provider_name = select_random_available_provider()
-        _client_instance = client
-        # 세션 상태가 사용 가능한 컨텍스트에서만 업데이트
-        if hasattr(st, 'session_state'):
-            st.session_state.provider_name = provider_name
-    return _client_instance
-
 # 대화형 응답 함수 수정
 async def get_conversational_response(query, chat_history):
     cache_key = f"conv:{needs_search(query)}:{query}"
@@ -1053,95 +858,6 @@ async def get_conversational_response(query, chat_history):
 
 GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
 GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
-
-@lru_cache(maxsize=100)
-def needs_search(query):
-    query_lower = query.strip().lower().replace(" ", "")
-    if "날씨" in query_lower:
-        return "weather" if "내일" not in query_lower else "tomorrow_weather"
-    if "시간" in query_lower or "날짜" in query_lower:
-        if is_time_query(query_lower):
-            return "time"
-    if "문화행사" in query_lower:
-        return "cultural_event"
-    if "리그순위" in query_lower:
-        return "league_standings"
-    if "리그득점순위" in query_lower or "득점순위" in query_lower:
-        return "league_scorers"
-    if ("챔피언스리그" in query_lower or "ucl" in query_lower) and (
-        "토너먼트" in query_lower or "knockout" in query_lower or "16강" in query_lower or "8강" in query_lower or "4강" in query_lower or "결승" in query_lower):
-        return "cl_knockout"
-    if "약품검색" in query_lower:
-        return "drug"
-    if "공학논문" in query_lower or "arxiv" in query_lower:
-        return "arxiv_search"
-    if "의학논문" in query_lower:
-        return "pubmed_search"
-    if "검색해줘" in query_lower or "검색해" in query_lower:
-        return "naver_search"
-
-    # MBTI 관련
-    if "mbti검사" in query_lower:
-        return "mbti"
-    if "mbti유형설명" in query_lower or "mbti유형" in query_lower or "mbti설명" in query_lower:
-        return "mbti_types"
-    
-    # 다중지능 관련
-    if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower or \
-       "다중지능 유형 설명" in query.strip().lower() or "다중지능 유형" in query.strip().lower():
-        return "multi_iq_types"
-    if "다중지능직업" in query_lower or "다중지능추천" in query_lower or \
-       "다중지능 직업" in query.strip().lower() or "다중지능 추천" in query.strip().lower():
-        return "multi_iq_jobs"
-    if "다중지능검사" in query_lower or "다중지능 검사" in query.strip().lower():
-        return "multi_iq"
-    if "다중지능" in query_lower:
-        return "multi_iq_full"
-    
-    if any(greeting in query_lower for greeting in GREETINGS):
-        return "conversation"
-    return "conversation"
-
-def is_time_query(query):
-    """시간 관련 질문인지 정확하게 판단"""
-    
-    # 긍정적 시간 패턴들
-    positive_patterns = [
-        r'(서울|도쿄|뉴욕|런던|파리|베를린|마드리드|로마|밀라노|시드니|홍콩|싱가포르|모스크바|두바이|라스베이거스|시카고|토론토|멜버른)\s*(시간|time)',
-        r'(현재|지금)\s*(시간|time)',
-        r'몇\s*시',
-        r'(오늘|현재|지금|금일)\s*(날짜|date)',
-        r'what\s*time',
-        r'시간\s*(알려|궁금)',
-        r'몇시인지',
-        r'time\s*in'
-    ]
-    
-    # 부정적 컨텍스트
-    negative_patterns = [
-        r'실시간.*?(축구|야구|농구|경기|스포츠|뉴스|주식|코인|정보)',
-        r'시간.*?(부족|없어|모자라|부족해|없다|남아)',
-        r'언제.*?시간',
-        r'시간대.*?날씨',
-        r'시간당',
-        r'시간.*?(걸려|소요|필요)',
-        r'몇.*?시간.*?(후|뒤|전)',
-        r'시간.*?(맞춰|맞추|조정)',
-        r'시간표',
-        r'시간.*?(예약|약속|일정)'
-    ]
-    
-    # 부정적 컨텍스트 확인
-    for pattern in negative_patterns:
-        if re.search(pattern, query):
-            return False
-    
-    # 긍정적 패턴 확인
-    for pattern in positive_patterns:
-        if re.search(pattern, query):
-            return True
-    
-    return False
 
 def process_query(query):
     cache_key = f"query:{hash(query)}"
@@ -1310,100 +1026,6 @@ def process_query(query):
         
         cache_handler.setex(cache_key, 600, result)
         return result
-
-# 후속 질문인지 확인하고 컨텍스트를 유지하는 함수
-def is_followup_question(query):
-    """후속 질문인지 확인하고, 컨텍스트를 유지해야 하는지 결정합니다."""
-    
-    # 후속 질문 패턴
-    followup_patterns = [
-        r'이에 대해|이것에 대해|관련해서|더 자세히|요약해?줘',
-        r'설명해?줘|알려?줘|어떤|왜|이유|뭐야|뭐지|뭐임',
-        r'이게 무슨|이건 무슨|무슨 의미|의미가 뭐|첫 번째|두 번째|세 번째',
-        r'다시 설명|다시 알려줘|한 번 더|더 알려줘|추가 정보|추가로|구체적',
-        r'같은 주제|계속|그리고|그 다음|추가 질문|연관된',
-        r'링크|사이트|웹페이지|이 주소|url'
-    ]
-    
-    # 검색 요청이 아니고, 후속 질문 패턴과 일치하면 컨텍스트 유지
-    if not needs_search(query):
-        for pattern in followup_patterns:
-            if re.search(pattern, query, re.IGNORECASE):
-                return True
-    
-    # URL이 포함된 경우도 후속 질문으로 처리
-    if extract_urls_from_text(query):
-        return True
-    
-    # 그 외에는 새로운 질문으로 처리
-    return False
-
-def is_url_summarization_request(query):
-    """URL 요약 요청인지 확인합니다"""
-    urls = extract_urls_from_text(query)
-    if urls:
-        summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석', '해석', '리뷰', '정보']
-        for keyword in summary_keywords:
-            if keyword in query:
-                return True, urls[0]  # 첫 번째 URL 반환
-    return False, None
-
-def is_numbered_link_request(query, search_context):
-    """순서 기반 링크 요청인지 확인합니다 (예: 3번째 링크 요약해줘)"""
-    if not search_context or search_context.get("type") != "naver_search":
-        return False, None
-    
-    # 숫자 패턴과 한글 패턴을 분리
-    number_patterns = [
-        r'(\d+)번째\s*(?:링크|결과|사이트)',
-        r'(\d+)번\s*(?:링크|결과|사이트)', 
-        r'(\d+)\.?\s*(?:링크|결과|사이트)',
-    ]
-    
-    korean_patterns = [
-        r'첫\s*번째\s*(?:링크|결과|사이트)',
-        r'두\s*번째\s*(?:링크|결과|사이트)',
-        r'세\s*번째\s*(?:링크|결과|사이트)',
-        r'네\s*번째\s*(?:링크|결과|사이트)',
-        r'다섯\s*번째\s*(?:링크|결과|사이트)'
-    ]
-    
-    # 숫자를 한글로 변환
-    korean_numbers = {'첫': 1, '두': 2, '세': 3, '네': 4, '다섯': 5}
-    
-    number = None
-    
-    # 숫자 패턴 확인
-    for pattern in number_patterns:
-        match = re.search(pattern, query, re.IGNORECASE)
-        if match:
-            number = int(match.group(1))
-            break
-    
-    # 한글 숫자 패턴 확인
-    if number is None:
-        for pattern in korean_patterns:
-            match = re.search(pattern, query, re.IGNORECASE)
-            if match:
-                # 한글 숫자 처리
-                for korean, num in korean_numbers.items():
-                    if korean in query:
-                        number = num
-                        break
-                if number:
-                    break
-    
-    if number is not None:
-        # 검색 결과에서 해당 순서의 URL 추출
-        search_result = search_context.get("result", "")
-        urls = extract_urls_from_text(search_result)
-        
-        if urls and len(urls) >= number:
-            summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석']
-            if any(keyword in query for keyword in summary_keywords):
-                return True, urls[number - 1]  # 0부터 시작하므로 -1
-    
-    return False, None
 
 # 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
 def show_chat_dashboard():
