@@ -1087,6 +1087,9 @@ def show_chat_dashboard():
                 
                 time_taken = round(time.time() - start_time, 2)
                 
+                # 로딩 메시지 제거
+                placeholder.empty()
+                
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(f"### {response['header']}")
                     st.dataframe(response['table'], use_container_width=True, hide_index=True)
