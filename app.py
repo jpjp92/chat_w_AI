@@ -1342,7 +1342,7 @@ def is_url_summarization_request(query):
     """URL 요약 요청인지 확인합니다"""
     urls = extract_urls_from_text(query)
     if urls:
-        summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석']
+        summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석', '해석', '리뷰', '정보']
         for keyword in summary_keywords:
             if keyword in query:
                 return True, urls[0]  # 첫 번째 URL 반환
@@ -1353,11 +1353,14 @@ def is_numbered_link_request(query, search_context):
     if not search_context or search_context.get("type") != "naver_search":
         return False, None
     
-    # 순서 관련 패턴 매칭
-    patterns = [
+    # 숫자 패턴과 한글 패턴을 분리
+    number_patterns = [
         r'(\d+)번째\s*(?:링크|결과|사이트)',
         r'(\d+)번\s*(?:링크|결과|사이트)', 
         r'(\d+)\.?\s*(?:링크|결과|사이트)',
+    ]
+    
+    korean_patterns = [
         r'첫\s*번째\s*(?:링크|결과|사이트)',
         r'두\s*번째\s*(?:링크|결과|사이트)',
         r'세\s*번째\s*(?:링크|결과|사이트)',
@@ -1368,28 +1371,37 @@ def is_numbered_link_request(query, search_context):
     # 숫자를 한글로 변환
     korean_numbers = {'첫': 1, '두': 2, '세': 3, '네': 4, '다섯': 5}
     
-    for pattern in patterns:
+    number = None
+    
+    # 숫자 패턴 확인
+    for pattern in number_patterns:
         match = re.search(pattern, query, re.IGNORECASE)
         if match:
-            if match.group(1).isdigit():
-                number = int(match.group(1))
-            else:
+            number = int(match.group(1))
+            break
+    
+    # 한글 숫자 패턴 확인
+    if number is None:
+        for pattern in korean_patterns:
+            match = re.search(pattern, query, re.IGNORECASE)
+            if match:
                 # 한글 숫자 처리
                 for korean, num in korean_numbers.items():
                     if korean in query:
                         number = num
                         break
-                else:
-                    continue
-            
-            # 검색 결과에서 해당 순서의 URL 추출
-            search_result = search_context.get("result", "")
-            urls = extract_urls_from_text(search_result)
-            
-            if urls and len(urls) >= number:
-                summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석']
-                if any(keyword in query for keyword in summary_keywords):
-                    return True, urls[number - 1]  # 0부터 시작하므로 -1
+                if number:
+                    break
+    
+    if number is not None:
+        # 검색 결과에서 해당 순서의 URL 추출
+        search_result = search_context.get("result", "")
+        urls = extract_urls_from_text(search_result)
+        
+        if urls and len(urls) >= number:
+            summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석']
+            if any(keyword in query for keyword in summary_keywords):
+                return True, urls[number - 1]  # 0부터 시작하므로 -1
     
     return False, None
 
@@ -1402,17 +1414,23 @@ def show_chat_dashboard():
             "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
             "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 마드리드 시간, 금일 날짜)\n"
             "3. **검색** 🌐: '[키워드] 검색해' 또는 '[키워드] 검색해줘' (예: 2025년 서울 전시회 검색해줘)\n"
-            "4. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
-            "5. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
-            "6. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "7. **축구 리그 정보** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
+            "   - 🔗 **검색 후 링크 분석**: '첫 번째 링크 요약해줘', '3번째 결과 분석해줘'\n"
+            "4. **웹페이지 직접 분석** 📄: 'URL 요약해줘' 또는 'URL 분석해줘'\n"
+            "   - 예: 'https://example.com 요약해줘', 'https://deepmind.google/models/gemini/flash/ 분석해줘'\n"
+            "5. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
+            "6. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
+            "7. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
+            "8. **축구 리그 정보** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
             "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
             "   - **챔피언스리그 리그 단계**: '챔피언스리그 리그 순위' 또는 'UCL 리그순위'로 확인\n"
             "   - **챔피언스리그 토너먼트**: '챔피언스리그 토너먼트' 또는 'UCL 16강'(예: 챔피언스리그 16강)\n"
-            "8. **MBTI** ✨: 'MBTI 검사',  'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
-            "9. **다중지능** 🎉: '다중지능 검사', '다중지능 유형', '다중지능 직업', (예: 다중지능 검사, 언어지능 직업)\n\n"
-            "10. **문화행사** 🎭: '[지역구] 문화행사' 또는 '문화행사' (예: 강남구 문화행사, 문화행사)\n\n"
-
+            "9. **MBTI** ✨: 'MBTI 검사',  'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
+            "10. **다중지능** 🎉: '다중지능 검사', '다중지능 유형', '다중지능 직업', (예: 다중지능 검사, 언어지능 직업)\n"
+            "11. **문화행사** 🎭: '[지역구] 문화행사' 또는 '문화행사' (예: 강남구 문화행사, 문화행사)\n\n"
+            "🌟 **고급 기능**:\n"
+            "- 검색 후 후속 질문으로 특정 링크의 전체 내용 분석 가능\n"
+            "- 웹페이지 URL을 직접 제공하여 내용 요약/분석 가능\n"
+            "- 멀티턴 대화로 이전 검색 결과에 대한 추가 질문 가능\n\n"
             "궁금한 점 있으면 질문해주세요! 😊"
         )
    
