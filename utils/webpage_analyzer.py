@@ -1,12 +1,55 @@
 # utils/webpage_analyzer.py
 from config.imports import *
 import re
-import PyPDF2
-import io
+import logging
 from urllib.parse import urlparse
+import requests
+from bs4 import BeautifulSoup
+
+# PyPDF2 조건부 import
+try:
+    import PyPDF2
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+    print("Warning: PyPDF2를 찾을 수 없습니다. PDF 파일 처리 기능이 비활성화됩니다.")
+
+logger = logging.getLogger(__name__)
+
+def fetch_pdf_content(url):
+    """PDF 파일에서 텍스트 추출"""
+    if not PDF_AVAILABLE:
+        return f"PDF 처리 기능이 사용할 수 없습니다. HTML 버전이 있다면 해당 링크를 사용해주세요."
+    
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        # PDF 내용 읽기
+        import io
+        pdf_file = io.BytesIO(response.content)
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        
+        text = ""
+        # 첫 2-3 페이지만 읽기 (Abstract, Introduction 부분)
+        max_pages = min(3, len(pdf_reader.pages))
+        
+        for page_num in range(max_pages):
+            page = pdf_reader.pages[page_num]
+            text += page.extract_text() + "\n"
+        
+        return text[:5000]  # 처음 5000자만 반환
+        
+    except Exception as e:
+        logger.error(f"PDF 처리 오류: {str(e)}")
+        return f"PDF 파일을 처리할 수 없습니다: {str(e)}"
 
 def fetch_webpage_content(url):
-    """웹페이지의 텍스트 내용을 가져옵니다"""
+    """웹페이지 또는 논문 내용 추출 (개선된 버전)"""
     try:
         # 논문 URL 특별 처리
         if is_arxiv_url(url):
@@ -19,7 +62,7 @@ def fetch_webpage_content(url):
             if content:
                 return content
         
-        # PDF 파일 처리
+        # PDF 파일 처리 (PyPDF2가 있는 경우만)
         if is_pdf_url(url):
             content = fetch_pdf_content(url)
             if content:
@@ -27,52 +70,32 @@ def fetch_webpage_content(url):
         
         # 기존 HTML 처리 로직
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
-        response.encoding = response.apparent_encoding
         
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.content, 'html.parser')
         
         # 불필요한 태그 제거
-        for script in soup(["script", "style", "nav", "footer", "aside", "header"]):
-            script.decompose()
+        for tag in soup(['script', 'style', 'nav', 'header', 'footer', 'aside']):
+            tag.decompose()
         
-        # 메인 콘텐츠 추출 시도
-        main_content = None
-        content_selectors = [
-            'article', 'main', '.content', '.post-content', 
-            '.article-content', '.entry-content', '.post-body'
-        ]
-        
-        for selector in content_selectors:
-            main_content = soup.select_one(selector)
-            if main_content:
-                break
-        
-        if not main_content:
-            main_content = soup.find('body')
+        # 메인 콘텐츠 추출
+        main_content = soup.find('main') or soup.find('article') or soup.find('div', class_=['content', 'main', 'post'])
         
         if main_content:
-            text = main_content.get_text(separator=' ', strip=True)
-            # 텍스트 정리
-            text = re.sub(r'\s+', ' ', text)  # 연속된 공백을 하나로
-            text = re.sub(r'\n+', '\n', text)  # 연속된 줄바꿈을 하나로
-            
-            # 너무 긴 텍스트는 제한 (토큰 제한 고려)
-            if len(text) > 8000:
-                text = text[:8000] + "..."
-            
-            return text
+            text = main_content.get_text(strip=True, separator='\n')
+        else:
+            text = soup.get_text(strip=True, separator='\n')
         
-        return "내용을 추출할 수 없습니다."
+        # 너무 긴 텍스트는 일부만 반환
+        return text[:8000] if len(text) > 8000 else text
         
-    except requests.exceptions.RequestException as e:
-        return f"웹페이지 요청 오류: {str(e)}"
     except Exception as e:
-        return f"내용 추출 오류: {str(e)}"
+        logger.error(f"웹페이지 내용 추출 오류: {str(e)}")
+        return f"'{url}' 내용을 가져올 수 없습니다. 오류: {str(e)}"
 
 def summarize_webpage_content(url, user_query="", client=None):
     """웹페이지 내용을 요약합니다"""
@@ -246,34 +269,6 @@ def is_arxiv_url(url):
 def is_pubmed_url(url):
     """PubMed URL인지 확인"""
     return 'pubmed.ncbi.nlm.nih.gov' in url.lower()
-
-def fetch_pdf_content(url):
-    """PDF 파일에서 텍스트 추출"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        # PDF 내용 읽기
-        pdf_file = io.BytesIO(response.content)
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        
-        text = ""
-        # 첫 2-3 페이지만 읽기 (Abstract, Introduction 부분)
-        max_pages = min(3, len(pdf_reader.pages))
-        
-        for page_num in range(max_pages):
-            page = pdf_reader.pages[page_num]
-            text += page.extract_text() + "\n"
-        
-        return text[:5000]  # 처음 5000자만 반환
-        
-    except Exception as e:
-        logger.error(f"PDF 처리 오류: {str(e)}")
-        return None
 
 def fetch_arxiv_metadata(url):
     """ArXiv URL에서 메타데이터와 초록 추출"""
