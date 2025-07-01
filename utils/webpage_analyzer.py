@@ -1,10 +1,31 @@
 # utils/webpage_analyzer.py
 from config.imports import *
 import re
+import PyPDF2
+import io
+from urllib.parse import urlparse
 
 def fetch_webpage_content(url):
     """웹페이지의 텍스트 내용을 가져옵니다"""
     try:
+        # 논문 URL 특별 처리
+        if is_arxiv_url(url):
+            content = fetch_arxiv_metadata(url)
+            if content:
+                return content
+        
+        if is_pubmed_url(url):
+            content = fetch_pubmed_abstract(url)
+            if content:
+                return content
+        
+        # PDF 파일 처리
+        if is_pdf_url(url):
+            content = fetch_pdf_content(url)
+            if content:
+                return content
+        
+        # 기존 HTML 처리 로직
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -213,3 +234,109 @@ def is_followup_question(query):
     
     # 그 외에는 새로운 질문으로 처리
     return False
+
+def is_pdf_url(url):
+    """URL이 PDF 파일인지 확인"""
+    return url.lower().endswith('.pdf') or 'pdf' in url.lower()
+
+def is_arxiv_url(url):
+    """ArXiv URL인지 확인"""
+    return 'arxiv.org' in url.lower()
+
+def is_pubmed_url(url):
+    """PubMed URL인지 확인"""
+    return 'pubmed.ncbi.nlm.nih.gov' in url.lower()
+
+def fetch_pdf_content(url):
+    """PDF 파일에서 텍스트 추출"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        # PDF 내용 읽기
+        pdf_file = io.BytesIO(response.content)
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        
+        text = ""
+        # 첫 2-3 페이지만 읽기 (Abstract, Introduction 부분)
+        max_pages = min(3, len(pdf_reader.pages))
+        
+        for page_num in range(max_pages):
+            page = pdf_reader.pages[page_num]
+            text += page.extract_text() + "\n"
+        
+        return text[:5000]  # 처음 5000자만 반환
+        
+    except Exception as e:
+        logger.error(f"PDF 처리 오류: {str(e)}")
+        return None
+
+def fetch_arxiv_metadata(url):
+    """ArXiv URL에서 메타데이터와 초록 추출"""
+    try:
+        # ArXiv ID 추출 (예: https://arxiv.org/abs/2301.12345 -> 2301.12345)
+        arxiv_id = url.split('/')[-1].replace('abs/', '').replace('pdf/', '')
+        
+        import arxiv
+        search = arxiv.Search(id_list=[arxiv_id])
+        paper = next(search.results())
+        
+        content = f"""
+        제목: {paper.title}
+        저자: {', '.join(str(a) for a in paper.authors)}
+        출판일: {paper.published.strftime('%Y-%m-%d')}
+        
+        초록:
+        {paper.summary}
+        """
+        
+        return content
+        
+    except Exception as e:
+        logger.error(f"ArXiv 메타데이터 추출 오류: {str(e)}")
+        return None
+
+def fetch_pubmed_abstract(url):
+    """PubMed URL에서 초록 추출"""
+    try:
+        # PMID 추출
+        pmid = url.split('/')[-1].rstrip('/')
+        
+        # PubMed API 사용
+        base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+        summary_url = f"{base_url}esummary.fcgi"
+        fetch_url = f"{base_url}efetch.fcgi"
+        
+        # 요약 정보 가져오기
+        params = {"db": "pubmed", "id": pmid, "retmode": "json"}
+        response = requests.get(summary_url, params=params, timeout=5)
+        summary_data = response.json()
+        
+        # 초록 가져오기
+        params = {"db": "pubmed", "id": pmid, "retmode": "xml", "rettype": "abstract"}
+        response = requests.get(fetch_url, params=params, timeout=5)
+        
+        # XML 파싱해서 초록 추출
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(response.text)
+        
+        title = root.find(".//ArticleTitle").text if root.find(".//ArticleTitle") is not None else "제목 없음"
+        abstract = root.find(".//AbstractText").text if root.find(".//AbstractText") is not None else "초록 없음"
+        
+        content = f"""
+        제목: {title}
+        PMID: {pmid}
+        
+        초록:
+        {abstract}
+        """
+        
+        return content
+        
+    except Exception as e:
+        logger.error(f"PubMed 추출 오류: {str(e)}")
+        return None
