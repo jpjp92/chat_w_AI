@@ -28,10 +28,11 @@ from utils.query_analyzer import (
     is_time_query,
     LEAGUE_MAPPING
 )
-# Import weather, football, and drug modules
+# Import weather, football, drug, and paper search modules
 from utils.weather import WeatherAPI
 from utils.football import FootballAPI
 from utils.drug_info import DrugAPI
+from utils.paper_search import PaperSearchAPI
 
 # set logger
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
@@ -99,7 +100,8 @@ multi_iq_full_description = personality_data["multi_iq_full_description"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 weather_api = WeatherAPI(cache_handler=cache_handler, WEATHER_API_KEY=WEATHER_API_KEY)
 football_api = FootballAPI(api_key=SPORTS_API_KEY, cache_handler=cache_handler)
-drug_api = DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler)  # 새로 추가
+drug_api = DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler)
+paper_search_api = PaperSearchAPI(ncbi_key=NCBI_KEY, cache_handler=cache_handler)  # 새로 추가
 naver_request_count = 0
 NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
@@ -288,104 +290,6 @@ def get_naver_api_results(query):
         logger.error(f"Naver API 오류: {str(e)}")
         return "검색 중 오류가 발생했습니다. 😓"
 
-# ArXiv 논문 검색
-def fetch_arxiv_paper(paper):
-    return {
-        "title": paper.title,
-        "authors": ", ".join(str(a) for a in paper.authors),
-        "summary": paper.summary[:200],
-        "entry_id": paper.entry_id,
-        "pdf_url": paper.pdf_url,
-        "published": paper.published.strftime('%Y-%m-%d')
-    }
-
-def get_arxiv_papers(query, max_results=3):
-    cache_key = f"arxiv:{query}:{max_results}"
-    cached = cache_handler.get(cache_key)
-    if cached:
-        return cached
-    search = arxiv.Search(query=query, max_results=max_results, sort_by=arxiv.SortCriterion.SubmittedDate)
-    with ThreadPoolExecutor() as executor:
-        results = list(executor.map(fetch_arxiv_paper, search.results()))
-    if not results:
-        return "해당 키워드로 논문을 찾을 수 없습니다."
-    
-    response = "📚 **Arxiv 논문 검색 결과** 📚\n\n"
-    response += "\n\n".join(
-        [f"**논문 {i}**\n\n📄 **제목**: {r['title']}\n\n👥 **저자**: {r['authors']}\n\n📝 **초록**: {r['summary']}...\n\n🔗 **논문 페이지**: {r['entry_id']}\n\n📅 **출판일**: {r['published']}"
-         for i, r in enumerate(results, 1)]
-    ) + "\n\n더 궁금한 점 있나요? 😊"
-    cache_handler.setex(cache_key, 3600, response)
-    return response
-
-# PubMed 논문 검색
-base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
-
-def search_pubmed(query, max_results=5):
-    search_url = f"{base_url}esearch.fcgi"
-    params = {"db": "pubmed", "term": query, "retmode": "json", "retmax": max_results, "api_key": NCBI_KEY}
-    response = requests.get(search_url, params=params, timeout=3)
-    return response.json()
-
-def get_pubmed_summaries(id_list):
-    summary_url = f"{base_url}esummary.fcgi"
-    params = {"db": "pubmed", "id": ",".join(id_list), "retmode": "json", "api_key": NCBI_KEY}
-    response = requests.get(summary_url, params=params, timeout=3)
-    return response.json()
-
-def get_pubmed_abstract(id_list):
-    fetch_url = f"{base_url}efetch.fcgi"
-    params = {"db": "pubmed", "id": ",".join(id_list), "retmode": "xml", "rettype": "abstract", "api_key": NCBI_KEY}
-    response = requests.get(fetch_url, params=params, timeout=3)
-    return response.text
-
-def extract_first_two_sentences(abstract_text):
-    if not abstract_text or abstract_text.isspace():
-        return "No abstract available"
-    sentences = [s.strip() for s in abstract_text.split('.') if s.strip()]
-    return " ".join(sentences[:2]) + "." if sentences else "No abstract available"
-
-def parse_abstracts(xml_text):
-    abstract_dict = {}
-    try:
-        root = ET.fromstring(xml_text)
-        for article in root.findall(".//PubmedArticle"):
-            pmid = article.find(".//MedlineCitation/PMID").text
-            abstract_elem = article.find(".//Abstract/AbstractText")
-            abstract = abstract_elem.text if abstract_elem is not None else "No abstract available"
-            abstract_dict[pmid] = extract_first_two_sentences(abstract)
-    except ET.ParseError:
-        return {}
-    return abstract_dict
-
-def get_pubmed_papers(query, max_results=5):
-    cache_key = f"pubmed:{query}:{max_results}"
-    cached = cache_handler.get(cache_key)
-    if cached:
-        return cached
-    
-    search_results = search_pubmed(query, max_results)
-    pubmed_ids = search_results["esearchresult"]["idlist"]
-    if not pubmed_ids:
-        return "해당 키워드로 의학 논문을 찾을 수 없습니다."
-    
-    summaries = get_pubmed_summaries(pubmed_ids)
-    abstracts_xml = get_pubmed_abstract(pubmed_ids)
-    abstract_dict = parse_abstracts(abstracts_xml)
-    response = "🩺 **PubMed 논문 검색 결과** 🩺\n\n"
-    response += "\n\n".join(
-        [f"**논문 {i}**\n\n"
-         f"🆔 **PMID**: {pmid}\n\n"
-         f"📖 **제목**: {summaries['result'][pmid].get('title', 'No title')}\n\n"
-         f"📅 **출판일**: {format_date(summaries['result'][pmid].get('pubdate', 'No date'))}\n\n"
-         f"✍️ **저자**: {', '.join([author.get('name', '') for author in summaries['result'][pmid].get('authors', [])])}\n\n"
-         f"📝 **초록**: {abstract_dict.get(pmid, 'No abstract')}\n\n"
-         f"🔗 **논문 페이지**: https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
-         for i, pmid in enumerate(pubmed_ids, 1)]
-    ) + "\n\n더 궁금한 점 있나요? 😊"
-    cache_handler.setex(cache_key, 3600, response)
-    return response
-    
 # 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
 _client_instance = None
@@ -604,11 +508,11 @@ def process_query(query):
             result = future.result()
         elif query_type == "arxiv_search":
             keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
-            future = executor.submit(get_arxiv_papers, keywords)
+            future = executor.submit(paper_search_api.get_arxiv_papers, keywords)  # 수정된 부분
             result = future.result()
         elif query_type == "pubmed_search":
             keywords = query.replace("의학논문", "").strip()
-            future = executor.submit(get_pubmed_papers, keywords)
+            future = executor.submit(paper_search_api.get_pubmed_papers, keywords)  # 수정된 부분
             result = future.result()
         elif query_type == "naver_search":
             search_query = query.lower().replace("검색", "").strip()
