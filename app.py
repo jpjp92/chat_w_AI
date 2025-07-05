@@ -28,6 +28,10 @@ from utils.query_analyzer import (
     is_time_query,
     LEAGUE_MAPPING
 )
+# Import weather, football, and drug modules
+from utils.weather import WeatherAPI
+from utils.football import FootballAPI
+from utils.drug_info import DrugAPI
 
 # set logger
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
@@ -91,323 +95,11 @@ multi_iq_descriptions = personality_data["multi_iq_descriptions"]
 mbti_full_description = personality_data["mbti_full_description"]
 multi_iq_full_description = personality_data["multi_iq_full_description"]
 
-# WeatherAPI 클래스
-class WeatherAPI:
-    def __init__(self, cache_ttl=600):
-        self.cache = cache_handler
-        self.cache_ttl = cache_ttl
-
-    def fetch_weather(self, url, params):
-        session = requests.Session()
-        retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("https://", adapter)
-        try:
-            response = session.get(url, params=params, timeout=3)
-            response.raise_for_status()
-            return response.json()
-        except:
-            return self.cache.get(f"weather:{params.get('q', '')}") or "날씨 정보를 불러올 수 없습니다."
-
-    @lru_cache(maxsize=100)
-    def get_city_info(self, city_name):
-        cache_key = f"city_info:{city_name}"
-        cached = self.cache.get(cache_key)
-        if cached:
-            return cached
-        url = "http://api.openweathermap.org/geo/1.0/direct"
-        params = {'q': city_name, 'limit': 1, 'appid': WEATHER_API_KEY}
-        data = self.fetch_weather(url, params)
-        if data and isinstance(data, list) and len(data) > 0:
-            city_info = {"name": data[0]["name"], "lat": data[0]["lat"], "lon": data[0]["lon"]}
-            self.cache.setex(cache_key, 86400, city_info)
-            return city_info
-        return None
-
-    def get_city_weather(self, city_name):
-        cache_key = f"weather:{city_name}"
-        cached_data = self.cache.get(cache_key)
-        if cached_data:
-            return cached_data
-        
-        city_info = self.get_city_info(city_name)
-        if not city_info:
-            return f"'{city_name}'의 날씨 정보를 가져올 수 없습니다."
-        
-        url = "https://api.openweathermap.org/data/2.5/weather"
-        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-        data = self.fetch_weather(url, params)
-        if isinstance(data, str):
-            return data
-        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-        weather_emoji = weather_emojis.get(data['weather'][0]['main'], '🌤️')
-        result = (
-            f"현재 {data['name']}, {data['sys']['country']} 날씨 {weather_emoji}\n"
-            f"날씨: {data['weather'][0]['description']}\n"
-            f"온도: {data['main']['temp']}°C\n"
-            f"체감: {data['main']['feels_like']}°C\n"
-            f"습도: {data['main']['humidity']}%\n"
-            f"풍속: {data['wind']['speed']}m/s\n"
-            f"더 궁금한 점 있나요? 😊"
-        )
-        # 캐시 TTL 값 확인 및 조정
-        self.cache.setex(cache_key, self.cache_ttl, result)
-        return result
-    def get_forecast_by_day(self, city_name, days_from_today=1):
-        cache_key = f"forecast:{city_name}:{days_from_today}"
-        cached_data = self.cache.get(cache_key)
-        if cached_data:
-            return cached_data
-        
-        city_info = self.get_city_info(city_name)
-        if not city_info:
-            return f"'{city_name}'의 날씨 예보를 가져올 수 없습니다."
-        
-        url = "https://api.openweathermap.org/data/2.5/forecast"
-        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-        data = self.fetch_weather(url, params)
-        if isinstance(data, str):
-            return data
-        target_date = (datetime.now() + timedelta(days=days_from_today)).strftime('%Y-%m-%d')
-        forecast_text = f"{city_info['name']}의 {target_date} 날씨 예보 🌤️\n\n"
-        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-        
-        found = False
-        for forecast in data['list']:
-            dt = datetime.fromtimestamp(forecast['dt']).strftime('%Y-%m-%d')
-            if dt == target_date:
-                found = True
-                time_only = datetime.fromtimestamp(forecast['dt']).strftime('%H:%M')
-                weather_emoji = weather_emojis.get(forecast['weather'][0]['main'], '🌤️')
-                forecast_text += (
-                    f"⏰ {time_only} {forecast['weather'][0]['description']} {weather_emoji} "
-                    f"{forecast['main']['temp']}°C 💧{forecast['main']['humidity']}% 🌬️{forecast['wind']['speed']}m/s\n\n"
-                )
-        
-        result = forecast_text + "더 궁금한 점 있나요? 😊" if found else f"'{city_name}'의 {target_date} 날씨 예보를 찾을 수 없습니다."
-        # 캐시 TTL 값 확인 및 조정
-        self.cache.setex(cache_key, self.cache_ttl, result)
-        return result
-
-    def get_weekly_forecast(self, city_name):
-        cache_key = f"weekly_forecast:{city_name}"
-        cached_data = self.cache.get(cache_key)
-        if cached_data:
-            return cached_data
-        
-        city_info = self.get_city_info(city_name)
-        if not city_info:
-            return f"'{city_name}'의 주간 예보를 가져올 수 없습니다."
-        
-        url = "https://api.openweathermap.org/data/2.5/forecast"
-        params = {'lat': city_info["lat"], 'lon': city_info["lon"], 'appid': WEATHER_API_KEY, 'units': 'metric', 'lang': 'kr'}
-        data = self.fetch_weather(url, params)
-        if isinstance(data, str):
-            return data
-        today = datetime.now().date()
-        week_end = today + timedelta(days=6)
-        daily_forecast = {}
-        weekdays_kr = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
-        today_weekday = today.weekday()
-        
-        for forecast in data['list']:
-            dt = datetime.fromtimestamp(forecast['dt']).date()
-            if today <= dt <= week_end:
-                dt_str = dt.strftime('%Y-%m-%d')
-                if dt_str not in daily_forecast:
-                    weekday_idx = (today_weekday + (dt - today).days) % 7
-                    daily_forecast[dt_str] = {
-                        'weekday': weekdays_kr[weekday_idx],
-                        'temp_min': forecast['main']['temp_min'],
-                        'temp_max': forecast['main']['temp_max'],
-                        'weather': forecast['weather'][0]['description']
-                    }
-                else:
-                    daily_forecast[dt_str]['temp_min'] = min(daily_forecast[dt_str]['temp_min'], forecast['main']['temp_min'])
-                    daily_forecast[dt_str]['temp_max'] = max(daily_forecast[dt_str]['temp_max'], forecast['main']['temp_max'])
-        
-        today_str = today.strftime('%Y-%m-%d')
-        today_weekday_str = weekdays_kr[today_weekday]
-        forecast_text = f"{today_str}({today_weekday_str}) 기준 {city_info['name']}의 주간 날씨 예보 🌤️\n"
-        weather_emojis = {'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Snow': '❄️', 'Thunderstorm': '⛈️', 'Drizzle': '🌦️', 'Mist': '🌫️'}
-        
-        for date, info in daily_forecast.items():
-            weather_emoji = weather_emojis.get(info['weather'].split()[0], '🌤️')
-            forecast_text += (
-                f"\n{info['weekday']}: {info['weather']} {weather_emoji} "
-                f"최저 {info['temp_min']}°C 최고 {info['temp_max']}°C\n\n"
-            )
-        
-        result = forecast_text + "\n더 궁금한 점 있나요? 😊"
-        # 캐시 TTL 값 확인 및 조정
-        self.cache.setex(cache_key, self.cache_ttl, result)
-        return result
-
-# FootballAPI 클래스
-class FootballAPI:
-    def __init__(self, api_key, cache_ttl=600):
-        self.api_key = api_key
-        self.base_url = "https://api.football-data.org/v4/competitions"
-        self.cache = cache_handler
-        self.cache_ttl = cache_ttl
-
-    def fetch_league_standings(self, league_code, league_name):
-        cache_key = f"league_standings:{league_code}"
-        cached_data = self.cache.get(cache_key)
-        if cached_data is not None:
-            return cached_data
-
-        url = f"{self.base_url}/{league_code}/standings"
-        headers = {'X-Auth-Token': self.api_key}
-        
-        try:
-            time.sleep(1)
-            response = requests.get(url, headers=headers, timeout=2)
-            response.raise_for_status()
-            data = response.json()
-            
-            standings = data['standings'][0]['table'] if league_code not in ["CL"] else data['standings']
-            if league_code in ["CL"]:
-                standings_data = []
-                for group in standings:
-                    for team in group['table']:
-                        standings_data.append({
-                            '순위': team['position'],
-                            '그룹': group['group'],
-                            '팀': team['team']['name'],
-                            '경기': team['playedGames'],
-                            '승': team['won'],
-                            '무': team['draw'],
-                            '패': team['lost'],
-                            '득점': team['goalsFor'],
-                            '실점': team['goalsAgainst'],
-                            '득실차': team['goalsFor'] - team['goalsAgainst'],
-                            '포인트': team['points']
-                        })
-                df = pd.DataFrame(standings_data)
-            else:
-                df = pd.DataFrame([
-                    {
-                        '순위': team['position'],
-                        '팀': team['team']['name'],
-                        '경기': team['playedGames'],
-                        '승': team['won'],
-                        '무': team['draw'],
-                        '패': team['lost'],
-                        '득점': team['goalsFor'],
-                        '실점': team['goalsAgainst'],
-                        '득실차': team['goalsFor'] - team['goalsAgainst'],
-                        '포인트': team['points']
-                    } for team in standings
-                ])
-            
-            result = {"league_name": league_name, "data": df}
-            self.cache.setex(cache_key, self.cache_ttl, result)
-            return result
-        
-        except requests.exceptions.RequestException as e:
-            return {"league_name": league_name, "error": f"{league_name} 리그 순위를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
-
-    def fetch_league_scorers(self, league_code, league_name):
-        cache_key = f"league_scorers:{league_code}"
-        cached_data = self.cache.get(cache_key)
-        if cached_data is not None:
-            return cached_data
-
-        url = f"{self.base_url}/{league_code}/scorers"
-        headers = {'X-Auth-Token': self.api_key}
-        
-        try:
-            time.sleep(1)
-            response = requests.get(url, headers=headers, timeout=2)
-            response.raise_for_status()
-            data = response.json()
-            
-            scorers = [{"순위": i+1, "선수": s['player']['name'], "팀": s['team']['name'], "득점": s['goals']} 
-                       for i, s in enumerate(data['scorers'][:10])]
-            df = pd.DataFrame(scorers)
-            result = {"league_name": league_name, "data": df}
-            self.cache.setex(cache_key, self.cache_ttl, result)
-            return result
-        
-        except requests.exceptions.RequestException as e:
-            return {"league_name": league_name, "error": f"{league_name} 리그 득점순위 정보를 가져오는 중 문제가 발생했습니다: {str(e)} 😓"}
-
-    def fetch_championsleague_knockout_matches(self):
-        """
-        챔피언스리그의 knockout(토너먼트) 스테이지 경기 결과를 반환합니다.
-        """
-        url = f"{self.base_url}/CL/matches"
-        headers = {'X-Auth-Token': self.api_key}
-        KNOCKOUT_STAGES = {
-            "LAST_16": "16강",
-            "QUARTER_FINALS": "8강",
-            "SEMI_FINALS": "준결승",
-            "FINAL": "결승",
-            "THIRD_PLACE": "3위 결정전"
-        }
-        try:
-            response = requests.get(url, headers=headers, timeout=3)
-            response.raise_for_status()
-            data = response.json()
-            
-            knockout_matches = [
-                m for m in data['matches']
-                if m.get('stage') in KNOCKOUT_STAGES
-            ]
-            results = []
-            for m in knockout_matches:
-                home = m.get('homeTeam', {}).get('name', '미정')
-                away = m.get('awayTeam', {}).get('name', '미정')
-                
-                # 스코어 확인 (fullTime → halfTime → extraTime → penalties 순으로 확인)
-                score_home = m.get('score', {}).get('fullTime', {}).get('home')
-                score_away = m.get('score', {}).get('fullTime', {}).get('away')
-                
-                if score_home is None or score_away is None:
-                    score_home = m.get('score', {}).get('halfTime', {}).get('home')
-                    score_away = m.get('score', {}).get('halfTime', {}).get('away')
-                
-                if score_home is None or score_away is None:
-                    score_home = m.get('score', {}).get('extraTime', {}).get('home')
-                    score_away = m.get('score', {}).get('extraTime', {}).get('away')
-                
-                if score_home is None or score_away is None:
-                    score_home = m.get('score', {}).get('penalties', {}).get('home')
-                    score_away = m.get('score', {}).get('penalties', {}).get('away')
-            
-                # 경기 상태 확인
-                match_status = m.get('status', '')
-                
-                # 스코어 문자열 생성
-                if match_status == 'FINISHED':
-                    score_str = f"{score_home if score_home is not None else 0} : {score_away if score_away is not None else 0}"
-                elif match_status == 'SCHEDULED':
-                    score_str = "예정된 경기"
-                else:
-                    score_str = f"{score_home if score_home is not None else '-'} : {score_away if score_away is not None else '-'}"
-                
-                # 라운드 이름 변환
-                stage = KNOCKOUT_STAGES.get(m.get('stage', ''), '미정')
-                
-                results.append({
-                    "라운드": stage,
-                    "날짜": m.get('utcDate', '')[:10] if m.get('utcDate') else '미정',
-                    "홈팀": home,
-                    "원정팀": away,
-                    "스코어": score_str,
-                    "상태": match_status
-                })
-            return results
-        except Exception as e:
-            return f"챔피언스리그 토너먼트 경기 결과를 가져오는 중 오류: {str(e)}"
-# 초기화
+# 초기화 - API 클래스들을 utils에서 import하여 사용
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-# 앱 시작 시 한 번만 실행하도록 수정
-# 전역 변수로 선언된 client 객체를 초기화할 때만 사용
-# client = select_best_provider_with_priority()
-weather_api = WeatherAPI()
-football_api = FootballAPI(api_key=SPORTS_API_KEY)
+weather_api = WeatherAPI(cache_handler=cache_handler, WEATHER_API_KEY=WEATHER_API_KEY)
+football_api = FootballAPI(api_key=SPORTS_API_KEY, cache_handler=cache_handler)
+drug_api = DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler)  # 새로 추가
 naver_request_count = 0
 NAVER_DAILY_LIMIT = 25000
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
@@ -560,53 +252,6 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
 
 def async_save_chat_history(user_id, session_id, question, answer, time_taken):
     threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
-
-# 의약품 검색
-def get_drug_info(drug_query):
-    drug_name = drug_query.replace("약품검색", "").strip()
-    cache_key = f"drug:{drug_name}"
-    cached = cache_handler.get(cache_key)
-    if cached:
-        return cached
-    
-    url = 'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList'
-    params = {'serviceKey': DRUG_API_KEY, 'pageNo': '1', 'numOfRows': '1', 'itemName': urllib.parse.quote(drug_name), 'type': 'json'}
-    try:
-        response = requests.get(url, params=params, timeout=3)
-        response.raise_for_status()
-        data = response.json()
-        if 'body' in data and 'items' in data['body'] and data['body']['items']:
-            item = data['body']['items'][0]
-            
-            # 전체 내용 및 요약 내용 저장
-            efcy_full = item.get('efcyQesitm', '정보 없음')
-            efcy_summary = efcy_full[:150] + ("..." if len(efcy_full) > 150 else "")
-            
-            use_method_full = item.get('useMethodQesitm', '정보 없음')
-            use_method_summary = use_method_full[:150] + ("..." if len(use_method_full) > 150 else "")
-            
-            atpn_full = item.get('atpnQesitm', '정보 없음')
-            atpn_summary = atpn_full[:150] + ("..." if len(atpn_full) > 150 else "")
-            
-            # 마크다운에서 details/summary 태그를 사용하여 접었다 펼치는 효과 구현
-            result = (
-                f"💊 **의약품 정보** 💊\n\n"
-                f"✅ **약품명**: {item.get('itemName', '정보 없음')}\n\n"
-                f"✅ **제조사**: {item.get('entpName', '정보 없음')}\n\n"
-                f"✅ **효능**: {efcy_summary}\n"
-                f"<details><summary>**전체 내용 보기**</summary>\n{efcy_full}\n</details>\n\n"
-                f"✅ **용법용량**: {use_method_summary}\n"
-                f"<details><summary>**전체 내용 보기**</summary>\n{use_method_full}\n</details>\n\n"
-                f"✅ **주의사항**: {atpn_summary}\n"
-                f"<details><summary>**전체 내용 보기**</summary>\n{atpn_full}\n</details>\n\n"
-                f"더 궁금한 점 있나요? 😊"
-            )
-            cache_handler.setex(cache_key, 86400, result)
-            return result
-        return f"'{drug_name}'의 공식 정보를 찾을 수 없습니다."
-    except Exception as e:
-        logger.error(f"약품 API 오류: {str(e)}")
-        return f"'{drug_name}'의 정보를 가져오는 중 문제가 발생했습니다. 😓"
 
 # Naver API 검색 (웹 검색)
 def get_naver_api_results(query):
@@ -912,12 +557,12 @@ def process_query(query):
             else:
                 result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
         elif query_type == "cl_knockout":
-            future = executor.submit(football_api.fetch_championsleague_knockout_matches)
-            results = future.result()
-            if isinstance(results, str):
-                result = results
-            else:
-                if not results:
+            try:
+                future = executor.submit(football_api.fetch_championsleague_knockout_matches)
+                results = future.result()
+                if isinstance(results, str):  # 에러 메시지인 경우
+                    result = results
+                elif not results:
                     result = "챔피언스리그 토너먼트 경기 결과가 없습니다."
                 else:
                     df = pd.DataFrame(results)
@@ -926,6 +571,8 @@ def process_query(query):
                         "table": df,
                         "footer": "더 궁금한 점 있나요? 😊"
                     }
+            except Exception as e:
+                result = f"챔피언스리그 토너먼트 조회 중 오류: {str(e)} 😓"
         elif query_type == "cultural_event":
             # 문화행사 처리 로직
             target_district = query.replace("문화행사", "").strip()  # "문화행사" 키워드 제거
@@ -953,7 +600,7 @@ def process_query(query):
                 result += "더 궁금한 점 있나요? 😊"
                 
         elif query_type == "drug":
-            future = executor.submit(get_drug_info, query)
+            future = executor.submit(drug_api.get_drug_info, query)  # 수정된 부분
             result = future.result()
         elif query_type == "arxiv_search":
             keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
