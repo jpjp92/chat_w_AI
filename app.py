@@ -185,10 +185,14 @@ def init_session_state():
         st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
+    
+    # 🔴 client와 provider는 한 번만 초기화
     if "client" not in st.session_state or "provider_name" not in st.session_state:
         client, provider_name = select_random_available_provider()
         st.session_state.client = client
         st.session_state.provider_name = provider_name
+        logger.info(f"세션 초기화 - 선택된 프로바이더: {provider_name}")
+    
     # 검색 결과 컨텍스트 저장을 위한 변수 추가
     if "search_contexts" not in st.session_state:
         st.session_state.search_contexts = {}
@@ -232,11 +236,8 @@ _client_instance = None
 # 대화형 응답 함수 수정
 async def get_conversational_response(query, chat_history):
     logger.info(f"대화형 응답 시작 - 쿼리: '{query}'")
-    logger.info(f"세션 상태 확인: {hasattr(st, 'session_state')}")
-    if hasattr(st, 'session_state'):
-        logger.info(f"current_context: {getattr(st.session_state, 'current_context', 'None')}")
-        logger.info(f"search_contexts 키 수: {len(getattr(st.session_state, 'search_contexts', {}))}")
     
+    # 캐시 확인
     cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
     if cached:
@@ -249,13 +250,7 @@ async def get_conversational_response(query, chat_history):
         if current_context_id and current_context_id in st.session_state.search_contexts:
             current_context = st.session_state.search_contexts[current_context_id]
     
-    # 디버깅 로그 추가
-    logger.info(f"현재 컨텍스트 존재: {current_context is not None}")
-    if current_context:
-        logger.info(f"컨텍스트 타입: {current_context.get('type')}")
-        logger.info(f"컨텍스트 결과 길이: {len(str(current_context.get('result', '')))}")
-    
-    # 순서 기반 링크 요청 확인 (예: 3번째 링크 요약해줘)
+    # 순서 기반 링크 요청 확인
     try:
         is_numbered_request, numbered_url = is_numbered_link_request(query, current_context)
         logger.info(f"순서 기반 요청: {is_numbered_request}, URL: {numbered_url}")
@@ -263,7 +258,8 @@ async def get_conversational_response(query, chat_history):
         if is_numbered_request and numbered_url:
             try:
                 logger.info(f"웹페이지 요약 시작: {numbered_url}")
-                summary = summarize_webpage_content(numbered_url, query)
+                # 🔴 세션 상태의 client 전달
+                summary = summarize_webpage_content(numbered_url, query, st.session_state.client)
                 conversation_cache.setex(cache_key, 600, summary)
                 return summary
             except Exception as e:
@@ -277,7 +273,8 @@ async def get_conversational_response(query, chat_history):
         if is_url_request and url:
             try:
                 logger.info(f"직접 URL 요약 시작: {url}")
-                summary = summarize_webpage_content(url, query)
+                # 🔴 세션 상태의 client 전달
+                summary = summarize_webpage_content(url, query, st.session_state.client)
                 conversation_cache.setex(cache_key, 600, summary)
                 return summary
             except Exception as e:
@@ -286,14 +283,13 @@ async def get_conversational_response(query, chat_history):
     
     except Exception as e:
         logger.error(f"링크 요약 처리 중 오류: {str(e)}")
-        # 링크 요약 오류 시에도 일반 대화는 계속 진행
     
     # 일반 대화 처리
     messages = [
         {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
     ]
     
-    # 검색 컨텍스트가 있으면 시스템 프롬프트에 추가
+    # 검색 컨텍스트 처리 (기존 로직 유지)
     if current_context:
         context_type = current_context["type"]
         context_query = current_context["query"]
@@ -348,13 +344,11 @@ async def get_conversational_response(query, chat_history):
     # 현재 질문 추가
     messages.append({"role": "user", "content": query})
     
-    # 비동기 실행 전에 client 객체를 미리 가져옴
+    # 🔴 세션 상태의 client 사용 (새로 선택하지 않음)
     try:
-        if not hasattr(st, 'session_state') or 'client' not in st.session_state:
-            client, _ = select_random_available_provider()
-        else:
-            client = st.session_state.client
-            
+        client = st.session_state.client
+        logger.info(f"기존 세션 client 사용: {st.session_state.provider_name}")
+        
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None, lambda: client.chat.completions.create(
@@ -638,8 +632,8 @@ def show_chat_dashboard():
             - 한국어/영어 도시명 모두 지원
             
             **축구 리그** ⚽
-            - EPL, 라리가, 분데스리가
-            - 세리에A, 리그1, 챔피언스리그
+            - EPL, LaLiga, Bundesliga
+            - SerieA, Ligue1, UEFA Champions League
             
             **검색 언어** 💬
             - 한국어 우선 지원

@@ -316,10 +316,16 @@ def summarize_webpage_content(url, user_query="", client=None):
         if content.startswith("❌"):
             return content
         
-        # LLM을 사용해 내용 요약
+        # LLM을 사용해 내용 요약 (세션 상태에서 client 가져오기)
         if not client:
-            from utils.providers import select_random_available_provider
-            client, _ = select_random_available_provider()
+            import streamlit as st
+            if hasattr(st, 'session_state') and 'client' in st.session_state:
+                client = st.session_state.client
+                logger.info(f"세션에서 기존 client 사용: {st.session_state.provider_name}")
+            else:
+                from utils.providers import select_random_available_provider
+                client, provider_name = select_random_available_provider()
+                logger.info(f"새로운 client 선택: {provider_name}")
         
         prompt = f"""다음 웹페이지의 내용을 한국어로 요약해주세요.
 
@@ -349,26 +355,19 @@ def summarize_webpage_content(url, user_query="", client=None):
 💡 **결론**: 간단한 결론이나 핵심 메시지
 """
 
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "당신은 웹페이지 내용을 정확하고 간결하게 요약하는 전문가입니다."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500,
-                temperature=0.3
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"LLM 요약 생성 오류: {str(e)}")
-            return f"❌ 요약 생성 중 오류가 발생했습니다: {str(e)}"
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "당신은 웹페이지 내용을 효과적으로 요약하는 전문가입니다."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        return response.choices[0].message.content if response.choices else "요약을 생성할 수 없습니다."
         
     except Exception as e:
-        logger.error(f"웹페이지 요약 오류: {str(e)}")
-        return f"❌ 웹페이지 요약 중 오류: {str(e)}"
+        logger.error(f"웹페이지 요약 중 오류: {str(e)}")
+        return f"웹페이지 요약 중 오류가 발생했습니다: {str(e)} 😓"
 
 def extract_urls_from_text(text):
     """텍스트에서 URL을 추출합니다"""
