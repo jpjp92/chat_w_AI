@@ -47,20 +47,38 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 cache = Cache("cache_directory")
 
 class MemoryCache:
-    def __init__(self):
+    def __init__(self, max_size=1000):
         self.cache = {}
         self.expiry = {}
+        self.max_size = max_size
+        self.access_count = {}
     
     def get(self, key):
         if key in self.cache and time.time() < self.expiry[key]:
+            self.access_count[key] = self.access_count.get(key, 0) + 1
             return self.cache[key]
         return cache.get(key)
     
     def setex(self, key, ttl, value):
+        # 캐시 크기 제한
+        if len(self.cache) >= self.max_size:
+            self._evict_least_used()
+        
         self.cache[key] = value
         self.expiry[key] = time.time() + ttl
+        self.access_count[key] = 1
         cache.set(key, value, expire=ttl)
-
+    
+    def _evict_least_used(self):
+        """가장 적게 사용된 캐시 항목 제거"""
+        if not self.access_count:
+            return
+        
+        least_used_key = min(self.access_count, key=self.access_count.get)
+        self.cache.pop(least_used_key, None)
+        self.expiry.pop(least_used_key, None)
+        self.access_count.pop(least_used_key, None)
+        
 cache_handler = MemoryCache()
 
 # 날짜 일괄적 수정 
@@ -75,22 +93,53 @@ def format_date(fordate):
 
 # JSON 파일에서 MBTI 및 다중지능 데이터 로드 (캐싱 적용)
 def load_personality_data():
+    """성격 검사 데이터 로드 (개선된 에러 핸들링)"""
     cache_key = "personality_data"
     cached_data = cache_handler.get(cache_key)
     if cached_data:
         return cached_data
     
     try:
-        with open("config/personality_multi_data.json", "r", encoding="utf-8") as f:
+        config_path = "config/personality_multi_data.json"
+        if not os.path.exists(config_path):
+            logger.warning(f"설정 파일을 찾을 수 없습니다: {config_path}")
+            # 기본 데이터 반환
+            return {
+                "mbti_descriptions": {},
+                "multi_iq_descriptions": {},
+                "mbti_full_description": "MBTI 데이터를 불러올 수 없습니다.",
+                "multi_iq_full_description": "다중지능 데이터를 불러올 수 없습니다."
+            }
+        
+        with open(config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        
+        # 데이터 검증
+        required_keys = ["mbti_descriptions", "multi_iq_descriptions", "mbti_full_description", "multi_iq_full_description"]
+        for key in required_keys:
+            if key not in data:
+                logger.warning(f"필수 키가 누락되었습니다: {key}")
+                data[key] = {} if "descriptions" in key else "데이터를 불러올 수 없습니다."
+        
         cache_handler.setex(cache_key, 86400, data)  # 24시간 캐싱
         return data
-    except FileNotFoundError:
-        logger.error("personality_multi_data.json 파일을 찾을 수 없습니다.")
-        raise
-    except json.JSONDecodeError:
-        logger.error("personality_multi_data.json 파일의 형식이 잘못되었습니다.")
-        raise
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON 파일 파싱 오류: {str(e)}")
+        return {
+            "mbti_descriptions": {},
+            "multi_iq_descriptions": {},
+            "mbti_full_description": "MBTI 데이터 파싱 오류",
+            "multi_iq_full_description": "다중지능 데이터 파싱 오류"
+        }
+    except Exception as e:
+        logger.error(f"성격 데이터 로드 중 예상치 못한 오류: {str(e)}")
+        return {
+            "mbti_descriptions": {},
+            "multi_iq_descriptions": {},
+            "mbti_full_description": "MBTI 데이터 로드 실패",
+            "multi_iq_full_description": "다중지능 데이터 로드 실패"
+        }
 
 # 데이터 로드
 personality_data = load_personality_data()
@@ -101,12 +150,28 @@ multi_iq_full_description = personality_data["multi_iq_full_description"]
 
 # 초기화 - API 클래스들을 utils에서 import하여 사용
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-weather_api = WeatherAPI(cache_handler=cache_handler, WEATHER_API_KEY=WEATHER_API_KEY)
-football_api = FootballAPI(api_key=SPORTS_API_KEY, cache_handler=cache_handler)
-drug_api = DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler)
-paper_search_api = PaperSearchAPI(ncbi_key=NCBI_KEY, cache_handler=cache_handler)
-culture_event_api = CultureEventAPI(api_key=CULTURE_API_KEY, cache_handler=cache_handler)
-web_search_api = WebSearchAPI(client_id=NAVER_CLIENT_ID, client_secret=NAVER_CLIENT_SECRET, cache_handler=cache_handler)  # 새로 추가
+
+# 전역 변수 초기화 최적화
+@st.cache_resource
+def initialize_apis():
+    """API 클래스들을 초기화합니다 (캐싱 적용)"""
+    return {
+        'weather': WeatherAPI(cache_handler=cache_handler, WEATHER_API_KEY=WEATHER_API_KEY),
+        'football': FootballAPI(api_key=SPORTS_API_KEY, cache_handler=cache_handler),
+        'drug': DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler),
+        'paper_search': PaperSearchAPI(ncbi_key=NCBI_KEY, cache_handler=cache_handler),
+        'culture_event': CultureEventAPI(api_key=CULTURE_API_KEY, cache_handler=cache_handler),
+        'web_search': WebSearchAPI(client_id=NAVER_CLIENT_ID, client_secret=NAVER_CLIENT_SECRET, cache_handler=cache_handler)
+    }
+
+# 전역 변수 대신 함수 호출
+apis = initialize_apis()
+weather_api = apis['weather']
+football_api = apis['football']
+drug_api = apis['drug']
+paper_search_api = apis['paper_search']
+culture_event_api = apis['culture_event']
+web_search_api = apis['web_search']
 
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
@@ -479,13 +544,10 @@ def get_time_by_city(city_name):
 def show_chat_dashboard():
     st.title("Chat with AI 🤖")
     
-    # 검색 컨텍스트 저장을 위한 변수 추가
-    if "search_contexts" not in st.session_state:
-        st.session_state.search_contexts = {}
-    if "current_context" not in st.session_state:
-        st.session_state.current_context = None
+    # 검색 컨텍스트 초기화는 init_session_state()에서 이미 처리됨
+    # 중복 제거
     
-    # 사이드바에 도움말 추가
+    # 사이드바 도움말 구성
     with st.sidebar:
         st.header("도움말 📚")
         
@@ -494,7 +556,7 @@ def show_chat_dashboard():
             st.markdown("""
             **날씨 정보** 🌤️
             - "서울 날씨", "파리 날씨 알려줘"
-            - "내일 서울 날씨", "뉴욕 내일 날씨"
+            - "내일 서울 날씨", "내일 뉴욕 날씨"
             
             **시간 정보** 🕒
             - "현재 시간", "오늘 날짜"
@@ -580,7 +642,12 @@ def show_chat_dashboard():
             - 영어 검색 가능
             """)
     
-    # 기존 메시지 표시
+    # 채팅 인터페이스
+    display_chat_messages()
+    handle_user_input()
+
+def display_chat_messages():
+    """채팅 메시지 표시"""
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             if isinstance(message["content"], dict) and "table" in message["content"]:
@@ -590,7 +657,8 @@ def show_chat_dashboard():
             else:
                 st.markdown(message["content"], unsafe_allow_html=True)
 
-    # 사용자 입력 처리
+def handle_user_input():
+    """사용자 입력 처리"""
     if user_prompt := st.chat_input("질문해 주세요!"):
         st.session_state.messages.append({"role": "user", "content": user_prompt})
         with st.chat_message("user"):
@@ -605,10 +673,8 @@ def show_chat_dashboard():
                 
                 # 후속 질문인지 확인
                 if is_followup_question(user_prompt) and st.session_state.current_context:
-                    # 후속 질문으로 판단되면 기존 컨텍스트 유지하고 LLM에 전달
                     response = asyncio.run(get_conversational_response(user_prompt, st.session_state.messages))
                 else:
-                    # 새로운 질문이면 컨텍스트 초기화하고 일반 처리
                     if needs_search(user_prompt) is None:
                         st.session_state.current_context = None
                     response = process_query(user_prompt)
