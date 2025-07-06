@@ -709,6 +709,14 @@ def handle_user_input():
 
 def show_login_page():
     st.title("로그인 🤗")
+    
+    # 🔴 로그인 성공 상태 표시
+    if st.session_state.get('show_welcome'):
+        st.success(f"환영합니다, {st.session_state.get('welcome_name', '')}님! 🎉")
+        del st.session_state.show_welcome
+        if 'welcome_name' in st.session_state:
+            del st.session_state.welcome_name
+    
     with st.form("login_form"):
         nickname = st.text_input("닉네임", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")
@@ -720,11 +728,13 @@ def show_login_page():
                 st.session_state.is_logged_in = True
                 st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 도움말도 활용해 보세요 😊"}]
                 st.session_state.session_id = str(uuid.uuid4())
-                st.toast(f"환영합니다, {nickname}님! 🎉")
-                time.sleep(1)
+                
+                # 🔴 성공 메시지를 세션에 저장
+                st.session_state.show_welcome = True
+                st.session_state.welcome_name = nickname
                 st.rerun()
             except Exception:
-                st.toast("로그인 중 오류가 발생했습니다. 다시 시도해주세요.", icon="❌")
+                st.error("로그인 중 오류가 발생했습니다. 다시 시도해주세요.")
 
 # 메인 실행 부분
 def main():
@@ -737,4 +747,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
