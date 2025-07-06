@@ -565,6 +565,10 @@ def show_chat_dashboard():
             **웹 검색** 🔍
             - "ChatGPT 사용방법 검색해줘"
             - 검색 후 "3번째 링크 요약해줘"
+            
+            **웹 페이지 요약** 📝
+            - "https://blog.google/intl/ko-kr/company-news/technology/made-by-google-gemini-ai-updates-kr/ 요약해줘"
+            
             """)
         
         # 전문 정보 안내
@@ -598,7 +602,7 @@ def show_chat_dashboard():
             """)
         
         # 성격 검사 안내
-        with st.expander("🧠 성격 검사"):
+        with st.expander("🧠 성격 유형 검사"):
             st.markdown("""
             **MBTI** ✨
             - "MBTI 검사", "MBTI 유형", "MBTI 설명"
