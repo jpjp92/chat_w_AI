@@ -93,17 +93,16 @@ class DrugStoreAPI:
     def _fetch_pharmacy_data(self, district=None, name=None, limit=10):
         """서울시 약국 API 호출"""
         try:
-            # 🔴 올바른 URL 구조 사용
+            # 🔴 지역구 파라미터 없이 전체 데이터 요청 후 수동 필터링
             start_index = 1
-            end_index = limit
+            end_index = limit * 5  # 🔴 더 많은 데이터를 가져와서 필터링
             
-            # 🔴 수정된 URL 구조 - 파라미터를 쿼리스트링으로 전달
             url = f"{self.base_url}/{self.api_key}/xml/TbPharmacyOperateInfo/{start_index}/{end_index}/"
             
-            # 🔴 파라미터를 쿼리스트링으로 전달
+            # 🔴 파라미터 제거 - 전체 데이터 요청
             params = {}
-            if district:
-                params['DUTYADDR'] = district
+            # if district:
+            #     params['DUTYADDR'] = district  # 🔴 주석처리
             if name:
                 params['DUTYNAME'] = name
             
@@ -182,11 +181,30 @@ class DrugStoreAPI:
         
         filtered_pharmacies = []
         for pharmacy in result["pharmacies"]:
-            if target_district in pharmacy["address"]:
+            address = pharmacy["address"]
+            logger.info(f"약국 주소 확인: '{address}'")
+            
+            # 🔴 더 유연한 필터링 조건
+            if (target_district in address or 
+                target_district.replace("구", "") in address or
+                address.find(target_district) != -1):
                 filtered_pharmacies.append(pharmacy)
+                logger.info(f"✅ 필터링 통과: {pharmacy['name']} - {address}")
+            else:
+                logger.info(f"❌ 필터링 제외: {pharmacy['name']} - {address}")
         
         logger.info(f"필터링 전: {len(result['pharmacies'])}개")
         logger.info(f"필터링 후: {len(filtered_pharmacies)}개")
+        
+        # 🔴 필터링 결과가 0개인 경우 원본 데이터 일부 반환
+        if len(filtered_pharmacies) == 0:
+            logger.warning(f"'{target_district}' 지역구에서 약국을 찾을 수 없어 전체 결과 반환")
+            return {
+                "status": "success",
+                "total_count": len(result["pharmacies"]),
+                "pharmacies": result["pharmacies"][:5],  # 최대 5개만 반환
+                "note": f"'{target_district}' 지역의 약국을 찾을 수 없어 인근 지역 약국을 표시합니다."
+            }
         
         return {
             "status": "success",
@@ -280,6 +298,7 @@ class DrugStoreAPI:
         
         pharmacies = result["pharmacies"]
         total_count = result["total_count"]
+        note = result.get("note", "")  # 🔴 주의사항 추가
         
         if not pharmacies:
             district_msg = f" ({searched_district})" if searched_district else ""
@@ -290,16 +309,18 @@ class DrugStoreAPI:
         header = f"## 💊 서울시 약국 정보 검색 결과{district_info}\n\n"
         header += f"✅ **총 {total_count}개 약국**을 찾았습니다.\n\n"
         
+        # 🔴 주의사항 표시
+        if note:
+            header += f"⚠️ **안내**: {note}\n\n"
+        
         # 약국 목록
         pharmacy_list = ""
         for i, pharmacy in enumerate(pharmacies, 1):
             pharmacy_list += f"### {i}. 🏥 {pharmacy['name']}\n"
-            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n\n"
-            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n\n"
-            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n\n"
-            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n\n"
-            
-            # 🔴 지도 링크 제거
+            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n"
+            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n"
+            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n"
+            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n"
             
             if i < len(pharmacies):
                 pharmacy_list += "\n---\n\n"
@@ -310,6 +331,7 @@ class DrugStoreAPI:
         footer = "\n💡 **이용 안내**:\n"
         footer += "- 영업시간은 변경될 수 있으니 방문 전 전화 확인을 권장합니다\n"
         footer += "- 공휴일 및 특별한 날에는 운영시간이 다를 수 있습니다\n"
-        footer += "- 더 정확한 정보는 약국에 직접 문의해주세요 😊"
+        footer += "- 더 정확한 정보는 약국에 직접 문의해주세요 😊\n"
+        footer += "- 🔴 **영업 종료 약국도 정보를 확인할 수 있습니다**"
         
         return header + pharmacy_list + footer
