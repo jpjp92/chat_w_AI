@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 import logging
 import pytz
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,25 @@ class DrugStoreAPI:
             logger.error(f"약국 검색 중 오류: {str(e)}")
             return f"약국 정보를 가져오는 중 오류가 발생했습니다: {str(e)} 😓"
     
+    def _extract_page_number(self, query):
+        """쿼리에서 페이지 번호 추출"""
+        # "광진구 약국 2페이지", "광진구 약국 3", "광진구 약국 더보기" 등
+        page_patterns = [
+            r'(\d+)페이지',
+            r'(\d+)번째',
+            r'페이지\s*(\d+)',
+            r'(\d+)p',
+            r'(\d+)$'  # 마지막에 숫자만 있는 경우
+        ]
+        
+        for pattern in page_patterns:
+            match = re.search(pattern, query)
+            if match:
+                page_num = int(match.group(1))
+                return max(1, page_num)  # 최소 1페이지
+        
+        return 1  # 기본 1페이지
+    
     def _extract_district(self, query):
         """쿼리에서 지역구 추출"""
         districts = [
@@ -176,39 +196,39 @@ class DrugStoreAPI:
                     
                     if result_code != "INFO-000":
                         return {"status": "error", "message": f"API 오류: {result_msg}"}
-        
-        # 데이터 파싱
-        pharmacies = []
-        rows = root.findall(".//row")
-        logger.info(f"찾은 약국 수: {len(rows)}")
-        
-        for i, row in enumerate(rows):
-            pharmacy = self._parse_pharmacy_row(row)
-            if pharmacy:
-                pharmacies.append(pharmacy)
-                logger.info(f"약국 {i+1}: {pharmacy['name']} - {pharmacy['address']}")
-        
-        # 총 개수 확인
-        total_count_elem = root.find(".//list_total_count")
-        total_count = total_count_elem.text if total_count_elem is not None else str(len(pharmacies))
-        
-        logger.info(f"총 약국 수: {total_count}, 파싱된 약국 수: {len(pharmacies)}")
-        
-        return {
-            "status": "success",
-            "total_count": total_count,
-            "pharmacies": pharmacies
-        }
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"네트워크 오류: {str(e)}")
-        return {"status": "error", "message": f"네트워크 오류: {str(e)}"}
-    except ET.ParseError as e:
-        logger.error(f"XML 파싱 오류: {str(e)}")
-        return {"status": "error", "message": f"데이터 파싱 오류: {str(e)}"}
-    except Exception as e:
-        logger.error(f"알 수 없는 오류: {str(e)}")
-        return {"status": "error", "message": f"알 수 없는 오류: {str(e)}"}
+            
+            # 🔴 데이터 파싱 (try 블록 안에 포함)
+            pharmacies = []
+            rows = root.findall(".//row")
+            logger.info(f"찾은 약국 수: {len(rows)}")
+            
+            for i, row in enumerate(rows):
+                pharmacy = self._parse_pharmacy_row(row)
+                if pharmacy:
+                    pharmacies.append(pharmacy)
+                    logger.info(f"약국 {i+1}: {pharmacy['name']} - {pharmacy['address']}")
+            
+            # 총 개수 확인
+            total_count_elem = root.find(".//list_total_count")
+            total_count = total_count_elem.text if total_count_elem is not None else str(len(pharmacies))
+            
+            logger.info(f"총 약국 수: {total_count}, 파싱된 약국 수: {len(pharmacies)}")
+            
+            return {
+                "status": "success",
+                "total_count": total_count,
+                "pharmacies": pharmacies
+            }
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"네트워크 오류: {str(e)}")
+            return {"status": "error", "message": f"네트워크 오류: {str(e)}"}
+        except ET.ParseError as e:
+            logger.error(f"XML 파싱 오류: {str(e)}")
+            return {"status": "error", "message": f"데이터 파싱 오류: {str(e)}"}
+        except Exception as e:
+            logger.error(f"알 수 없는 오류: {str(e)}")
+            return {"status": "error", "message": f"알 수 없는 오류: {str(e)}"}
     
     def _filter_by_district(self, result, target_district):
         """지역구별 수동 필터링"""
@@ -246,7 +266,6 @@ class DrugStoreAPI:
             tel = row.findtext("DUTYTEL1", "정보 없음")
             
             # 🔴 한국시간 기준으로 요일 계산
-            import pytz
             korea_tz = pytz.timezone('Asia/Seoul')
             now_kst = datetime.now(korea_tz)
             weekday = now_kst.weekday()  # 0:월요일, 6:일요일
@@ -305,9 +324,6 @@ class DrugStoreAPI:
             return "정보 없음"
         
         try:
-            from datetime import datetime
-            import pytz
-            
             # 🔴 한국시간(KST) 기준으로 현재 시간 계산
             korea_tz = pytz.timezone('Asia/Seoul')
             now_kst = datetime.now(korea_tz)
@@ -421,24 +437,3 @@ class DrugStoreAPI:
         footer += "- 🔴 **영업 종료 약국도 정보를 확인할 수 있습니다**"
         
         return header + pharmacy_list + navigation + footer
-    
-    def _extract_page_number(self, query):
-        """쿼리에서 페이지 번호 추출"""
-        import re
-        
-        # "광진구 약국 2페이지", "광진구 약국 3", "광진구 약국 더보기" 등
-        page_patterns = [
-            r'(\d+)페이지',
-            r'(\d+)번째',
-            r'페이지\s*(\d+)',
-            r'(\d+)p',
-            r'(\d+)$'  # 마지막에 숫자만 있는 경우
-        ]
-        
-        for pattern in page_patterns:
-            match = re.search(pattern, query)
-            if match:
-                page_num = int(match.group(1))
-                return max(1, page_num)  # 최소 1페이지
-        
-        return 1  # 기본 1페이지
