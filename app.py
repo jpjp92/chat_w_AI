@@ -435,57 +435,41 @@ def process_query(query):
 def show_chat_dashboard():
     st.title("Chat with AI 🤖")
     
-    # 검색 통계 표시 (사이드바에 추가 가능)
-    with st.sidebar:
-        if st.button("검색 통계 📊"):
-            stats = web_search_api.get_search_stats()
-            st.info(f"🔍 **검색 통계**\n\n"
-                   f"• 사용: {stats['request_count']}/{stats['daily_limit']}\n"
-                   f"• 남은 횟수: {stats['remaining']}\n"
-                   f"• 사용률: {stats['usage_percentage']}%")
+    # 검색 컨텍스트 저장을 위한 변수 추가
+    if "search_contexts" not in st.session_state:
+        st.session_state.search_contexts = {}
+    if "current_context" not in st.session_state:
+        st.session_state.current_context = None
     
-    if st.button("도움말 ℹ️"):
-        st.info(
-            "챗봇과 더 쉽게 대화하는 방법이에요! :\n"
-            "1. **날씨** ☀️: '[도시명] 날씨' (예: 서울 날씨, 내일 서울 날씨)\n"
-            "2. **시간/날짜** ⏱️: '[도시명] 시간' 또는 '오늘 날짜' (예: 마드리드 시간, 금일 날짜)\n"
-            "3. **검색** 🌐: '[키워드] 검색해' 또는 '[키워드] 검색해줘' (예: 2025년 서울 전시회 검색해줘)\n"
-            "   - 🔗 **검색 후 링크 분석**: '첫 번째 링크 요약해줘', '3번째 결과 분석해줘'\n"
-            "4. **웹페이지 직접 분석** 📄: 'URL 요약해줘' 또는 'URL 분석해줘'\n"
-            "   - 예: 'https://example.com 요약해줘', 'https://deepmind.google/models/gemini/flash/ 분석해줘'\n"
-            "5. **약품검색** 💊: '약품검색 [약 이름]' (예: 약품검색 게보린)\n"
-            "6. **공학논문** 📚: '공학논문 [키워드]' (예: 공학논문 Multimodal AI)\n"
-            "7. **의학논문** 🩺: '의학논문 [키워드]' (예: 의학논문 cancer therapy)\n"
-            "8. **축구 리그 정보** ⚽: '[리그 이름] 리그 순위 또는 리그득점순위' (예: EPL 리그순위, EPL 리그득점순위)\n"
-            "   - 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague\n"
-            "   - **챔피언스리그 리그 단계**: '챔피언스리그 리그 순위' 또는 'UCL 리그순위'로 확인\n"
-            "   - **챔피언스리그 토너먼트**: '챔피언스리그 토너먼트' 또는 'UCL 16강'(예: 챔피언스리그 16강)\n"
-            "9. **MBTI** ✨: 'MBTI 검사',  'MBTI 유형', 'MBTI 설명' (예: MBTI 검사, INTJ 설명)\n"
-            "10. **다중지능** 🎉: '다중지능 검사', '다중지능 유형', '다중지능 직업', (예: 다중지능 검사, 언어지능 직업)\n"
-            "11. **문화행사** 🎭: '[지역구] 문화행사' 또는 '문화행사' (예: 강남구 문화행사, 문화행사)\n\n"
-            "🌟 **고급 기능**:\n"
-            "- 검색 후 후속 질문으로 특정 링크의 전체 내용 분석 가능\n"
-            "- 웹페이지 URL을 직접 제공하여 내용 요약/분석 가능\n"
-            "- 멀티턴 대화로 이전 검색 결과에 대한 추가 질문 가능\n\n"
-            "궁금한 점 있으면 질문해주세요! 😊"
-        )
-   
-    for msg in st.session_state.messages[-10:]:
-        with st.chat_message(msg['role']):
-            if isinstance(msg['content'], dict) and "table" in msg['content']:
-                st.markdown(f"### {msg['content']['header']}")
-                st.dataframe(pd.DataFrame(msg['content']['table']), use_container_width=True, hide_index=True)
-                st.markdown(msg['content']['footer'])
+    # 사이드바 검색통계 버튼 제거
+    # with st.sidebar:
+    #     if st.button("검색 통계 📊"):
+    #         stats = web_search_api.get_search_stats()
+    #         st.info(f"🔍 **검색 통계**\n\n"
+    #                f"• 사용: {stats['request_count']}/{stats['daily_limit']}\n"
+    #                f"• 남은 횟수: {stats['remaining']}\n"
+    #                f"• 사용률: {stats['usage_percentage']}%")
+    
+    # 기존 메시지 표시
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            if isinstance(message["content"], dict) and "table" in message["content"]:
+                st.markdown(message["content"]["header"])
+                st.dataframe(message["content"]["table"])
+                st.markdown(message["content"]["footer"])
             else:
-                st.markdown(msg['content'], unsafe_allow_html=True)
-    
+                st.markdown(message["content"], unsafe_allow_html=True)
+
+    # 사용자 입력 처리
     if user_prompt := st.chat_input("질문해 주세요!"):
-        st.chat_message("user").markdown(user_prompt)
         st.session_state.messages.append({"role": "user", "content": user_prompt})
-        
+        with st.chat_message("user"):
+            st.markdown(user_prompt)
+
         with st.chat_message("assistant"):
             placeholder = st.empty()
-            placeholder.markdown("응답을 준비 중이에요.. ⏳")
+            placeholder.markdown("답변을 준비하고 있습니다... 🤔")
+            
             try:
                 start_time = time.time()
                 
@@ -499,21 +483,29 @@ def show_chat_dashboard():
                         st.session_state.current_context = None
                     response = process_query(user_prompt)
                 
-                time_taken = round(time.time() - start_time, 2)
+                end_time = time.time()
+                time_taken = end_time - start_time
                 
-                # 로딩 메시지 제거
                 placeholder.empty()
                 
                 if isinstance(response, dict) and "table" in response:
-                    st.markdown(f"### {response['header']}")
-                    st.dataframe(response['table'], use_container_width=True, hide_index=True)
-                    st.markdown(response['footer'])
+                    st.markdown(response["header"])
+                    st.dataframe(response["table"])
+                    st.markdown(response["footer"])
                 else:
                     st.markdown(response, unsafe_allow_html=True)
                 
                 st.session_state.messages.append({"role": "assistant", "content": response})
-                async_save_chat_history(st.session_state.user_id, st.session_state.session_id, user_prompt, response, time_taken)
-            
+                
+                # 비동기로 채팅 기록 저장
+                async_save_chat_history(
+                    st.session_state.user_id,
+                    st.session_state.session_id,
+                    user_prompt,
+                    response,
+                    time_taken
+                )
+                
             except Exception as e:
                 placeholder.empty()
                 error_msg = f"응답을 준비하다 문제: {str(e)} 😓"

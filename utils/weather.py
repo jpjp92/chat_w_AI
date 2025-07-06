@@ -44,14 +44,13 @@ class WeatherAPI:
         return None
 
     def search_city_by_name(self, city_name):
-        """OpenWeatherMap Geocoding API로 도시 검색"""
+        """OpenWeatherMap Geocoding API로 도시 검색 (메인 메서드)"""
         cache_key = f"city_search:{city_name}"
         cached = self.cache.get(cache_key)
         if cached:
             return cached
         
         try:
-            # OpenWeatherMap Geocoding API 사용
             url = f"{self.geo_url}/direct"
             params = {
                 "q": city_name,
