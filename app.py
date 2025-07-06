@@ -389,6 +389,9 @@ def process_query(query):
         else:
             city = extract_city_from_time_query(query)
             result = get_time_by_city(city)
+    # 🔴 약국 검색 케이스 추가
+    elif query_type == "pharmacy_search":
+        result = drug_store_api.search_pharmacies(query)
     elif query_type == "league_standings":
         league_key = extract_league_from_query(query)
         if league_key:
