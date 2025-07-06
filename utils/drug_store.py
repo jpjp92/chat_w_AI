@@ -13,12 +13,15 @@ class DrugStoreAPI:
         self.base_url = "http://openapi.seoul.go.kr:8088"
     
     def search_pharmacies(self, query, limit=10):
-        """약국 검색 및 정보 조회"""
+        """약국 검색 및 정보 조회 (페이지네이션)"""
         try:
             logger.info(f"약국 검색 요청: '{query}'")
             
-            # 캐시 확인
-            cache_key = f"pharmacy:{query}:{limit}"
+            # 🔴 페이지 번호 추출
+            page = self._extract_page_number(query)
+            
+            # 캐시 확인 (페이지 포함)
+            cache_key = f"pharmacy:{query}:{limit}:{page}"
             if self.cache_handler:
                 cached = self.cache_handler.get(cache_key)
                 if cached:
@@ -31,19 +34,52 @@ class DrugStoreAPI:
             
             logger.info(f"추출된 지역구: {district}")
             logger.info(f"추출된 약국명: {pharmacy_name}")
+            logger.info(f"추출된 페이지: {page}")
             
-            # API 호출
+            # 🔴 전체 데이터 가져오기 (지역구 검색 시 500개)
             result = self._fetch_pharmacy_data(district, pharmacy_name, limit)
             
             if result["status"] == "error":
                 return result["message"]
             
-            # 🔴 지역구 필터링 (API 필터링이 완벽하지 않을 경우 수동 필터링)
+            # 🔴 지역구 필터링
             if district:
                 result = self._filter_by_district(result, district)
             
+            # 🔴 페이지네이션 처리
+            all_pharmacies = result["pharmacies"]
+            total_filtered = len(all_pharmacies)
+            
+            # 페이지별 약국 선택
+            start_idx = (page - 1) * limit
+            end_idx = start_idx + limit
+            page_pharmacies = all_pharmacies[start_idx:end_idx]
+            
+            # 페이지네이션 정보 계산
+            total_pages = (total_filtered + limit - 1) // limit
+            has_next = page < total_pages
+            has_prev = page > 1
+            
+            logger.info(f"전체 필터링된 약국: {total_filtered}개")
+            logger.info(f"현재 페이지: {page}/{total_pages}")
+            logger.info(f"표시할 약국: {len(page_pharmacies)}개")
+            
+            # 🔴 결과 구조 업데이트
+            paginated_result = {
+                "status": "success",
+                "total_count": total_filtered,
+                "pharmacies": page_pharmacies,
+                "pagination": {
+                    "current_page": page,
+                    "total_pages": total_pages,
+                    "has_next": has_next,
+                    "has_prev": has_prev,
+                    "per_page": limit
+                }
+            }
+            
             # 결과 포맷팅
-            formatted_result = self._format_pharmacy_results(result, district)
+            formatted_result = self._format_pharmacy_results(paginated_result, district)
             
             # 캐시 저장 (30분)
             if self.cache_handler:
@@ -94,21 +130,22 @@ class DrugStoreAPI:
     def _fetch_pharmacy_data(self, district=None, name=None, limit=10):
         """서울시 약국 API 호출"""
         try:
-            # 🔴 지역구 파라미터 없이 전체 데이터 요청 후 수동 필터링
+            # 🔴 지역구 검색 시 더 많은 데이터 가져오기
             start_index = 1
-            end_index = limit * 5  # 🔴 더 많은 데이터를 가져와서 필터링
+            if district:
+                end_index = 500  # 🔴 지역구 검색 시 500개 가져오기
+            else:
+                end_index = limit * 5
             
             url = f"{self.base_url}/{self.api_key}/xml/TbPharmacyOperateInfo/{start_index}/{end_index}/"
             
-            # 🔴 파라미터 제거 - 전체 데이터 요청
             params = {}
-            # if district:
-            #     params['DUTYADDR'] = district  # 🔴 주석처리
             if name:
                 params['DUTYNAME'] = name
             
             logger.info(f"API 호출 URL: {url}")
             logger.info(f"파라미터: {params}")
+            logger.info(f"요청 데이터 범위: {start_index}-{end_index}")
             
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
@@ -139,39 +176,39 @@ class DrugStoreAPI:
                     
                     if result_code != "INFO-000":
                         return {"status": "error", "message": f"API 오류: {result_msg}"}
-            
-            # 데이터 파싱
-            pharmacies = []
-            rows = root.findall(".//row")
-            logger.info(f"찾은 약국 수: {len(rows)}")
-            
-            for i, row in enumerate(rows):
-                pharmacy = self._parse_pharmacy_row(row)
-                if pharmacy:
-                    pharmacies.append(pharmacy)
-                    logger.info(f"약국 {i+1}: {pharmacy['name']} - {pharmacy['address']}")
-            
-            # 총 개수 확인
-            total_count_elem = root.find(".//list_total_count")
-            total_count = total_count_elem.text if total_count_elem is not None else str(len(pharmacies))
-            
-            logger.info(f"총 약국 수: {total_count}, 파싱된 약국 수: {len(pharmacies)}")
-            
-            return {
-                "status": "success",
-                "total_count": total_count,
-                "pharmacies": pharmacies
-            }
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"네트워크 오류: {str(e)}")
-            return {"status": "error", "message": f"네트워크 오류: {str(e)}"}
-        except ET.ParseError as e:
-            logger.error(f"XML 파싱 오류: {str(e)}")
-            return {"status": "error", "message": f"데이터 파싱 오류: {str(e)}"}
-        except Exception as e:
-            logger.error(f"알 수 없는 오류: {str(e)}")
-            return {"status": "error", "message": f"알 수 없는 오류: {str(e)}"}
+        
+        # 데이터 파싱
+        pharmacies = []
+        rows = root.findall(".//row")
+        logger.info(f"찾은 약국 수: {len(rows)}")
+        
+        for i, row in enumerate(rows):
+            pharmacy = self._parse_pharmacy_row(row)
+            if pharmacy:
+                pharmacies.append(pharmacy)
+                logger.info(f"약국 {i+1}: {pharmacy['name']} - {pharmacy['address']}")
+        
+        # 총 개수 확인
+        total_count_elem = root.find(".//list_total_count")
+        total_count = total_count_elem.text if total_count_elem is not None else str(len(pharmacies))
+        
+        logger.info(f"총 약국 수: {total_count}, 파싱된 약국 수: {len(pharmacies)}")
+        
+        return {
+            "status": "success",
+            "total_count": total_count,
+            "pharmacies": pharmacies
+        }
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"네트워크 오류: {str(e)}")
+        return {"status": "error", "message": f"네트워크 오류: {str(e)}"}
+    except ET.ParseError as e:
+        logger.error(f"XML 파싱 오류: {str(e)}")
+        return {"status": "error", "message": f"데이터 파싱 오류: {str(e)}"}
+    except Exception as e:
+        logger.error(f"알 수 없는 오류: {str(e)}")
+        return {"status": "error", "message": f"알 수 없는 오류: {str(e)}"}
     
     def _filter_by_district(self, result, target_district):
         """지역구별 수동 필터링"""
@@ -299,23 +336,24 @@ class DrugStoreAPI:
                     return "🟢 영업중"
                 else:
                     return "🔴 영업종료"
-                    
+                
             except ValueError:
                 logger.error(f"시간 파싱 오류: {start_time}, {end_time}")
                 return "정보 없음"
-                
+            
         except Exception as e:
             logger.error(f"영업상태 계산 오류: {str(e)}")
             return "정보 없음"
     
     def _format_pharmacy_results(self, result, searched_district=None):
-        """약국 검색 결과를 채팅 형태로 포맷팅"""
+        """약국 검색 결과를 채팅 형태로 포맷팅 (페이지네이션 포함)"""
         if result["status"] == "error":
             return result["message"]
         
         pharmacies = result["pharmacies"]
         total_count = result["total_count"]
-        note = result.get("note", "")  # 🔴 주의사항 추가
+        note = result.get("note", "")
+        pagination = result.get("pagination", {})
         
         if not pharmacies:
             district_msg = f" ({searched_district})" if searched_district else ""
@@ -326,23 +364,54 @@ class DrugStoreAPI:
         header = f"## 💊 서울시 약국 정보 검색 결과{district_info}\n\n"
         header += f"✅ **총 {total_count}개 약국**을 찾았습니다.\n\n"
         
-        # 🔴 주의사항 표시
+        # 🔴 페이지네이션 정보
+        if pagination:
+            current_page = pagination.get("current_page", 1)
+            total_pages = pagination.get("total_pages", 1)
+            per_page = pagination.get("per_page", 10)
+            
+            start_num = (current_page - 1) * per_page + 1
+            end_num = min(start_num + len(pharmacies) - 1, total_count)
+            
+            header += f"📄 **현재 페이지**: {current_page}/{total_pages} ({start_num}-{end_num}번 약국)\n\n"
+        
+        # 주의사항 표시
         if note:
             header += f"⚠️ **안내**: {note}\n\n"
         
         # 약국 목록
         pharmacy_list = ""
-        for i, pharmacy in enumerate(pharmacies, 1):
+        start_num = ((pagination.get("current_page", 1) - 1) * pagination.get("per_page", 10)) + 1
+        
+        for i, pharmacy in enumerate(pharmacies, start_num):
             pharmacy_list += f"### {i}. 🏥 {pharmacy['name']}\n"
-            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n\n"
-            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n\n"
-            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n\n"
-            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n\n"
+            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n"
+            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n"
+            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n"
+            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n"
             
-            if i < len(pharmacies):
+            if i < start_num + len(pharmacies) - 1:
                 pharmacy_list += "\n---\n\n"
             else:
                 pharmacy_list += "\n"
+        
+        # 🔴 페이지네이션 네비게이션
+        navigation = ""
+        if pagination:
+            has_prev = pagination.get("has_prev", False)
+            has_next = pagination.get("has_next", False)
+            current_page = pagination.get("current_page", 1)
+            
+            if has_prev or has_next:
+                navigation += "\n🔄 **더 보기**:\n"
+                
+                if has_prev:
+                    navigation += f"- 이전 페이지: \"{searched_district} 약국 {current_page - 1}페이지\"\n"
+                
+                if has_next:
+                    navigation += f"- 다음 페이지: \"{searched_district} 약국 {current_page + 1}페이지\"\n"
+                
+                navigation += "\n"
         
         # 푸터
         footer = "\n💡 **이용 안내**:\n"
@@ -351,4 +420,25 @@ class DrugStoreAPI:
         footer += "- 더 정확한 정보는 약국에 직접 문의해주세요 😊\n"
         footer += "- 🔴 **영업 종료 약국도 정보를 확인할 수 있습니다**"
         
-        return header + pharmacy_list + footer
+        return header + pharmacy_list + navigation + footer
+    
+    def _extract_page_number(self, query):
+        """쿼리에서 페이지 번호 추출"""
+        import re
+        
+        # "광진구 약국 2페이지", "광진구 약국 3", "광진구 약국 더보기" 등
+        page_patterns = [
+            r'(\d+)페이지',
+            r'(\d+)번째',
+            r'페이지\s*(\d+)',
+            r'(\d+)p',
+            r'(\d+)$'  # 마지막에 숫자만 있는 경우
+        ]
+        
+        for pattern in page_patterns:
+            match = re.search(pattern, query)
+            if match:
+                page_num = int(match.group(1))
+                return max(1, page_num)  # 최소 1페이지
+        
+        return 1  # 기본 1페이지
