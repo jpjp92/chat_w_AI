@@ -1,7 +1,7 @@
 # set lib
 from config.imports import *
 from config.env import *
-from streamlit.runtime.scriptrunner import add_script_run_ctx
+# from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 # Import utils modules
 from utils.webpage_analyzer import (
