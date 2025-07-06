@@ -27,6 +27,7 @@ from utils.query_analyzer import (
     is_paper_search,
     extract_keywords_for_paper_search,
     is_time_query,
+    is_pharmacy_search,  # 🔴 추가
     LEAGUE_MAPPING
 )
 # Import weather, football, drug, paper search, culture event, and web search modules
@@ -378,70 +379,41 @@ def process_query(query):
     query_type = needs_search(query)
     query_lower = query.strip().lower().replace(" ", "")
     
-    # ThreadPoolExecutor 사용하지 않고 직접 호출 (세션 상태 전달 문제 해결)
-    if query_type == "weather":
-        result = weather_api.get_city_weather(extract_city_from_query(query))
-    elif query_type == "tomorrow_weather":
-        result = weather_api.get_forecast_by_day(extract_city_from_query(query), 1)
-    elif query_type == "time":
+    logger.info(f"🎯 쿼리 타입: {query_type}")
+    
+    # 날씨 관련 쿼리
+    if "날씨" in query_lower:
+        return weather_api.get_city_weather(extract_city_from_query(query))
+    elif "내일" in query_lower and "날씨" in query_lower:
+        return weather_api.get_forecast_by_day(extract_city_from_query(query), 1)
+    
+    # 시간 관련 쿼리
+    elif "시간" in query_lower or "현재" in query_lower or "날짜" in query_lower:
         if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
-            result = get_kst_time()
+            return get_kst_time()
         else:
             city = extract_city_from_time_query(query)
-            result = get_time_by_city(city)
-    # 🔴 약국 검색 케이스 추가
-    elif query_type == "pharmacy_search":
-        result = drug_store_api.search_pharmacies(query)
-    elif query_type == "league_standings":
-        league_key = extract_league_from_query(query)
-        if league_key:
-            league_info = LEAGUE_MAPPING[league_key]
-            result = football_api.fetch_league_standings(league_info["code"], league_info["name"])
-            result = result["error"] if "error" in result else {
-                "header": f"{result['league_name']} 리그 순위",
-                "table": result["data"],
-                "footer": "더 궁금한 점 있나요? 😊"
-            }
-        else:
-            result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
-    elif query_type == "league_scorers":
-        league_key = extract_league_from_query(query)
-        if league_key:
-            league_info = LEAGUE_MAPPING[league_key]
-            try:
-                result = football_api.fetch_league_scorers(league_info["code"], league_info["name"])
-                result = result["error"] if "error" in result else {
-                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
-                    "table": result["data"],
-                    "footer": "더 궁금한 점 있나요? 😊"
-                }
-            except Exception as e:
-                result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
-        else:
-            result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
-    elif query_type == "cl_knockout":
-        try:
-            results = football_api.fetch_championsleague_knockout_matches()
-            if isinstance(results, str):
-                result = results
-            elif not results:
-                result = "챔피언스리그 토너먼트 경기 결과가 없습니다."
-            else:
-                df = pd.DataFrame(results)
-                result = {
-                    "header": "챔피언스리그 Knockout Stage 결과",
-                    "table": df,
-                    "footer": "더 궁금한 점 있나요? 😊"
-                }
-        except Exception as e:
-            result = f"챔피언스리그 토너먼트 조회 중 오류: {str(e)} 😓"
-    elif query_type == "cultural_event":
-        result = culture_event_api.search_cultural_events(query)
-    elif query_type == "drug":
-        result = drug_api.get_drug_info(query)
-    elif query_type == "arxiv_search":
+            return get_time_by_city(city)
+    
+    # 축구 리그 순위
+    elif "리그순위" in query_lower:
+        return football_api.fetch_league_standings(extract_league_from_query(query))
+    # 축구 득점 순위
+    elif "득점순위" in query_lower:
+        return football_api.fetch_league_scorers(extract_league_from_query(query))
+    # 챔피언스리그 관련
+    elif "챔피언스리그" in query_lower or "ucl" in query_lower:
+        return football_api.fetch_championsleague_knockout_matches()
+    
+    # 약품 검색
+    elif is_drug_inquiry(query):
+        return drug_api.get_drug_info(query)
+    
+    # 논문 검색
+    elif "논문" in query_lower:
         keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
-        result = paper_search_api.get_arxiv_papers(keywords)
+        return paper_search_api.get_arxiv_papers(keywords)
+    
     elif query_type == "pubmed_search":
         keywords = query.replace("의학논문", "").strip()
         result = paper_search_api.get_pubmed_papers(keywords)
@@ -491,6 +463,9 @@ def process_query(query):
             result = GREETING_RESPONSE
         else:
             result = asyncio.run(get_conversational_response(query, st.session_state.messages))
+    # 🔴 문화행사 검색 케이스 추가
+    elif query_type == "cultural_event":
+        result = culture_event_api.search_cultural_events(query)
     else:
         result = "아직 지원하지 않는 기능이에요. 😅"
     
@@ -539,89 +514,6 @@ def get_time_by_city(city_name):
     except Exception as e:
         return f"{city_name}의 시간 정보를 가져오는 중 오류가 발생했습니다: {str(e)} 😓"
 
-
-# 기존 코드에 추가
-
-def needs_search(query):
-    """쿼리 타입을 분석하여 적절한 검색 타입을 반환"""
-    query_lower = query.strip().lower()
-    
-    # 🔴 약국 검색 추가
-    if is_pharmacy_search(query):
-        return "pharmacy_search"
-    
-    # 날씨 관련 쿼리
-    if "날씨" in query_lower:
-        return "weather"
-    elif "내일" in query_lower and "날씨" in query_lower:
-        return "tomorrow_weather"
-    
-    # 시간 관련 쿼리
-    elif "시간" in query_lower or "현재" in query_lower or "날짜" in query_lower:
-        return "time"
-    
-    # 축구 리그 순위
-    elif "리그순위" in query_lower:
-        return "league_standings"
-    # 축구 득점 순위
-    elif "득점순위" in query_lower:
-        return "league_scorers"
-    # 챔피언스리그 관련
-    elif "챔피언스리그" in query_lower or "ucl" in query_lower:
-        return "cl_knockout"
-    
-    # 약품 검색
-    elif is_drug_inquiry(query):
-        return "drug"
-    
-    # 논문 검색
-    elif "논문" in query_lower:
-        return "arxiv_search"  # 기본값으로 arxiv_search 반환
-    
-    # 웹 검색 (기본 쿼리)
-    return "naver_search"
-
-def is_pharmacy_search(query):
-    """약국 검색 쿼리인지 확인"""
-    query_lower = query.lower().replace(" ", "")
-    
-    pharmacy_keywords = [
-        "약국", "약국정보", "약국검색", "약국운영", "약국시간",
-        "서울약국", "약국찾기", "약국위치", "약국운영시간"
-    ]
-    
-    for keyword in pharmacy_keywords:
-        if keyword in query_lower:
-            return True
-    
-    # 지역구 + 약국 패턴
-    districts = [
-        "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구",
-        "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구",
-        "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"
-    ]
-    
-    for district in districts:
-        if district in query and "약국" in query_lower:
-            return True
-    
-    return False
-
-def extract_pharmacy_location(query):
-    """쿼리에서 약국 위치 정보 추출"""
-    districts = [
-        "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구",
-        "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구",
-        "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"
-    ]
-    
-    for district in districts:
-        if district in query:
-            return district
-    
-    return None
-
-
 # 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
 def show_chat_dashboard():
     st.title("Chat with AI 🤖")
@@ -661,11 +553,39 @@ def show_chat_dashboard():
             - 약품명, 제조사, 효능, 용법용량, 주의사항 확인 가능
             
             **서울시 약국 정보** 🏥
-            - "강남구 약국", "서초구 약국 정보"
-            - "온누리약국", "24시간 약국"
+            - "강남구 약국", "약국 검색 서초구"
             - 약국 위치, 운영시간, 연락처 확인 가능
             
             **논문 검색** 📚
+            - "공학논문 Transformers"
+            - "의학논문 Gene Therapy"
+            
+            **문화행사** 🎭
+            - "강남구 문화행사", "문화행사"
+            """)
+        
+        # 축구 정보 안내
+        with st.expander("⚽ 축구 정보"):
+            st.markdown("""
+            **리그 순위** 🏆
+            - "EPL 리그순위", "라리가 리그순위"
+            - "분데스리가 리그순위", "세리에A 리그순위"
+            
+            **득점 순위** ⚽
+            - "EPL 득점순위", "라리가 득점순위"
+            
+            **챔피언스리그** 🏅
+            - "챔피언스리그 리그 순위", "UCL 리그순위"
+            - "챔피언스리그 토너먼트"
+            """)
+        
+        # 성격 검사 안내
+        with st.expander("🧠 성격 유형 검사"):
+            st.markdown("""
+            **MBTI** ✨
+            - "MBTI 검사", "MBTI 유형", "MBTI 설명"
+            - 예: "MBTI 검사", "INTJ 설명"
+            
             - "공학논문 Transformers"
             - "의학논문 Gene Therapy"
             

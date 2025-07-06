@@ -97,20 +97,20 @@ class DrugStoreAPI:
             start_index = 1
             end_index = limit
             
-            # 기본 URL 구성
+            # 🔴 수정된 URL 구조 - 파라미터를 쿼리스트링으로 전달
             url = f"{self.base_url}/{self.api_key}/xml/TbPharmacyOperateInfo/{start_index}/{end_index}/"
             
-            # 🔴 선택적 파라미터를 URL에 추가
+            # 🔴 파라미터를 쿼리스트링으로 전달
+            params = {}
             if district:
-                url += f"{district}"
-                if name:
-                    url += f"/{name}"
-            elif name:
-                url += f"/{name}"
+                params['DUTYADDR'] = district
+            if name:
+                params['DUTYNAME'] = name
             
             logger.info(f"API 호출 URL: {url}")
+            logger.info(f"파라미터: {params}")
             
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             
             logger.info(f"API 응답 상태 코드: {response.status_code}")
@@ -294,18 +294,17 @@ class DrugStoreAPI:
         pharmacy_list = ""
         for i, pharmacy in enumerate(pharmacies, 1):
             pharmacy_list += f"### {i}. 🏥 {pharmacy['name']}\n"
-            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n"
-            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n"
-            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n"
-            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n"
+            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n\n"
+            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n\n"
+            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n\n"
+            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n\n"
             
-            # 지도 링크
-            map_query = f"{pharmacy['name']} {pharmacy['address']}"
-            map_url = f"https://www.google.com/maps/search/?api=1&query={map_query}"
-            pharmacy_list += f"🗺️ [지도에서 보기]({map_url})\n\n"
+            # 🔴 지도 링크 제거
             
             if i < len(pharmacies):
-                pharmacy_list += "---\n\n"
+                pharmacy_list += "\n---\n\n"
+            else:
+                pharmacy_list += "\n"
         
         # 푸터
         footer = "\n💡 **이용 안내**:\n"
