@@ -567,7 +567,7 @@ def show_chat_dashboard():
             - 검색 후 "3번째 링크 요약해줘"
             
             **웹 페이지 요약** 📝 
-            - "https://blog.google/intl/ko-kr/company-news/technology/made-by-google-gemini-ai-updates-kr/ 요약해줘"
+            - "https://www.aitimes.com/news/articleView.html?idxno=200282 요약해줘"
             
             """)
         
