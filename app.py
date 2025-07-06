@@ -166,6 +166,12 @@ _client_instance = None
 
 # 대화형 응답 함수 수정
 async def get_conversational_response(query, chat_history):
+    logger.info(f"대화형 응답 시작 - 쿼리: '{query}'")
+    logger.info(f"세션 상태 확인: {hasattr(st, 'session_state')}")
+    if hasattr(st, 'session_state'):
+        logger.info(f"current_context: {getattr(st.session_state, 'current_context', 'None')}")
+        logger.info(f"search_contexts 키 수: {len(getattr(st.session_state, 'search_contexts', {}))}")
+    
     cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
     if cached:
@@ -385,9 +391,14 @@ def process_query(query):
             future = executor.submit(paper_search_api.get_pubmed_papers, keywords)
             result = future.result()
         elif query_type == "naver_search":
-            # 웹 검색 처리 로직 - add_script_run_ctx 제거
+            # 웹 검색 처리 로직
             future = executor.submit(web_search_api.search_and_create_context, query, st.session_state)
             result = future.result()
+            
+            # 컨텍스트 저장 확인 로그
+            logger.info(f"검색 후 컨텍스트 상태: {st.session_state.current_context}")
+            if hasattr(st.session_state, 'search_contexts'):
+                logger.info(f"저장된 컨텍스트 수: {len(st.session_state.search_contexts)}")
         elif query_type == "mbti":
             result = (
                 "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
@@ -441,14 +452,98 @@ def show_chat_dashboard():
     if "current_context" not in st.session_state:
         st.session_state.current_context = None
     
-    # 사이드바 검색통계 버튼 제거
-    # with st.sidebar:
-    #     if st.button("검색 통계 📊"):
-    #         stats = web_search_api.get_search_stats()
-    #         st.info(f"🔍 **검색 통계**\n\n"
-    #                f"• 사용: {stats['request_count']}/{stats['daily_limit']}\n"
-    #                f"• 남은 횟수: {stats['remaining']}\n"
-    #                f"• 사용률: {stats['usage_percentage']}%")
+    # 사이드바에 도움말 추가
+    with st.sidebar:
+        st.header("도움말 📚")
+        
+        # 기본 기능 안내
+        with st.expander("🌟 기본 기능"):
+            st.markdown("""
+            **날씨 정보** 🌤️
+            - "서울 날씨", "파리 날씨 알려줘"
+            - "내일 서울 날씨", "뉴욕 내일 날씨"
+            
+            **시간 정보** 🕒
+            - "현재 시간", "오늘 날짜"
+            - "런던 시간", "도쿄 시간 알려줘"
+            
+            **웹 검색** 🔍
+            - "ChatGPT 검색", "파이썬 검색"
+            - 검색 후 "3번째 링크 요약해줘"
+            """)
+        
+        # 전문 정보 안내
+        with st.expander("🎯 전문 정보"):
+            st.markdown("""
+            **의약품 정보** 💊
+            - "타이레놀 효능", "아스피린 부작용"
+            
+            **논문 검색** 📚
+            - "인공지능 공학논문"
+            - "당뇨병 의학논문"
+            
+            **문화행사** 🎭
+            - "서울 문화행사", "이번 주 공연"
+            """)
+        
+        # 축구 정보 안내
+        with st.expander("⚽ 축구 정보"):
+            st.markdown("""
+            **리그 순위** 🏆
+            - "EPL 순위", "라리가 순위"
+            - "분데스리가 순위", "세리에A 순위"
+            
+            **득점 순위** ⚽
+            - "EPL 득점순위", "라리가 득점왕"
+            
+            **챔피언스리그** 🏅
+            - "챔피언스리그 토너먼트"
+            """)
+        
+        # 성격 검사 안내
+        with st.expander("🧠 성격 검사"):
+            st.markdown("""
+            **MBTI** 🎭
+            - "MBTI 검사", "MBTI 유형"
+            - "ENFP 설명", "INTJ 특징"
+            
+            **다중지능** 🎨
+            - "다중지능 검사", "다중지능 유형"
+            - "언어지능 설명", "음악지능 직업"
+            """)
+        
+        # 사용 팁
+        with st.expander("💡 사용 팁"):
+            st.markdown("""
+            **검색 후 활용** 🔍
+            - 검색 후 "요약해줘"
+            - "첫 번째 결과 자세히 설명해줘"
+            - "3번째 링크 요약해줘"
+            
+            **대화 연속성** 💬
+            - 이전 결과에 대한 추가 질문 가능
+            - 검색 결과 기반 상세 설명 요청
+            
+            **정확한 검색** 🎯
+            - 구체적인 키워드 사용
+            - 도시명은 한국어/영어 모두 가능
+            """)
+        
+        # 지원 언어/지역
+        with st.expander("🌍 지원 범위"):
+            st.markdown("""
+            **날씨 지원** 🌍
+            - 전세계 주요 도시
+            - 한국어/영어 도시명 모두 지원
+            
+            **축구 리그** ⚽
+            - EPL, 라리가, 분데스리가
+            - 세리에A, 리그1, 챔피언스리그
+            
+            **검색 언어** 💬
+            - 한국어 우선 지원
+            - 영어 검색 가능
+            """)
     
     # 기존 메시지 표시
     for message in st.session_state.messages:

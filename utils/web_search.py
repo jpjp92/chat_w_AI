@@ -113,6 +113,12 @@ class WebSearchAPI:
                 "timestamp": datetime.now().isoformat()
             }
             session_state.current_context = context_id
+            
+            # 로그 추가
+            logger.info(f"검색 컨텍스트 저장 완료: {context_id}")
+            logger.info(f"저장된 컨텍스트 수: {len(session_state.search_contexts)}")
+        else:
+            logger.warning("세션 상태가 없거나 search_contexts가 없습니다.")
         
         # 멀티턴 대화를 위한 안내 추가
         enhanced_result = search_result + "\n\n💡 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어:\n"

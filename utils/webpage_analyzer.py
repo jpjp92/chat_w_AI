@@ -388,27 +388,44 @@ def is_url_summarization_request(query):
 
 def is_numbered_link_request(query, context):
     """순서 기반 링크 요청을 확인하고 URL을 반환합니다."""
+    logger.info(f"패턴 검사 시작 - 쿼리: '{query}', 컨텍스트 존재: {context is not None}")
+    
     if not context or context.get("type") != "naver_search":
+        logger.info("컨텍스트가 없거나 naver_search 타입이 아님")
         return False, None
     
-    # 순서 패턴 매칭
+    # 순서 패턴 매칭 (더 유연한 패턴)
     patterns = [
         r'(\d+)번째\s*링크\s*요약',
         r'(\d+)번째\s*결과\s*요약',  
         r'(\d+)번째\s*링크\s*분석',
         r'(\d+)번째\s*결과\s*분석',
-        r'(\d+)번째\s*결과.*자세히'
+        r'(\d+)번째\s*결과.*자세히',
+        r'(\d+)번째.*요약'  # 더 유연한 패턴 추가
     ]
     
     for pattern in patterns:
         match = re.search(pattern, query)
         if match:
             link_number = int(match.group(1))
+            logger.info(f"패턴 매칭 성공: {link_number}번째")
+            
             # 컨텍스트에서 해당 순서의 URL 추출
             urls = extract_urls_from_text(context["result"])
+            logger.info(f"추출된 URL 개수: {len(urls)}")
+            
+            if urls:
+                for i, url in enumerate(urls, 1):
+                    logger.info(f"URL {i}: {url}")
+            
             if 1 <= link_number <= len(urls):
-                return True, urls[link_number - 1]
+                selected_url = urls[link_number - 1]
+                logger.info(f"선택된 URL: {selected_url}")
+                return True, selected_url
+            else:
+                logger.warning(f"요청한 번호({link_number})가 범위를 벗어남")
     
+    logger.info("패턴 매칭 실패")
     return False, None
 
 def is_followup_question(query):
