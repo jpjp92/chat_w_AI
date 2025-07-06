@@ -381,8 +381,20 @@ def process_query(query):
     
     logger.info(f"🎯 쿼리 타입: {query_type}")
     
+    # 🔴 약국 검색 케이스 추가 (최우선 처리)
+    if query_type == "pharmacy_search":
+        result = drug_store_api.search_pharmacies(query)
+        cache_handler.setex(cache_key, 600, result)
+        return result
+    
+    # 🔴 문화행사 검색 케이스 추가
+    elif query_type == "cultural_event":
+        result = culture_event_api.search_cultural_events(query)
+        cache_handler.setex(cache_key, 600, result)
+        return result
+    
     # 날씨 관련 쿼리
-    if "날씨" in query_lower:
+    elif "날씨" in query_lower:
         return weather_api.get_city_weather(extract_city_from_query(query))
     elif "내일" in query_lower and "날씨" in query_lower:
         return weather_api.get_forecast_by_day(extract_city_from_query(query), 1)
@@ -463,9 +475,6 @@ def process_query(query):
             result = GREETING_RESPONSE
         else:
             result = asyncio.run(get_conversational_response(query, st.session_state.messages))
-    # 🔴 문화행사 검색 케이스 추가
-    elif query_type == "cultural_event":
-        result = culture_event_api.search_cultural_events(query)
     else:
         result = "아직 지원하지 않는 기능이에요. 😅"
     
@@ -534,7 +543,7 @@ def show_chat_dashboard():
             
             **시간 정보** 🕒
             - "현재 시간", "오늘 날짜"
-            - "런던 시간", "도쿄 시간 알려줘"
+            - "런던 시간", "파리 시간 알려줘"
             
             **웹 검색** 🔍
             - "ChatGPT 사용방법 검색해줘"
