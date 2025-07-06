@@ -2,6 +2,7 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 import logging
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -207,9 +208,11 @@ class DrugStoreAPI:
             addr = row.findtext("DUTYADDR", "정보 없음")
             tel = row.findtext("DUTYTEL1", "정보 없음")
             
-            # 🔴 운영 시간 정보 개선
-            now = datetime.now()
-            weekday = now.weekday()  # 0:월요일, 6:일요일
+            # 🔴 한국시간 기준으로 요일 계산
+            import pytz
+            korea_tz = pytz.timezone('Asia/Seoul')
+            now_kst = datetime.now(korea_tz)
+            weekday = now_kst.weekday()  # 0:월요일, 6:일요일
             day_names = ["월", "화", "수", "목", "금", "토", "일"]
             
             # 오늘 운영시간 (1:월요일 ~ 7:일요일)
@@ -218,7 +221,7 @@ class DrugStoreAPI:
             end_time = row.findtext(f"DUTYTIME{today_idx}C", "")
             
             # 🔴 운영시간 필드 디버깅
-            logger.debug(f"약국 {name} 운영시간:")
+            logger.debug(f"약국 {name} 운영시간 (한국시간 기준):")
             for i in range(1, 9):  # 1-8 (월~일, 공휴일)
                 start = row.findtext(f"DUTYTIME{i}S", "")
                 end = row.findtext(f"DUTYTIME{i}C", "")
@@ -260,23 +263,26 @@ class DrugStoreAPI:
             return "정보 없음"
     
     def _calculate_status(self, start_time, end_time):
-        """현재 영업 상태 계산"""
+        """현재 영업 상태 계산 (한국시간 기준)"""
         if start_time == "정보 없음" or end_time == "정보 없음":
             return "정보 없음"
         
         try:
             from datetime import datetime
-            now = datetime.now()
-            current_time = now.strftime("%H:%M")
+            import pytz
             
-            logger.info(f"현재 시간: {current_time}, 영업시간: {start_time} - {end_time}")
+            # 🔴 한국시간(KST) 기준으로 현재 시간 계산
+            korea_tz = pytz.timezone('Asia/Seoul')
+            now_kst = datetime.now(korea_tz)
+            current_time = now_kst.strftime("%H:%M")
+            
+            logger.info(f"현재 시간(KST): {current_time}, 영업시간: {start_time} - {end_time}")
             
             # 24시간 영업 체크
             if start_time == "00:00" and end_time == "23:59":
                 return "🟢 24시간 영업"
             
             # 🔴 시간 비교 로직 수정
-            # 문자열 비교 대신 시간 객체로 비교
             try:
                 current_hour, current_min = map(int, current_time.split(':'))
                 start_hour, start_min = map(int, start_time.split(':'))
@@ -286,7 +292,7 @@ class DrugStoreAPI:
                 start_minutes = start_hour * 60 + start_min
                 end_minutes = end_hour * 60 + end_min
                 
-                logger.info(f"시간 비교 - 현재: {current_minutes}분, 시작: {start_minutes}분, 종료: {end_minutes}분")
+                logger.info(f"시간 비교(KST) - 현재: {current_minutes}분, 시작: {start_minutes}분, 종료: {end_minutes}분")
                 
                 # 영업시간 체크
                 if start_minutes <= current_minutes <= end_minutes:
