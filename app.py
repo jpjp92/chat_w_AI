@@ -357,7 +357,7 @@ def process_query(query):
             try:
                 future = executor.submit(football_api.fetch_championsleague_knockout_matches)
                 results = future.result()
-                if isinstance(results, str):  # 에러 메시지인 경우
+                if isinstance(results, str):
                     result = results
                 elif not results:
                     result = "챔피언스리그 토너먼트 경기 결과가 없습니다."
@@ -371,23 +371,22 @@ def process_query(query):
             except Exception as e:
                 result = f"챔피언스리그 토너먼트 조회 중 오류: {str(e)} 😓"
         elif query_type == "cultural_event":
-            # 문화행사 처리 로직 - 수정된 부분
             future = executor.submit(culture_event_api.search_cultural_events, query)
             result = future.result()
         elif query_type == "drug":
-            future = executor.submit(drug_api.get_drug_info, query)  # 수정된 부분
+            future = executor.submit(drug_api.get_drug_info, query)
             result = future.result()
         elif query_type == "arxiv_search":
             keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
-            future = executor.submit(paper_search_api.get_arxiv_papers, keywords)  # 수정된 부분
+            future = executor.submit(paper_search_api.get_arxiv_papers, keywords)
             result = future.result()
         elif query_type == "pubmed_search":
             keywords = query.replace("의학논문", "").strip()
-            future = executor.submit(paper_search_api.get_pubmed_papers, keywords)  # 수정된 부분
+            future = executor.submit(paper_search_api.get_pubmed_papers, keywords)
             result = future.result()
         elif query_type == "naver_search":
-            # 웹 검색 처리 로직 - 수정된 부분
-            future = executor.submit(add_script_run_ctx(web_search_api.search_and_create_context), query, st.session_state)
+            # 웹 검색 처리 로직 - add_script_run_ctx 제거
+            future = executor.submit(web_search_api.search_and_create_context, query, st.session_state)
             result = future.result()
         elif query_type == "mbti":
             result = (
