@@ -184,10 +184,8 @@ class DrugStoreAPI:
             address = pharmacy["address"]
             logger.info(f"약국 주소 확인: '{address}'")
             
-            # 🔴 더 유연한 필터링 조건
-            if (target_district in address or 
-                target_district.replace("구", "") in address or
-                address.find(target_district) != -1):
+            # 🔴 간단한 문자열 포함 검사
+            if target_district in address:
                 filtered_pharmacies.append(pharmacy)
                 logger.info(f"✅ 필터링 통과: {pharmacy['name']} - {address}")
             else:
@@ -195,16 +193,6 @@ class DrugStoreAPI:
         
         logger.info(f"필터링 전: {len(result['pharmacies'])}개")
         logger.info(f"필터링 후: {len(filtered_pharmacies)}개")
-        
-        # 🔴 필터링 결과가 0개인 경우 원본 데이터 일부 반환
-        if len(filtered_pharmacies) == 0:
-            logger.warning(f"'{target_district}' 지역구에서 약국을 찾을 수 없어 전체 결과 반환")
-            return {
-                "status": "success",
-                "total_count": len(result["pharmacies"]),
-                "pharmacies": result["pharmacies"][:5],  # 최대 5개만 반환
-                "note": f"'{target_district}' 지역의 약국을 찾을 수 없어 인근 지역 약국을 표시합니다."
-            }
         
         return {
             "status": "success",
@@ -277,18 +265,41 @@ class DrugStoreAPI:
             return "정보 없음"
         
         try:
-            current_time = datetime.now().strftime("%H:%M")
+            from datetime import datetime
+            now = datetime.now()
+            current_time = now.strftime("%H:%M")
+            
+            logger.info(f"현재 시간: {current_time}, 영업시간: {start_time} - {end_time}")
             
             # 24시간 영업 체크
             if start_time == "00:00" and end_time == "23:59":
                 return "🟢 24시간 영업"
             
-            # 일반 영업시간 체크
-            if start_time <= current_time <= end_time:
-                return "🟢 영업중"
-            else:
-                return "🔴 영업종료"
-        except:
+            # 🔴 시간 비교 로직 수정
+            # 문자열 비교 대신 시간 객체로 비교
+            try:
+                current_hour, current_min = map(int, current_time.split(':'))
+                start_hour, start_min = map(int, start_time.split(':'))
+                end_hour, end_min = map(int, end_time.split(':'))
+                
+                current_minutes = current_hour * 60 + current_min
+                start_minutes = start_hour * 60 + start_min
+                end_minutes = end_hour * 60 + end_min
+                
+                logger.info(f"시간 비교 - 현재: {current_minutes}분, 시작: {start_minutes}분, 종료: {end_minutes}분")
+                
+                # 영업시간 체크
+                if start_minutes <= current_minutes <= end_minutes:
+                    return "🟢 영업중"
+                else:
+                    return "🔴 영업종료"
+                    
+            except ValueError:
+                logger.error(f"시간 파싱 오류: {start_time}, {end_time}")
+                return "정보 없음"
+                
+        except Exception as e:
+            logger.error(f"영업상태 계산 오류: {str(e)}")
             return "정보 없음"
     
     def _format_pharmacy_results(self, result, searched_district=None):
@@ -317,10 +328,10 @@ class DrugStoreAPI:
         pharmacy_list = ""
         for i, pharmacy in enumerate(pharmacies, 1):
             pharmacy_list += f"### {i}. 🏥 {pharmacy['name']}\n"
-            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n"
-            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n"
-            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n"
-            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n"
+            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n\n"
+            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n\n"
+            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n\n"
+            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n\n"
             
             if i < len(pharmacies):
                 pharmacy_list += "\n---\n\n"
