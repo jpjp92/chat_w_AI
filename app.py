@@ -28,11 +28,13 @@ from utils.query_analyzer import (
     is_time_query,
     LEAGUE_MAPPING
 )
-# Import weather, football, drug, and paper search modules
+# Import weather, football, drug, paper search, culture event, and web search modules
 from utils.weather import WeatherAPI
 from utils.football import FootballAPI
 from utils.drug_info import DrugAPI
 from utils.paper_search import PaperSearchAPI
+from utils.culture_event import CultureEventAPI
+from utils.web_search import WebSearchAPI
 
 # set logger
 logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
@@ -101,9 +103,10 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 weather_api = WeatherAPI(cache_handler=cache_handler, WEATHER_API_KEY=WEATHER_API_KEY)
 football_api = FootballAPI(api_key=SPORTS_API_KEY, cache_handler=cache_handler)
 drug_api = DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler)
-paper_search_api = PaperSearchAPI(ncbi_key=NCBI_KEY, cache_handler=cache_handler)  # 새로 추가
-naver_request_count = 0
-NAVER_DAILY_LIMIT = 25000
+paper_search_api = PaperSearchAPI(ncbi_key=NCBI_KEY, cache_handler=cache_handler)
+culture_event_api = CultureEventAPI(api_key=CULTURE_API_KEY, cache_handler=cache_handler)
+web_search_api = WebSearchAPI(client_id=NAVER_CLIENT_ID, client_secret=NAVER_CLIENT_SECRET, cache_handler=cache_handler)  # 새로 추가
+
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
 # 세션 상태 초기화 부분에 검색 결과 컨텍스트 추가
@@ -125,105 +128,6 @@ def init_session_state():
         st.session_state.search_contexts = {}
     if "current_context" not in st.session_state:
         st.session_state.current_context = None
-
-# 문화 행사 관련 함수 
-def fetch_xml(api_key: str) -> ET.Element:
-    """API 키를 사용하여 XML 데이터를 가져옵니다."""
-    url = f"http://openapi.seoul.go.kr:8088/{api_key}/xml/culturalEventInfo/1/100/"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        root = ET.fromstring(response.content)
-        return root
-    except requests.exceptions.RequestException as e:
-        logger.error(f"문화행사 API 호출 실패: {e}")
-        return None
-
-def select_target_district(root: ET.Element, target_district: str = ""):
-    """
-    target_district가 빈 문자열이면 XML에서 모든 구를 추출하여
-    랜덤으로 5개 선택한 후 선택된 구 목록(리스트)을 반환합니다.
-    target_district에 값이 있다면 그대로 반환합니다.
-    """
-    if target_district:
-        return target_district
-    districts = {row.findtext('GUNAME', default='정보 없음') for row in root.findall('.//row')}
-    districts = [d for d in districts if d != "정보 없음"]
-    if districts:
-        selected_districts = random.sample(districts, min(5, len(districts)))
-        return selected_districts
-    else:
-        return None
-
-def extract_event_date(date_str: str):
-    """
-    날짜 문자열에서 시작일만 추출하여 datetime.date 객체로 반환합니다.
-    파싱에 실패하면 None을 반환합니다.
-    """
-    date_match = re.match(r"(\d{4}[-./]\d{2}[-./]\d{2})", date_str)
-    if not date_match:
-        return None
-    date_part = date_match.group(1).replace('.', '-').replace('/', '-')
-    try:
-        event_date = datetime.strptime(date_part, "%Y-%m-%d").date()
-        return event_date
-    except Exception:
-        return None
-
-def get_future_events(api_key: str, target_district: str = ""):
-    """API 키와 target_district(빈 문자열이면 랜덤 선택)를 받아 미래 행사를 반환합니다."""
-    root = fetch_xml(api_key)
-    today = datetime.today().date()
-    selected_district = select_target_district(root, target_district)
-    if not selected_district:
-        return "구 정보가 없습니다."
-    
-    events = []
-    for row in root.findall('.//row'):
-        district = row.findtext('GUNAME', default='정보 없음')
-        date_str = row.findtext('DATE', default='정보 없음')
-        event_date = extract_event_date(date_str)
-        if not event_date or event_date <= today:
-            continue
-        # selected_district가 리스트이면 포함 여부, 문자열이면 동일 여부를 비교
-        if isinstance(selected_district, list):
-            if district not in selected_district:
-                continue
-        else:
-            if district != selected_district:
-                continue
-        title = row.findtext('TITLE', default='정보 없음')
-        place = row.findtext('PLACE', default='정보 없음')
-        fee = row.findtext('USE_FEE', default='정보 없음')
-        is_free = row.findtext('IS_FREE', default='정보 없음')
-        link = row.findtext('HMPG_ADDR', default='정보 없음')
-        image = row.findtext('MAIN_IMG', default='정보 없음')
-        events.append({
-            "title": title,
-            "date": date_str,
-            "place": place,
-            "district": district,
-            "fee": fee,
-            "is_free": is_free,
-            "link": link,
-            "image": image
-        })
-    return events[:10]  # 최대 10개의 이벤트만 반환
-# 시간 관련 함수
-def get_kst_time():
-    kst_timezone = pytz.timezone("Asia/Seoul")
-    kst_time = datetime.now(kst_timezone)
-    return f"대한민국 기준 : {kst_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰\n\n 더 궁금한 점 있나요? 😊"
-
-def get_time_by_city(city_name="서울"):
-    city_info = weather_api.get_city_info(city_name)
-    if not city_info:
-        return f"'{city_name}'의 시간 정보를 가져올 수 없습니다."
-    tf = TimezoneFinder()
-    timezone_str = tf.timezone_at(lng=city_info["lon"], lat=city_info["lat"]) or "Asia/Seoul"
-    timezone = pytz.timezone(timezone_str)
-    city_time = datetime.now(timezone)
-    return f"현재 {city_name} 시간: {city_time.strftime('%Y년 %m월 %d일 %p %I:%M')}입니다. ⏰\n\n 더 궁금한 점 있나요? 😊"
 
 # 사용자 및 채팅 기록 관리
 def create_or_get_user(nickname):
@@ -254,41 +158,6 @@ def save_chat_history(user_id, session_id, question, answer, time_taken):
 
 def async_save_chat_history(user_id, session_id, question, answer, time_taken):
     threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
-
-# Naver API 검색 (웹 검색)
-def get_naver_api_results(query):
-    global naver_request_count
-    cache_key = f"naver:{query}"
-    cached = cache_handler.get(cache_key)
-    if cached:
-        return cached
-    
-    if naver_request_count >= NAVER_DAILY_LIMIT:
-        return "검색 한도 초과로 결과를 가져올 수 없습니다. 😓"
-    enc_text = urllib.parse.quote(query)
-    url = f"https://openapi.naver.com/v1/search/webkr?query={enc_text}&display=5&sort=date"
-    request = urllib.request.Request(url)
-    request.add_header("X-Naver-Client-Id", NAVER_CLIENT_ID)
-    request.add_header("X-Naver-Client-Secret", NAVER_CLIENT_SECRET)
-    try:
-        response = urllib.request.urlopen(request, timeout=3)
-        naver_request_count += 1
-        if response.getcode() == 200:
-            data = json.loads(response.read().decode('utf-8'))
-            results = data.get('items', [])
-            if not results:
-                return "검색 결과가 없습니다. 😓"
-            
-            response_text = "🌐 **웹 검색 결과** \n\n"
-            response_text += "\n\n".join(
-                [f"**결과 {i}**\n\n📄 **제목**: {re.sub(r'<b>|</b>', '', item['title'])}\n\n📝 **내용**: {re.sub(r'<b>|</b>', '', item.get('description', '내용 없음'))[:100]}...\n\n🔗 **링크**: {item.get('link', '')}"
-                 for i, item in enumerate(results, 1)]
-            ) + "\n\n더 궁금한 점 있나요? 😊"
-            cache_handler.setex(cache_key, 3600, response_text)
-            return response_text
-    except Exception as e:
-        logger.error(f"Naver API 오류: {str(e)}")
-        return "검색 중 오류가 발생했습니다. 😓"
 
 # 대화형 응답 (비동기)
 conversation_cache = MemoryCache()
@@ -478,31 +347,9 @@ def process_query(query):
             except Exception as e:
                 result = f"챔피언스리그 토너먼트 조회 중 오류: {str(e)} 😓"
         elif query_type == "cultural_event":
-            # 문화행사 처리 로직
-            target_district = query.replace("문화행사", "").strip()  # "문화행사" 키워드 제거
-            future = executor.submit(get_future_events, CULTURE_API_KEY, target_district)
-            events = future.result()
-            if isinstance(events, str):  # 오류 메시지 반환
-                return events
-            elif not events:  # 결과가 없을 경우
-                result = "해당 조건에 맞는 문화 행사가 없습니다."
-            else:
-                result = "🎭 **문화 행사 정보** 🎭\n\n"
-                for i, event in enumerate(events, 1):
-                    # 이미지 URL과 링크를 클릭 가능한 링크로 변경
-                    image_link = f"[🖼️ 이미지 보기]({event['image']})" if event['image'] != '정보 없음' else "🖼️ 이미지 없음"
-                    web_link = f"[🔗 웹사이트]({event['link']})" if event['link'] != '정보 없음' else "🔗 링크 없음"
-                    
-                    result += (
-                        f"### {i}. {event['title']}\n\n"
-                        f"📅 **날짜**: {event['date']}\n\n"
-                        f"📍 **장소**: {event['place']} ({event['district']})\n\n"
-                        f"💰 **요금**: {event['fee']} ({event['is_free']})\n\n"
-                        f"{web_link} | {image_link}\n\n"
-                        f"---\n\n"
-                    )
-                result += "더 궁금한 점 있나요? 😊"
-                
+            # 문화행사 처리 로직 - 수정된 부분
+            future = executor.submit(culture_event_api.search_cultural_events, query)
+            result = future.result()
         elif query_type == "drug":
             future = executor.submit(drug_api.get_drug_info, query)  # 수정된 부분
             result = future.result()
@@ -515,26 +362,9 @@ def process_query(query):
             future = executor.submit(paper_search_api.get_pubmed_papers, keywords)  # 수정된 부분
             result = future.result()
         elif query_type == "naver_search":
-            search_query = query.lower().replace("검색", "").strip()
-            future = executor.submit(get_naver_api_results, search_query)
+            # 웹 검색 처리 로직 - 수정된 부분
+            future = executor.submit(web_search_api.search_and_create_context, query, st.session_state)
             result = future.result()
-            
-            # 검색 결과를 컨텍스트에 저장
-            context_id = str(uuid.uuid4())
-            st.session_state.search_contexts[context_id] = {
-                "type": "naver_search",
-                "query": search_query,
-                "result": result,
-                "timestamp": datetime.now().isoformat()
-            }
-            st.session_state.current_context = context_id
-            
-            # 멀티턴 대화를 위한 안내 추가
-            result += "\n\n💡 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어:\n"
-            result += "- '검색 결과를 요약해'\n"
-            result += "- '첫 번째 결과에 대해 자세히 설명해줘'\n"
-            result += "- '3번째 링크 요약해줘' (해당 순서 웹페이지 전체 내용 요약)\n"
-            result += "- 'URL 요약해줘' (특정 링크의 전체 내용 확인)"
         elif query_type == "mbti":
             result = (
                 "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
@@ -581,6 +411,16 @@ def process_query(query):
 # 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
 def show_chat_dashboard():
     st.title("Chat with AI 🤖")
+    
+    # 검색 통계 표시 (사이드바에 추가 가능)
+    with st.sidebar:
+        if st.button("검색 통계 📊"):
+            stats = web_search_api.get_search_stats()
+            st.info(f"🔍 **검색 통계**\n\n"
+                   f"• 사용: {stats['request_count']}/{stats['daily_limit']}\n"
+                   f"• 남은 횟수: {stats['remaining']}\n"
+                   f"• 사용률: {stats['usage_percentage']}%")
+    
     if st.button("도움말 ℹ️"):
         st.info(
             "챗봇과 더 쉽게 대화하는 방법이에요! :\n"
