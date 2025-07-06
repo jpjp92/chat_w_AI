@@ -97,14 +97,23 @@ class WebSearchAPI:
     
     def search_and_create_context(self, query, session_state=None):
         """검색을 수행하고 컨텍스트를 생성합니다."""
+        logger.info(f"검색 시작: '{query}'")
+        logger.info(f"세션 상태 전달됨: {session_state is not None}")
+        
         # 쿼리에서 '검색' 키워드 제거
         clean_query = query.lower().replace("검색", "").strip()
         
         # 검색 수행
         search_result = self.search_web(clean_query)
         
-        # 세션 상태가 있는 경우 컨텍스트 저장
-        if session_state and hasattr(session_state, 'search_contexts'):
+        # 세션 상태 저장 (중요!)
+        if session_state is not None:
+            # search_contexts 속성이 없으면 생성
+            if not hasattr(session_state, 'search_contexts'):
+                session_state.search_contexts = {}
+            if not hasattr(session_state, 'current_context'):
+                session_state.current_context = None
+            
             context_id = str(uuid.uuid4())
             session_state.search_contexts[context_id] = {
                 "type": "naver_search",
@@ -114,11 +123,10 @@ class WebSearchAPI:
             }
             session_state.current_context = context_id
             
-            # 로그 추가
-            logger.info(f"검색 컨텍스트 저장 완료: {context_id}")
-            logger.info(f"저장된 컨텍스트 수: {len(session_state.search_contexts)}")
+            logger.info(f"✅ 검색 컨텍스트 저장 완료: {context_id}")
+            logger.info(f"✅ 저장된 컨텍스트 수: {len(session_state.search_contexts)}")
         else:
-            logger.warning("세션 상태가 없거나 search_contexts가 없습니다.")
+            logger.error("❌ 세션 상태가 전달되지 않음!")
         
         # 멀티턴 대화를 위한 안내 추가
         enhanced_result = search_result + "\n\n💡 검색 결과에 대해 더 질문하시면 답변해드릴게요. 예를 들어:\n"

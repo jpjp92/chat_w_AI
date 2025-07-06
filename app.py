@@ -316,131 +316,164 @@ def process_query(query):
     query_type = needs_search(query)
     query_lower = query.strip().lower().replace(" ", "")
     
-    with ThreadPoolExecutor() as executor:
-        if query_type == "weather":
-            future = executor.submit(weather_api.get_city_weather, extract_city_from_query(query))
-            result = future.result()
-        elif query_type == "tomorrow_weather":
-            future = executor.submit(weather_api.get_forecast_by_day, extract_city_from_query(query), 1)
-            result = future.result()
-        elif query_type == "time":
-            if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
-                result = get_kst_time()
-            else:
-                city = extract_city_from_time_query(query)
-                future = executor.submit(get_time_by_city, city)
-                result = future.result()
-        elif query_type == "league_standings":
-            league_key = extract_league_from_query(query)
-            if league_key:
-                league_info = LEAGUE_MAPPING[league_key]
-                future = executor.submit(football_api.fetch_league_standings, league_info["code"], league_info["name"])
-                result = future.result()
+    # ThreadPoolExecutor 사용하지 않고 직접 호출 (세션 상태 전달 문제 해결)
+    if query_type == "weather":
+        result = weather_api.get_city_weather(extract_city_from_query(query))
+    elif query_type == "tomorrow_weather":
+        result = weather_api.get_forecast_by_day(extract_city_from_query(query), 1)
+    elif query_type == "time":
+        if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
+            result = get_kst_time()
+        else:
+            city = extract_city_from_time_query(query)
+            result = get_time_by_city(city)
+    elif query_type == "league_standings":
+        league_key = extract_league_from_query(query)
+        if league_key:
+            league_info = LEAGUE_MAPPING[league_key]
+            result = football_api.fetch_league_standings(league_info["code"], league_info["name"])
+            result = result["error"] if "error" in result else {
+                "header": f"{result['league_name']} 리그 순위",
+                "table": result["data"],
+                "footer": "더 궁금한 점 있나요? 😊"
+            }
+        else:
+            result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
+    elif query_type == "league_scorers":
+        league_key = extract_league_from_query(query)
+        if league_key:
+            league_info = LEAGUE_MAPPING[league_key]
+            try:
+                result = football_api.fetch_league_scorers(league_info["code"], league_info["name"])
                 result = result["error"] if "error" in result else {
-                    "header": f"{result['league_name']} 리그 순위",
+                    "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
                     "table": result["data"],
                     "footer": "더 궁금한 점 있나요? 😊"
                 }
-            else:
-                result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
-        elif query_type == "league_scorers":
-            league_key = extract_league_from_query(query)
-            if league_key:
-                league_info = LEAGUE_MAPPING[league_key]
-                future = executor.submit(football_api.fetch_league_scorers, league_info["code"], league_info["name"])
-                try:
-                    result = future.result()
-                    result = result["error"] if "error" in result else {
-                        "header": f"{result['league_name']} 리그 득점순위 (상위 10명)",
-                        "table": result["data"],
-                        "footer": "더 궁금한 점 있나요? 😊"
-                    }
-                except Exception as e:
-                    result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
-            else:
-                result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
-        elif query_type == "cl_knockout":
-            try:
-                future = executor.submit(football_api.fetch_championsleague_knockout_matches)
-                results = future.result()
-                if isinstance(results, str):
-                    result = results
-                elif not results:
-                    result = "챔피언스리그 토너먼트 경기 결과가 없습니다."
-                else:
-                    df = pd.DataFrame(results)
-                    result = {
-                        "header": "챔피언스리그 Knockout Stage 결과",
-                        "table": df,
-                        "footer": "더 궁금한 점 있나요? 😊"
-                    }
             except Exception as e:
-                result = f"챔피언스리그 토너먼트 조회 중 오류: {str(e)} 😓"
-        elif query_type == "cultural_event":
-            future = executor.submit(culture_event_api.search_cultural_events, query)
-            result = future.result()
-        elif query_type == "drug":
-            future = executor.submit(drug_api.get_drug_info, query)
-            result = future.result()
-        elif query_type == "arxiv_search":
-            keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
-            future = executor.submit(paper_search_api.get_arxiv_papers, keywords)
-            result = future.result()
-        elif query_type == "pubmed_search":
-            keywords = query.replace("의학논문", "").strip()
-            future = executor.submit(paper_search_api.get_pubmed_papers, keywords)
-            result = future.result()
-        elif query_type == "naver_search":
-            # 웹 검색 처리 로직
-            future = executor.submit(web_search_api.search_and_create_context, query, st.session_state)
-            result = future.result()
-            
-            # 컨텍스트 저장 확인 로그
-            logger.info(f"검색 후 컨텍스트 상태: {st.session_state.current_context}")
-            if hasattr(st.session_state, 'search_contexts'):
-                logger.info(f"저장된 컨텍스트 수: {len(st.session_state.search_contexts)}")
-        elif query_type == "mbti":
-            result = (
-                "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
-                "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
-                "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 💡"
-            )
-        elif query_type == "mbti_types":
-            specific_type = query_lower.replace("mbti", "").replace("유형", "").replace("설명", "").strip().upper()
-            if specific_type in mbti_descriptions:
-                result = f"### 🎭 {specific_type} 한 줄 설명\n- ✅ **{specific_type}** {mbti_descriptions[specific_type]}"
-            else:
-                result = mbti_full_description
-        elif query_type == "multi_iq":
-            result = (
-                "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
-                "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
-                "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
-            )
-        elif query_type == "multi_iq_types":
-            specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("유형", "").replace("설명", "").strip().replace(" ", "")
-            if specific_type in multi_iq_descriptions:
-                result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 한 줄 설명\n- 📖 **{specific_type.replace('지능', ' 지능')}** {multi_iq_descriptions[specific_type]['description']}"
-            else:
-                result = multi_iq_full_description
-        elif query_type == "multi_iq_jobs":
-            specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("직업", "").replace("추천", "").strip().replace(" ", "")
-            if specific_type in multi_iq_descriptions:
-                result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 추천 직업\n- 📖 **{specific_type.replace('지능', ' 지능')}**: {multi_iq_descriptions[specific_type]['description']}- **추천 직업**: {multi_iq_descriptions[specific_type]['jobs']}"
-            else:
-                result = multi_iq_full_description
-        elif query_type == "multi_iq_full":
-            result = multi_iq_full_description
-        elif query_type == "conversation":
-            if query_lower in GREETINGS:
-                result = GREETING_RESPONSE
-            else:
-                result = asyncio.run(get_conversational_response(query, st.session_state.messages))
+                result = f"리그 득점순위 조회 중 오류 발생: {str(e)} 😓"
         else:
-            result = "아직 지원하지 않는 기능이에요. 😅"
+            result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1"
+    elif query_type == "cl_knockout":
+        try:
+            results = football_api.fetch_championsleague_knockout_matches()
+            if isinstance(results, str):
+                result = results
+            elif not results:
+                result = "챔피언스리그 토너먼트 경기 결과가 없습니다."
+            else:
+                df = pd.DataFrame(results)
+                result = {
+                    "header": "챔피언스리그 Knockout Stage 결과",
+                    "table": df,
+                    "footer": "더 궁금한 점 있나요? 😊"
+                }
+        except Exception as e:
+            result = f"챔피언스리그 토너먼트 조회 중 오류: {str(e)} 😓"
+    elif query_type == "cultural_event":
+        result = culture_event_api.search_cultural_events(query)
+    elif query_type == "drug":
+        result = drug_api.get_drug_info(query)
+    elif query_type == "arxiv_search":
+        keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
+        result = paper_search_api.get_arxiv_papers(keywords)
+    elif query_type == "pubmed_search":
+        keywords = query.replace("의학논문", "").strip()
+        result = paper_search_api.get_pubmed_papers(keywords)
+    elif query_type == "naver_search":
+        # 웹 검색 처리 로직 - 직접 호출 (세션 상태 전달 보장)
+        logger.info(f"네이버 검색 직접 호출: '{query}'")
+        result = web_search_api.search_and_create_context(query, st.session_state)
         
-        cache_handler.setex(cache_key, 600, result)
-        return result
+        # 컨텍스트 저장 확인 로그
+        logger.info(f"검색 후 컨텍스트 상태: {st.session_state.current_context}")
+        if hasattr(st.session_state, 'search_contexts'):
+            logger.info(f"저장된 컨텍스트 수: {len(st.session_state.search_contexts)}")
+    elif query_type == "mbti":
+        result = (
+            "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
+            "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
+            "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 💡"
+        )
+    elif query_type == "mbti_types":
+        specific_type = query_lower.replace("mbti", "").replace("유형", "").replace("설명", "").strip().upper()
+        if specific_type in mbti_descriptions:
+            result = f"### 🎭 {specific_type} 한 줄 설명\n- ✅ **{specific_type}** {mbti_descriptions[specific_type]}"
+        else:
+            result = mbti_full_description
+    elif query_type == "multi_iq":
+        result = (
+            "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
+            "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
+            "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
+        )
+    elif query_type == "multi_iq_types":
+        specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("유형", "").replace("설명", "").strip().replace(" ", "")
+        if specific_type in multi_iq_descriptions:
+            result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 한 줄 설명\n- 📖 **{specific_type.replace('지능', ' 지능')}** {multi_iq_descriptions[specific_type]['description']}"
+        else:
+            result = multi_iq_full_description
+    elif query_type == "multi_iq_jobs":
+        specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("직업", "").replace("추천", "").strip().replace(" ", "")
+        if specific_type in multi_iq_descriptions:
+            result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 추천 직업\n- 📖 **{specific_type.replace('지능', ' 지능')}**: {multi_iq_descriptions[specific_type]['description']}- **추천 직업**: {multi_iq_descriptions[specific_type]['jobs']}"
+        else:
+            result = multi_iq_full_description
+    elif query_type == "multi_iq_full":
+        result = multi_iq_full_description
+    elif query_type == "conversation":
+        if query_lower in GREETINGS:
+            result = GREETING_RESPONSE
+        else:
+            result = asyncio.run(get_conversational_response(query, st.session_state.messages))
+    else:
+        result = "아직 지원하지 않는 기능이에요. 😅"
+    
+    cache_handler.setex(cache_key, 600, result)
+    return result
+
+def get_kst_time():
+    """KST 시간을 반환합니다."""
+    import pytz
+    from datetime import datetime
+    
+    kst = pytz.timezone('Asia/Seoul')
+    now = datetime.now(kst)
+    return f"현재 한국 시간: {now.strftime('%Y년 %m월 %d일 %H:%M:%S')} 😊"
+
+def get_time_by_city(city_name):
+    """도시별 시간을 반환합니다."""
+    # 날씨 API의 도시 검색 기능 활용
+    try:
+        city_info = weather_api.search_city_by_name(city_name)
+        if city_info:
+            import pytz
+            from datetime import datetime
+            
+            # 시간대 매핑 (간단한 예시)
+            timezone_map = {
+                "KR": "Asia/Seoul",
+                "US": "America/New_York", 
+                "GB": "Europe/London",
+                "JP": "Asia/Tokyo",
+                "FR": "Europe/Paris",
+                "DE": "Europe/Berlin"
+            }
+            
+            country = city_info["country"]
+            tz_name = timezone_map.get(country, "UTC")
+            
+            try:
+                tz = pytz.timezone(tz_name)
+                now = datetime.now(tz)
+                return f"현재 {city_name} 시간: {now.strftime('%Y년 %m월 %d일 %H:%M:%S')} 😊"
+            except:
+                return f"{city_name}의 시간 정보를 가져올 수 없습니다. 😓"
+        else:
+            return f"{city_name} 도시를 찾을 수 없습니다. 😓"
+    except Exception as e:
+        return f"{city_name}의 시간 정보를 가져오는 중 오류가 발생했습니다: {str(e)} 😓"
+
 
 # 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
 def show_chat_dashboard():
@@ -468,7 +501,7 @@ def show_chat_dashboard():
             - "런던 시간", "도쿄 시간 알려줘"
             
             **웹 검색** 🔍
-            - "ChatGPT 검색", "파이썬 검색"
+            - "ChatGPT 사용방법 검색해줘"
             - 검색 후 "3번째 링크 요약해줘"
             """)
         
@@ -476,40 +509,42 @@ def show_chat_dashboard():
         with st.expander("🎯 전문 정보"):
             st.markdown("""
             **의약품 정보** 💊
-            - "타이레놀 효능", "아스피린 부작용"
+            - "약품검색 타이레놀", "약품검색 게보린"
+            - 약품명, 제조사, 효능, 용법용량, 주의사항 확인 가능
             
             **논문 검색** 📚
-            - "인공지능 공학논문"
-            - "당뇨병 의학논문"
+            - "공학논문 Transformers"
+            - "의학논문 Gene Therapy"
             
             **문화행사** 🎭
-            - "서울 문화행사", "이번 주 공연"
+            - "강남구 문화행사", "문화행사"
             """)
         
         # 축구 정보 안내
         with st.expander("⚽ 축구 정보"):
             st.markdown("""
             **리그 순위** 🏆
-            - "EPL 순위", "라리가 순위"
-            - "분데스리가 순위", "세리에A 순위"
+            - "EPL 리그순위", "라리가 리그순위"
+            - "분데스리가 리그순위", "세리에A 리그순위"
             
             **득점 순위** ⚽
-            - "EPL 득점순위", "라리가 득점왕"
+            - "EPL 득점순위", "라리가 득점순위"
             
             **챔피언스리그** 🏅
+            - "챔피언스리그 리그 순위", "UCL 리그순위"
             - "챔피언스리그 토너먼트"
             """)
         
         # 성격 검사 안내
         with st.expander("🧠 성격 검사"):
             st.markdown("""
-            **MBTI** 🎭
-            - "MBTI 검사", "MBTI 유형"
-            - "ENFP 설명", "INTJ 특징"
+            **MBTI** ✨
+            - "MBTI 검사", "MBTI 유형", "MBTI 설명"
+            - 예: "MBTI 검사", "INTJ 설명"
             
-            **다중지능** 🎨
-            - "다중지능 검사", "다중지능 유형"
-            - "언어지능 설명", "음악지능 직업"
+            **다중지능** 🎉
+            - "다중지능 검사", "다중지능 유형", "다중지능 직업"
+            - 예: "다중지능 검사", "언어지능 직업"
             """)
         
         # 사용 팁
@@ -638,3 +673,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
