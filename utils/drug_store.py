@@ -400,11 +400,11 @@ class DrugStoreAPI:
         start_num = ((pagination.get("current_page", 1) - 1) * pagination.get("per_page", 10)) + 1
         
         for i, pharmacy in enumerate(pharmacies, start_num):
-            pharmacy_list += f"### {i}. 🏥 {pharmacy['name']}\n"
-            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n"
-            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n"
-            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n"
-            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n"
+            pharmacy_list += f"### {i}. 🏥 {pharmacy['name']}\n\n"
+            pharmacy_list += f"📍 **주소**: {pharmacy['address']}\n\n"
+            pharmacy_list += f"📞 **전화**: {pharmacy['phone']}\n\n"
+            pharmacy_list += f"⏰ **오늘({pharmacy['current_day']}) 운영시간**: {pharmacy['today_hours']}\n\n"
+            pharmacy_list += f"🔍 **현재 상태**: {pharmacy['status']}\n\n"
             
             if i < start_num + len(pharmacies) - 1:
                 pharmacy_list += "\n---\n\n"
