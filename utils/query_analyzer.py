@@ -181,3 +181,91 @@ def extract_keywords_for_paper_search(query):
         if match:
             return match.group(1).strip()
     return ""
+
+def is_pharmacy_search(query):
+    """약국 검색 쿼리인지 확인"""
+    query_lower = query.lower().replace(" ", "")
+    
+    pharmacy_keywords = [
+        "약국", "약국정보", "약국검색", "약국운영", "약국시간",
+        "서울약국", "약국찾기", "약국위치", "약국운영시간"
+    ]
+    
+    for keyword in pharmacy_keywords:
+        if keyword in query_lower:
+            return True
+    
+    # 지역구 + 약국 패턴
+    districts = [
+        "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구",
+        "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구",
+        "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"
+    ]
+    
+    for district in districts:
+        if district in query and "약국" in query_lower:
+            return True
+    
+    return False
+
+def extract_pharmacy_location(query):
+    """쿼리에서 약국 위치 정보 추출"""
+    districts = [
+        "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구",
+        "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구",
+        "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"
+    ]
+    
+    for district in districts:
+        if district in query:
+            return district
+    
+    return None
+
+def needs_search(query):
+    """쿼리 타입을 분석하여 적절한 검색 타입을 반환"""
+    query_lower = query.strip().lower().replace(" ", "")
+    if "날씨" in query_lower:
+        return "weather" if "내일" not in query_lower else "tomorrow_weather"
+    if "시간" in query_lower or "날짜" in query_lower:
+        if is_time_query(query_lower):
+            return "time"
+    if "문화행사" in query_lower:
+        return "cultural_event"
+    if "리그순위" in query_lower:
+        return "league_standings"
+    if "리그득점순위" in query_lower or "득점순위" in query_lower:
+        return "league_scorers"
+    if ("챔피언스리그" in query_lower or "ucl" in query_lower) and (
+        "토너먼트" in query_lower or "knockout" in query_lower or "16강" in query_lower or "8강" in query_lower or "4강" in query_lower or "결승" in query_lower):
+        return "cl_knockout"
+    if "약품검색" in query_lower:
+        return "drug"
+    if "공학논문" in query_lower or "arxiv" in query_lower:
+        return "arxiv_search"
+    if "의학논문" in query_lower:
+        return "pubmed_search"
+    if "검색해줘" in query_lower or "검색해" in query_lower:
+        return "naver_search"
+
+    # MBTI 관련
+    if "mbti검사" in query_lower:
+        return "mbti"
+    if "mbti유형설명" in query_lower or "mbti유형" in query_lower or "mbti설명" in query_lower:
+        return "mbti_types"
+    
+    # 다중지능 관련
+    if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower or \
+       "다중지능 유형 설명" in query.strip().lower() or "다중지능 유형" in query.strip().lower():
+        return "multi_iq_types"
+    if "다중지능직업" in query_lower or "다중지능추천" in query_lower or \
+       "다중지능 직업" in query.strip().lower() or "다중지능 추천" in query.strip().lower():
+        return "multi_iq_jobs"
+    if "다중지능검사" in query_lower or "다중지능 검사" in query.strip().lower():
+        return "multi_iq"
+    if "다중지능" in query_lower:
+        return "multi_iq_full"
+    
+    if any(greeting in query_lower for greeting in GREETINGS):
+        return "conversation"
+    return "conversation"

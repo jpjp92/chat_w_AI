@@ -36,6 +36,7 @@ from utils.drug_info import DrugAPI
 from utils.paper_search import PaperSearchAPI
 from utils.culture_event import CultureEventAPI
 from utils.web_search import WebSearchAPI
+from utils.drug_store import DrugStoreAPI  # 🔴 추가
 
 # set logger
 logging.basicConfig(level=logging.INFO)  # 디버깅을 위해 INFO 레벨로 변경
@@ -159,6 +160,7 @@ def initialize_apis():
         'weather': WeatherAPI(cache_handler=cache_handler, WEATHER_API_KEY=WEATHER_API_KEY),
         'football': FootballAPI(api_key=SPORTS_API_KEY, cache_handler=cache_handler),
         'drug': DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler),
+        'drug_store': DrugStoreAPI(api_key=DRUG_STORE_KEY, cache_handler=cache_handler),  # 🔴 추가
         'paper_search': PaperSearchAPI(ncbi_key=NCBI_KEY, cache_handler=cache_handler),
         'culture_event': CultureEventAPI(api_key=CULTURE_API_KEY, cache_handler=cache_handler),
         'web_search': WebSearchAPI(client_id=NAVER_CLIENT_ID, client_secret=NAVER_CLIENT_SECRET, cache_handler=cache_handler)
@@ -172,6 +174,7 @@ drug_api = apis['drug']
 paper_search_api = apis['paper_search']
 culture_event_api = apis['culture_event']
 web_search_api = apis['web_search']
+drug_store_api = apis['drug_store']  # 🔴 추가
 
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
@@ -534,6 +537,88 @@ def get_time_by_city(city_name):
         return f"{city_name}의 시간 정보를 가져오는 중 오류가 발생했습니다: {str(e)} 😓"
 
 
+# 기존 코드에 추가
+
+def needs_search(query):
+    """쿼리 타입을 분석하여 적절한 검색 타입을 반환"""
+    query_lower = query.strip().lower()
+    
+    # 🔴 약국 검색 추가
+    if is_pharmacy_search(query):
+        return "pharmacy_search"
+    
+    # 날씨 관련 쿼리
+    if "날씨" in query_lower:
+        return "weather"
+    elif "내일" in query_lower and "날씨" in query_lower:
+        return "tomorrow_weather"
+    
+    # 시간 관련 쿼리
+    elif "시간" in query_lower or "현재" in query_lower or "날짜" in query_lower:
+        return "time"
+    
+    # 축구 리그 순위
+    elif "리그순위" in query_lower:
+        return "league_standings"
+    # 축구 득점 순위
+    elif "득점순위" in query_lower:
+        return "league_scorers"
+    # 챔피언스리그 관련
+    elif "챔피언스리그" in query_lower or "ucl" in query_lower:
+        return "cl_knockout"
+    
+    # 약품 검색
+    elif is_drug_inquiry(query):
+        return "drug"
+    
+    # 논문 검색
+    elif "논문" in query_lower:
+        return "arxiv_search"  # 기본값으로 arxiv_search 반환
+    
+    # 웹 검색 (기본 쿼리)
+    return "naver_search"
+
+def is_pharmacy_search(query):
+    """약국 검색 쿼리인지 확인"""
+    query_lower = query.lower().replace(" ", "")
+    
+    pharmacy_keywords = [
+        "약국", "약국정보", "약국검색", "약국운영", "약국시간",
+        "서울약국", "약국찾기", "약국위치", "약국운영시간"
+    ]
+    
+    for keyword in pharmacy_keywords:
+        if keyword in query_lower:
+            return True
+    
+    # 지역구 + 약국 패턴
+    districts = [
+        "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구",
+        "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구",
+        "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"
+    ]
+    
+    for district in districts:
+        if district in query and "약국" in query_lower:
+            return True
+    
+    return False
+
+def extract_pharmacy_location(query):
+    """쿼리에서 약국 위치 정보 추출"""
+    districts = [
+        "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구",
+        "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구",
+        "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"
+    ]
+    
+    for district in districts:
+        if district in query:
+            return district
+    
+    return None
+
+
 # 기존 show_chat_dashboard 함수 내에서 사용자 입력 처리 부분 수정
 def show_chat_dashboard():
     st.title("Chat with AI 🤖")
@@ -571,6 +656,11 @@ def show_chat_dashboard():
             **의약품 정보** 💊
             - "약품검색 타이레놀", "약품검색 게보린"
             - 약품명, 제조사, 효능, 용법용량, 주의사항 확인 가능
+            
+            **서울시 약국 정보** 🏥
+            - "강남구 약국", "서초구 약국 정보"
+            - "온누리약국", "24시간 약국"
+            - 약국 위치, 운영시간, 연락처 확인 가능
             
             **논문 검색** 📚
             - "공학논문 Transformers"
