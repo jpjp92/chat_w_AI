@@ -566,7 +566,7 @@ def show_chat_dashboard():
             - "ChatGPT 사용방법 검색해줘"
             - 검색 후 "3번째 링크 요약해줘"
             
-            **웹 페이지 요약** 📝
+            **웹 페이지 요약** 📝 
             - "https://blog.google/intl/ko-kr/company-news/technology/made-by-google-gemini-ai-updates-kr/ 요약해줘"
             
             """)
