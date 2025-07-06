@@ -386,60 +386,28 @@ def is_url_summarization_request(query):
                 return True, urls[0]  # 첫 번째 URL 반환
     return False, None
 
-def is_numbered_link_request(query, search_context):
-    """순서 기반 링크 요청인지 확인합니다 (예: 3번째 링크 요약해줘)"""
-    if not search_context or search_context.get("type") != "naver_search":
+def is_numbered_link_request(query, context):
+    """순서 기반 링크 요청을 확인하고 URL을 반환합니다."""
+    if not context or context.get("type") != "naver_search":
         return False, None
     
-    # 숫자 패턴과 한글 패턴을 분리
-    number_patterns = [
-        r'(\d+)번째\s*(?:링크|결과|사이트)',
-        r'(\d+)번\s*(?:링크|결과|사이트)', 
-        r'(\d+)\.?\s*(?:링크|결과|사이트)',
+    # 순서 패턴 매칭
+    patterns = [
+        r'(\d+)번째\s*링크\s*요약',
+        r'(\d+)번째\s*결과\s*요약',  
+        r'(\d+)번째\s*링크\s*분석',
+        r'(\d+)번째\s*결과\s*분석',
+        r'(\d+)번째\s*결과.*자세히'
     ]
     
-    korean_patterns = [
-        r'첫\s*번째\s*(?:링크|결과|사이트)',
-        r'두\s*번째\s*(?:링크|결과|사이트)',
-        r'세\s*번째\s*(?:링크|결과|사이트)',
-        r'네\s*번째\s*(?:링크|결과|사이트)',
-        r'다섯\s*번째\s*(?:링크|결과|사이트)'
-    ]
-    
-    # 숫자를 한글로 변환
-    korean_numbers = {'첫': 1, '두': 2, '세': 3, '네': 4, '다섯': 5}
-    
-    number = None
-    
-    # 숫자 패턴 확인
-    for pattern in number_patterns:
-        match = re.search(pattern, query, re.IGNORECASE)
+    for pattern in patterns:
+        match = re.search(pattern, query)
         if match:
-            number = int(match.group(1))
-            break
-    
-    # 한글 숫자 패턴 확인
-    if number is None:
-        for pattern in korean_patterns:
-            match = re.search(pattern, query, re.IGNORECASE)
-            if match:
-                # 한글 숫자 처리
-                for korean, num in korean_numbers.items():
-                    if korean in query:
-                        number = num
-                        break
-                if number:
-                    break
-    
-    if number is not None:
-        # 검색 결과에서 해당 순서의 URL 추출
-        search_result = search_context.get("result", "")
-        urls = extract_urls_from_text(search_result)
-        
-        if urls and len(urls) >= number:
-            summary_keywords = ['요약', '정리', '내용', '설명', '알려줘', '분석']
-            if any(keyword in query for keyword in summary_keywords):
-                return True, urls[number - 1]  # 0부터 시작하므로 -1
+            link_number = int(match.group(1))
+            # 컨텍스트에서 해당 순서의 URL 추출
+            urls = extract_urls_from_text(context["result"])
+            if 1 <= link_number <= len(urls):
+                return True, urls[link_number - 1]
     
     return False, None
 

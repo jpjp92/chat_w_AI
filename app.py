@@ -1,6 +1,7 @@
 # set lib
 from config.imports import *
 from config.env import *
+from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 # Import utils modules
 from utils.webpage_analyzer import (
@@ -37,7 +38,7 @@ from utils.culture_event import CultureEventAPI
 from utils.web_search import WebSearchAPI
 
 # set logger
-logging.basicConfig(level=logging.WARNING if os.getenv("ENV") == "production" else logging.INFO)
+logging.basicConfig(level=logging.INFO)  # 디버깅을 위해 INFO 레벨로 변경
 logger = logging.getLogger("HybridChat")
 logging.getLogger("streamlit").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -177,31 +178,49 @@ async def get_conversational_response(query, chat_history):
         if current_context_id and current_context_id in st.session_state.search_contexts:
             current_context = st.session_state.search_contexts[current_context_id]
     
+    # 디버깅 로그 추가
+    logger.info(f"현재 컨텍스트 존재: {current_context is not None}")
+    if current_context:
+        logger.info(f"컨텍스트 타입: {current_context.get('type')}")
+        logger.info(f"컨텍스트 결과 길이: {len(str(current_context.get('result', '')))}")
+    
     # 순서 기반 링크 요청 확인 (예: 3번째 링크 요약해줘)
-    is_numbered_request, numbered_url = is_numbered_link_request(query, current_context)
-    if is_numbered_request:
-        summary = summarize_webpage_content(numbered_url, query)
-        conversation_cache.setex(cache_key, 600, summary)
-        return summary
+    try:
+        is_numbered_request, numbered_url = is_numbered_link_request(query, current_context)
+        logger.info(f"순서 기반 요청: {is_numbered_request}, URL: {numbered_url}")
+        
+        if is_numbered_request and numbered_url:
+            try:
+                logger.info(f"웹페이지 요약 시작: {numbered_url}")
+                summary = summarize_webpage_content(numbered_url, query)
+                conversation_cache.setex(cache_key, 600, summary)
+                return summary
+            except Exception as e:
+                logger.error(f"웹페이지 요약 오류: {str(e)}")
+                return f"해당 링크의 내용을 가져올 수 없습니다: {str(e)} 😓"
+        
+        # 일반 URL 요약 요청 확인
+        is_url_request, url = is_url_summarization_request(query)
+        logger.info(f"URL 요약 요청: {is_url_request}, URL: {url}")
+        
+        if is_url_request and url:
+            try:
+                logger.info(f"직접 URL 요약 시작: {url}")
+                summary = summarize_webpage_content(url, query)
+                conversation_cache.setex(cache_key, 600, summary)
+                return summary
+            except Exception as e:
+                logger.error(f"URL 요약 오류: {str(e)}")
+                return f"해당 링크의 내용을 가져올 수 없습니다: {str(e)} 😓"
     
-    # 일반 URL 요약 요청 확인
-    is_url_request, url = is_url_summarization_request(query)
-    if is_url_request:
-        # URL 요약 처리
-        summary = summarize_webpage_content(url, query)
-        conversation_cache.setex(cache_key, 600, summary)
-        return summary
+    except Exception as e:
+        logger.error(f"링크 요약 처리 중 오류: {str(e)}")
+        # 링크 요약 오류 시에도 일반 대화는 계속 진행
     
+    # 일반 대화 처리
     messages = [
         {"role": "system", "content": "친절한 AI 챗봇입니다. 적절한 이모지 사용: ✅(완료), ❓(질문), 😊(친절)"}
     ]
-    
-    # 현재 대화 컨텍스트가 있는지 확인
-    current_context = None
-    if hasattr(st, 'session_state') and 'current_context' in st.session_state:
-        current_context_id = st.session_state.current_context
-        if current_context_id and current_context_id in st.session_state.search_contexts:
-            current_context = st.session_state.search_contexts[current_context_id]
     
     # 검색 컨텍스트가 있으면 시스템 프롬프트에 추가
     if current_context:
@@ -220,20 +239,24 @@ async def get_conversational_response(query, chat_history):
                 cleaned_results = re.findall(r"\*\*결과 \d+\*\*\s*\n\n📄 \*\*제목\*\*: (.*?)\n\n📝 \*\*내용\*\*: (.*?)(?=\n\n🔗|\n\n더 궁금한)", context_result, re.DOTALL)
                 context_desc = f"사용자가 '{context_query}'에 대해 웹 검색을 했고, 다음 결과를 받았습니다:\n\n"
                 for i, (title, content) in enumerate(cleaned_results, 1):
-                    context_desc += f"{i}. 제목: {title}\n   내용: {content}\n\n"
+                    context_desc += f"{i}. 제목: {title.strip()}\n   내용: {content.strip()}\n\n"
                 
                 # 검색 결과에서 URL을 추출하여 웹페이지 요약 제안
                 urls_in_context = extract_urls_from_text(context_result)
+                logger.info(f"검색 결과에서 추출된 URL 개수: {len(urls_in_context)}")
                 if urls_in_context:
-                    context_desc += f"\n\n검색 결과에 총 {len(urls_in_context)}개의 링크가 있습니다.\n"
-                    context_desc += "특정 링크의 전체 내용이 궁금하시면 다음과 같이 질문해주세요:\n"
+                    context_desc += f"\n\n검색 결과에 총 {len(urls_in_context)}개의 링크가 있습니다:\n"
+                    for i, url in enumerate(urls_in_context, 1):
+                        context_desc += f"{i}. {url}\n"
+                    context_desc += "\n특정 링크의 전체 내용이 궁금하시면 다음과 같이 질문해주세요:\n"
                     context_desc += "- '첫 번째 링크 요약해줘' 또는 '3번째 링크 요약해줘'\n"
                     context_desc += "- 'URL + 요약해줘' 형태로 직접 URL 지정"
         
         # 다른 유형의 컨텍스트 처리 (약품 정보, 논문 등)
         elif context_type == "drug":
-            # 약품 정보일 경우
             context_desc = f"사용자가 '{context_query}' 약품에 대한 정보를 검색했습니다. 약품 정보를 기반으로 사용자의 질문에 답변해주세요."
+        else:
+            context_desc = f"사용자가 '{context_query}'에 대해 검색했습니다."
         
         # 공통 지시사항
         system_prompt = (
@@ -271,6 +294,7 @@ async def get_conversational_response(query, chat_history):
     except Exception as e:
         logger.error(f"대화 응답 생성 중 오류: {str(e)}", exc_info=True)
         result = "응답을 생성하는 중 문제가 발생했습니다."
+    
     conversation_cache.setex(cache_key, 600, result)
     return result
 
@@ -363,7 +387,7 @@ def process_query(query):
             result = future.result()
         elif query_type == "naver_search":
             # 웹 검색 처리 로직 - 수정된 부분
-            future = executor.submit(web_search_api.search_and_create_context, query, st.session_state)
+            future = executor.submit(add_script_run_ctx(web_search_api.search_and_create_context), query, st.session_state)
             result = future.result()
         elif query_type == "mbti":
             result = (
