@@ -834,11 +834,8 @@ def show_login_page():
                 st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 도움말도 활용해 보세요 😊"}]
                 st.session_state.session_id = str(uuid.uuid4())
                 
-                # 성공 메시지 표시 후 즉시 상태 삭제
+                # ✅ 수정된 부분: 불필요한 상태 삭제 제거
                 st.success(f"환영합니다, {nickname}님! 🎉")
-                del st.session_state.show_welcome
-                if 'welcome_name' in st.session_state:
-                    del st.session_state.welcome_name
                 st.rerun()
             except Exception:
                 st.error("로그인 중 오류가 발생했습니다. 다시 시도해주세요.")
