@@ -402,117 +402,6 @@ async def get_conversational_response(query, chat_history):
 GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
 GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
 
-# def process_query(query):
-#     cache_key = f"query:{hash(query)}"
-#     cached = cache_handler.get(cache_key)
-#     if cached is not None:
-#         return cached
-    
-#     query_type = needs_search(query)
-#     query_lower = query.strip().lower().replace(" ", "")
-    
-#     logger.info(f"🎯 쿼리 타입: {query_type}")
-    
-#     # 🔴 약국 검색 케이스 추가 (최우선 처리)
-#     if query_type == "pharmacy_search":
-#         result = drug_store_api.search_pharmacies(query)
-#         cache_handler.setex(cache_key, 600, result)
-#         return result
-    
-#     # 🔴 문화행사 검색 케이스 추가
-#     elif query_type == "cultural_event":
-#         result = culture_event_api.search_cultural_events(query)
-#         cache_handler.setex(cache_key, 600, result)
-#         return result
-    
-#     # 날씨 관련 쿼리
-#     elif "내일" in query_lower and "날씨" in query_lower:
-#         return weather_api.get_forecast_by_day(extract_city_from_query(query), 1)
-#     elif "날씨" in query_lower:
-#         return weather_api.get_city_weather(extract_city_from_query(query))
-    
-#     # 시간 관련 쿼리
-#     elif "시간" in query_lower or "현재" in query_lower or "날짜" in query_lower:
-#         if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
-#             return get_kst_time()
-#         else:
-#             city = extract_city_from_time_query(query)
-#             return get_time_by_city(city)
-    
-#     # 축구 리그 순위
-#     elif "리그순위" in query_lower:
-#         return football_api.fetch_league_standings(extract_league_from_query(query))
-#     # 축구 득점 순위
-#     elif "득점순위" in query_lower:
-#         return football_api.fetch_league_scorers(extract_league_from_query(query))
-#     # 챔피언스리그 관련
-#     elif "챔피언스리그" in query_lower or "ucl" in query_lower:
-#         return football_api.fetch_championsleague_knockout_matches()
-    
-#     # 약품 검색
-#     elif is_drug_inquiry(query):
-#         return drug_api.get_drug_info(query)
-    
-#     # 논문 검색
-#     elif "논문" in query_lower:
-#         keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
-#         return paper_search_api.get_arxiv_papers(keywords)
-    
-#     elif query_type == "pubmed_search":
-#         keywords = query.replace("의학논문", "").strip()
-#         result = paper_search_api.get_pubmed_papers(keywords)
-#     elif query_type == "naver_search":
-#         # 웹 검색 처리 로직 - 직접 호출 (세션 상태 전달 보장)
-#         logger.info(f"네이버 검색 직접 호출: '{query}'")
-#         result = web_search_api.search_and_create_context(query, st.session_state)
-        
-#         # 컨텍스트 저장 확인 로그
-#         logger.info(f"검색 후 컨텍스트 상태: {st.session_state.current_context}")
-#         if hasattr(st.session_state, 'search_contexts'):
-#             logger.info(f"저장된 컨텍스트 수: {len(st.session_state.search_contexts)}")
-#     elif query_type == "mbti":
-#         result = (
-#             "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
-#             "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
-#             "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 💡"
-#         )
-#     elif query_type == "mbti_types":
-#         specific_type = query_lower.replace("mbti", "").replace("유형", "").replace("설명", "").strip().upper()
-#         if specific_type in mbti_descriptions:
-#             result = f"### 🎭 {specific_type} 한 줄 설명\n- ✅ **{specific_type}** {mbti_descriptions[specific_type]}"
-#         else:
-#             result = mbti_full_description
-#     elif query_type == "multi_iq":
-#         result = (
-#             "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
-#             "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
-#             "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
-#         )
-#     elif query_type == "multi_iq_types":
-#         specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("유형", "").replace("설명", "").strip().replace(" ", "")
-#         if specific_type in multi_iq_descriptions:
-#             result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 한 줄 설명\n- 📖 **{specific_type.replace('지능', ' 지능')}** {multi_iq_descriptions[specific_type]['description']}"
-#         else:
-#             result = multi_iq_full_description
-#     elif query_type == "multi_iq_jobs":
-#         specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("직업", "").replace("추천", "").strip().replace(" ", "")
-#         if specific_type in multi_iq_descriptions:
-#             result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 추천 직업\n- 📖 **{specific_type.replace('지능', ' 지능')}**: {multi_iq_descriptions[specific_type]['description']}- **추천 직업**: {multi_iq_descriptions[specific_type]['jobs']}"
-#         else:
-#             result = multi_iq_full_description
-#     elif query_type == "multi_iq_full":
-#         result = multi_iq_full_description
-#     elif query_type == "conversation":
-#         if query_lower in GREETINGS:
-#             result = GREETING_RESPONSE
-#         else:
-#             result = asyncio.run(get_conversational_response(query, st.session_state.messages))
-#     else:
-#         result = "아직 지원하지 않는 기능이에요. 😅"
-    
-#     cache_handler.setex(cache_key, 600, result)
-#     return result
-
 def process_query(query):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
@@ -933,14 +822,6 @@ def handle_user_input():
 
 def show_login_page():
     st.title("로그인 🤗")
-    
-    # 🔴 로그인 성공 상태 표시
-    if st.session_state.get('show_welcome'):
-        st.success(f"환영합니다, {st.session_state.get('welcome_name', '')}님! 🎉")
-        del st.session_state.show_welcome
-        if 'welcome_name' in st.session_state:
-            del st.session_state.welcome_name
-    
     with st.form("login_form"):
         nickname = st.text_input("닉네임", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")
@@ -953,9 +834,11 @@ def show_login_page():
                 st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 도움말도 활용해 보세요 😊"}]
                 st.session_state.session_id = str(uuid.uuid4())
                 
-                # 🔴 성공 메시지를 세션에 저장
-                st.session_state.show_welcome = True
-                st.session_state.welcome_name = nickname
+                # 성공 메시지 표시 후 즉시 상태 삭제
+                st.success(f"환영합니다, {nickname}님! 🎉")
+                del st.session_state.show_welcome
+                if 'welcome_name' in st.session_state:
+                    del st.session_state.welcome_name
                 st.rerun()
             except Exception:
                 st.error("로그인 중 오류가 발생했습니다. 다시 시도해주세요.")
