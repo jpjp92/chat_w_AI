@@ -175,12 +175,12 @@ class WeatherAPI:
         weather_emoji = self.get_weather_emoji(data['weather'][0]['icon'])
         
         return (
-            f"현재 {display_name} 날씨 {weather_emoji}\n"
-            f"날씨: {weather_desc}\n"
-            f"온도: {temp}°C\n"
-            f"체감: {feels_like}°C\n"
-            f"습도: {humidity}%\n"
-            f"풍속: {wind_speed}m/s\n"
+            f"현재 {display_name} 날씨 {weather_emoji}\n\n"
+            f"날씨: {weather_desc}\n\n"
+            f"온도: {temp}°C\n\n"
+            f"체감: {feels_like}°C\n\n"
+            f"습도: {humidity}%\n\n"
+            f"풍속: {wind_speed}m/s\n\n"
             f"더 궁금한 점 있나요? 😊"
         )
     
@@ -203,12 +203,12 @@ class WeatherAPI:
         weather_emoji = self.get_weather_emoji(tomorrow_forecast['weather'][0]['icon'])
         
         return (
-            f"내일 {display_name} 날씨 {weather_emoji}\n"
-            f"날씨: {weather_desc}\n"
-            f"최고: {temp_max}°C\n"
-            f"최저: {temp_min}°C\n"
-            f"습도: {humidity}%\n"
-            f"풍속: {wind_speed}m/s\n"
+            f"내일 {display_name} 날씨 {weather_emoji}\n\n"
+            f"날씨: {weather_desc}\n\n"
+            f"최고: {temp_max}°C\n\n"
+            f"최저: {temp_min}°C\n\n"
+            f"습도: {humidity}%\n\n"
+            f"풍속: {wind_speed}m/s\n\n"
             f"더 궁금한 점 있나요? 😊"
         )
     
