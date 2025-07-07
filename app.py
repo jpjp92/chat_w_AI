@@ -617,18 +617,6 @@ def show_chat_dashboard():
             - "챔피언스리그 토너먼트"
             """)
         
-        # 성격 검사 안내
-        with st.expander("🧠 성격 유형 검사"):
-            st.markdown("""
-            **MBTI** ✨
-            - "MBTI 검사", "MBTI 유형", "MBTI 설명"
-            - 예: "MBTI 검사", "INTJ 설명"
-            
-            **다중지능** 🎉
-            - "다중지능 검사", "다중지능 유형", "다중지능 직업"
-            - 예: "다중지능 검사", "언어지능 직업"
-            """)
-        
         # 사용 팁
         with st.expander("💡 사용 팁"):
             st.markdown("""
