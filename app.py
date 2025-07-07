@@ -211,24 +211,56 @@ def create_or_get_user(nickname):
     new_user = supabase.table("users").insert({"nickname": nickname, "created_at": datetime.now().isoformat()}).execute()
     return new_user.data[0]["id"], False
 
-def save_chat_history(user_id, session_id, question, answer, time_taken):
-    if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-        answer_to_save = {
-            "header": answer["header"],
-            "table": answer["table"].to_dict(orient="records"),
-            "footer": answer["footer"]
-        }
-    else:
-        answer_to_save = answer
+# def save_chat_history(user_id, session_id, question, answer, time_taken):
+#     if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
+#         answer_to_save = {
+#             "header": answer["header"],
+#             "table": answer["table"].to_dict(orient="records"),
+#             "footer": answer["footer"]
+#         }
+#     else:
+#         answer_to_save = answer
     
-    supabase.table("chat_history").insert({
-        "user_id": user_id,
-        "session_id": session_id,
-        "question": question,
-        "answer": answer_to_save,
-        "time_taken": time_taken,
-        "created_at": datetime.now().isoformat()
-    }).execute()
+#     supabase.table("chat_history").insert({
+#         "user_id": user_id,
+#         "session_id": session_id,
+#         "question": question,
+#         "answer": answer_to_save,
+#         "time_taken": time_taken,
+#         "created_at": datetime.now().isoformat()
+#     }).execute()
+
+def save_chat_history(user_id, session_id, question, answer, time_taken):
+    try:
+        # answer가 딕셔너리이고 table 키에 DataFrame이 포함된 경우
+        if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
+            answer_to_save = {
+                "header": answer["header"],
+                "table": answer["table"].to_dict(orient="records"),
+                "footer": answer["footer"]
+            }
+        # answer가 딕셔너리이지만 table이 DataFrame이 아닌 경우
+        elif isinstance(answer, dict):
+            answer_to_save = answer
+        # answer가 DataFrame인 경우
+        elif isinstance(answer, pd.DataFrame):
+            answer_to_save = answer.to_dict(orient="records")
+        # 그 외의 경우 (문자열 등)
+        else:
+            answer_to_save = answer
+
+        logger.info(f"Saving chat history: user_id={user_id}, session_id={session_id}, question={question}, answer_type={type(answer_to_save)}")
+        
+        supabase.table("chat_history").insert({
+            "user_id": user_id,
+            "session_id": session_id,
+            "question": question,
+            "answer": answer_to_save,
+            "time_taken": time_taken,
+            "created_at": datetime.now().isoformat()
+        }).execute()
+    except Exception as e:
+        logger.error(f"Failed to save chat history: {str(e)}", exc_info=True)
 
 def async_save_chat_history(user_id, session_id, question, answer, time_taken):
     threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
@@ -505,17 +537,13 @@ def process_query(query):
         return result
     
     # 날씨 관련 쿼리
-    elif "내일" in query_lower and "날씨" in query_lower:
-        result = weather_api.get_forecast_by_day(extract_city_from_query(query), 1)
-        cache_handler.setex(cache_key, 600, result)
-        return result
     elif "날씨" in query_lower:
-        result = weather_api.get_city_weather(extract_city_from_query(query))
+        result = weather_api.get_forecast_by_day(extract_city_from_query(query), 1) if "내일" in query_lower else weather_api.get_city_weather(extract_city_from_query(query))
         cache_handler.setex(cache_key, 600, result)
         return result
     
     # 시간 관련 쿼리
-    elif "시간" in query_lower or "현재" in query_lower or "날짜" in query_lower:
+    elif "시간" in query_lower or "날짜" in query_lower:
         if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
             result = get_kst_time()
             cache_handler.setex(cache_key, 600, result)
@@ -529,9 +557,15 @@ def process_query(query):
     # 축구 리그 순위
     elif "리그순위" in query_lower:
         league_key = extract_league_from_query(query)
-        if league_key:
+        if league_key in LEAGUE_MAPPING:
             league_info = LEAGUE_MAPPING[league_key]
             result = football_api.fetch_league_standings(league_info["code"], league_info["name"])
+            if "error" not in result:
+                result = {
+                    "header": f"### {result['league_name']} 리그 순위 🏆",
+                    "table": result["data"].to_dict(orient="records"),  # DataFrame을 즉시 직렬화
+                    "footer": "더 궁금한 점 있나요? 😊"
+                }
             cache_handler.setex(cache_key, 600, result)
             return result
         else:
@@ -542,9 +576,15 @@ def process_query(query):
     # 축구 득점 순위
     elif "득점순위" in query_lower:
         league_key = extract_league_from_query(query)
-        if league_key:
+        if league_key in LEAGUE_MAPPING:
             league_info = LEAGUE_MAPPING[league_key]
             result = football_api.fetch_league_scorers(league_info["code"], league_info["name"])
+            if "error" not in result:
+                result = {
+                    "header": f"### {result['league_name']} 득점 순위 ⚽ (상위 10명)",
+                    "table": result["data"].to_dict(orient="records"),  # DataFrame을 즉시 직렬화
+                    "footer": "더 궁금한 점 있나요? 😊"
+                }
             cache_handler.setex(cache_key, 600, result)
             return result
         else:
@@ -555,6 +595,12 @@ def process_query(query):
     # 챔피언스리그 관련
     elif "챔피언스리그" in query_lower or "ucl" in query_lower:
         result = football_api.fetch_championsleague_knockout_matches()
+        if isinstance(result, list) and result:
+            result = {
+                "header": "### 챔피언스리그 Knockout Stage 결과 🏅",
+                "table": result,  # 이미 직렬화 가능한 리스트
+                "footer": "더 궁금한 점 있나요? 😊"
+            }
         cache_handler.setex(cache_key, 600, result)
         return result
     
@@ -625,7 +671,7 @@ def process_query(query):
     elif query_type == "multi_iq_jobs":
         specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("직업", "").replace("추천", "").strip().replace(" ", "")
         if specific_type in multi_iq_descriptions:
-            result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 추천 직업\n- 📖 **{specific_type.replace('지능', ' 지능')}**: {multi_iq_descriptions[specific_type]['description']}- **추천 직업**: {multi_iq_descriptions[specific_type]['jobs']}"
+            result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 추천 직업\n- 📖 **{specific_type.replace('지능', ' 지능')}**: {multi_iq_descriptions[specific_type]['description']}\n- **추천 직업**: {multi_iq_descriptions[specific_type]['jobs']}"
         else:
             result = multi_iq_full_description
         cache_handler.setex(cache_key, 600, result)
