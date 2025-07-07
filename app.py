@@ -394,10 +394,10 @@ def process_query(query):
         return result
     
     # 날씨 관련 쿼리
-    elif "날씨" in query_lower:
-        return weather_api.get_city_weather(extract_city_from_query(query))
     elif "내일" in query_lower and "날씨" in query_lower:
         return weather_api.get_forecast_by_day(extract_city_from_query(query), 1)
+    elif "날씨" in query_lower:
+        return weather_api.get_city_weather(extract_city_from_query(query))
     
     # 시간 관련 쿼리
     elif "시간" in query_lower or "현재" in query_lower or "날짜" in query_lower:
