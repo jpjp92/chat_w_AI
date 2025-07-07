@@ -152,3 +152,13 @@ class FootballAPI:
             return results
         except Exception as e:
             return f"챔피언스리그 토너먼트 경기 결과를 가져오는 중 오류: {str(e)}"
+
+
+LEAGUE_MAPPING = {
+    "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
+    "laliga": {"name": "라리가 (스페인)", "code": "PD"},
+    "bundesliga": {"name": "분데스리가 (독일)", "code": "BL1"},
+    "seriea": {"name": "세리에 A (이탈리아)", "code": "SA"},
+    "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"},
+    "championsleague": {"name": "챔피언스 리그", "code": "CL"}
+}
