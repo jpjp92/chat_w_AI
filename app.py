@@ -174,7 +174,7 @@ drug_api = apis['drug']
 paper_search_api = apis['paper_search']
 culture_event_api = apis['culture_event']
 web_search_api = apis['web_search']
-drug_store_api = apis['drug_store']  
+drug_store_api = apis['drug_store']  # 🔴 추가
 
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
@@ -725,11 +725,14 @@ def handle_user_input():
         st.session_state.messages.append({"role": "user", "content": user_prompt})
         with st.chat_message("user"):
             st.markdown(user_prompt)
+
         with st.chat_message("assistant"):
             placeholder = st.empty()
             placeholder.markdown("답변을 준비하고 있습니다... 🤔")
+            
             try:
                 start_time = time.time()
+                
                 # 후속 질문인지 확인
                 if is_followup_question(user_prompt) and st.session_state.current_context:
                     response = asyncio.run(get_conversational_response(user_prompt, st.session_state.messages))
@@ -737,16 +740,21 @@ def handle_user_input():
                     if needs_search(user_prompt) is None:
                         st.session_state.current_context = None
                     response = process_query(user_prompt)
+                
                 end_time = time.time()
                 time_taken = end_time - start_time
+                
                 placeholder.empty()
+                
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(response["header"])
                     st.dataframe(response["table"])
                     st.markdown(response["footer"])
                 else:
                     st.markdown(response, unsafe_allow_html=True)
+                
                 st.session_state.messages.append({"role": "assistant", "content": response})
+                
                 # 비동기로 채팅 기록 저장
                 async_save_chat_history(
                     st.session_state.user_id,
@@ -755,6 +763,7 @@ def handle_user_input():
                     response,
                     time_taken
                 )
+                
             except Exception as e:
                 placeholder.empty()
                 error_msg = f"응답을 준비하다 문제: {str(e)} 😓"
@@ -776,13 +785,19 @@ def show_login_page():
                 st.session_state.client = client
                 st.session_state.provider_name = provider_name
                 st.session_state.provider_initialized = True
-                st.success("AI 연결 준비 완료! 🚀")
+                st.success("준비 완료! 🚀")
         except queue.Empty:
-            pass  # 아직 초기화 중
+            st.info("서버 연결 준비 중입니다. 잠시만 기다려주세요 🙂")
+
+    # provider가 준비될 때까지 로그인 폼 비활성화
+    login_disabled = not st.session_state.provider_initialized
+
     with st.form("login_form"):
-        nickname = st.text_input("닉네임", placeholder="예: 후안")
-        submit_button = st.form_submit_button("시작하기 🚀")
-        if submit_button and nickname:
+        nickname = st.text_input("닉네임", placeholder="예: 후안", disabled=login_disabled)
+        submit_button = st.form_submit_button("시작하기 🚀", disabled=login_disabled)
+        if login_disabled:
+            # st.warning("AI 연결이 완료될 때까지 기다려주세요.")
+        elif submit_button and nickname:
             try:
                 user_id, is_existing = create_or_get_user(nickname)
                 st.session_state.user_id = user_id
