@@ -777,7 +777,8 @@ def show_login_page():
     if "async_init_started" not in st.session_state:
         st.session_state.async_init_started = True
         st.session_state.provider_queue = init_provider_async()
-    # 백그라운드 초기화 상태 확인
+
+    # provider 준비 안 됐으면 스피너만 보여주고 return
     if hasattr(st.session_state, 'provider_queue') and not st.session_state.provider_initialized:
         try:
             client, provider_name = st.session_state.provider_queue.get_nowait()
@@ -786,19 +787,17 @@ def show_login_page():
                 st.session_state.provider_name = provider_name
                 st.session_state.provider_initialized = True
                 st.success("준비 완료! 🚀")
-                st.rerun()  # provider 준비 후 즉시 rerun
+                st.rerun()
         except queue.Empty:
             with st.spinner("서버 연결 중입니다. 잠시만 기다려주세요 🙂⏳"):
-                pass  # 안내 메시지는 spinner에만 표시
+                st.empty()  # 아무것도 렌더링하지 않음
+            return  # 폼을 렌더링하지 않고 함수 종료
 
-    login_disabled = not st.session_state.provider_initialized
-
+    # provider가 준비된 경우에만 폼 렌더링
     with st.form("login_form"):
-        nickname = st.text_input("닉네임", placeholder="예: 후안", disabled=login_disabled)
-        submit_button = st.form_submit_button("시작하기 🚀", disabled=login_disabled)
-        if login_disabled:
-            pass  # 별도 안내 메시지 없이 spinner만 사용
-        elif submit_button and nickname:
+        nickname = st.text_input("닉네임", placeholder="예: 후안")
+        submit_button = st.form_submit_button("시작하기 🚀")
+        if submit_button and nickname:
             try:
                 user_id, is_existing = create_or_get_user(nickname)
                 st.session_state.user_id = user_id
