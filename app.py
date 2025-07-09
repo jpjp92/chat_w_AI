@@ -796,7 +796,7 @@ def show_login_page():
         nickname = st.text_input("닉네임", placeholder="예: 후안", disabled=login_disabled)
         submit_button = st.form_submit_button("시작하기 🚀", disabled=login_disabled)
         if login_disabled:
-            # st.warning("AI 연결이 완료될 때까지 기다려주세요.")
+            st.warning("AI 연결이 완료될 때까지 기다려주세요.🙏")
         elif submit_button and nickname:
             try:
                 user_id, is_existing = create_or_get_user(nickname)
