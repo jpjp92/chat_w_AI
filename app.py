@@ -1,7 +1,6 @@
 # set lib
 from config.imports import *
 from config.env import *
-# from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 # Import utils modules
 from utils.webpage_analyzer import (
@@ -27,7 +26,7 @@ from utils.query_analyzer import (
     is_paper_search,
     extract_keywords_for_paper_search,
     is_time_query,
-    is_pharmacy_search,  # 🔴 추가
+    is_pharmacy_search,  
     LEAGUE_MAPPING
 )
 # Import weather, football, drug, paper search, culture event, and web search modules
@@ -37,7 +36,7 @@ from utils.drug_info import DrugAPI
 from utils.paper_search import PaperSearchAPI
 from utils.culture_event import CultureEventAPI
 from utils.web_search import WebSearchAPI
-from utils.drug_store import DrugStoreAPI  # 🔴 추가
+from utils.drug_store import DrugStoreAPI  
 
 # set logger
 logging.basicConfig(level=logging.INFO)  # 디버깅을 위해 INFO 레벨로 변경
@@ -175,7 +174,7 @@ drug_api = apis['drug']
 paper_search_api = apis['paper_search']
 culture_event_api = apis['culture_event']
 web_search_api = apis['web_search']
-drug_store_api = apis['drug_store']  # 🔴 추가
+drug_store_api = apis['drug_store']  
 
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
@@ -189,90 +188,59 @@ def init_session_state():
         st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?😊"}]
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-    
-    # 🔴 client와 provider는 한 번만 초기화
-    if "client" not in st.session_state or "provider_name" not in st.session_state:
-        client, provider_name = select_random_available_provider()
-        st.session_state.client = client
-        st.session_state.provider_name = provider_name
-        logger.info(f"세션 초기화 - 선택된 프로바이더: {provider_name}")
-    
-    # 검색 결과 컨텍스트 저장을 위한 변수 추가
+    # Provider 관련 상태를 지연 로딩으로 변경
+    if "client" not in st.session_state:
+        st.session_state.client = None
+    if "provider_name" not in st.session_state:
+        st.session_state.provider_name = None
+    if "provider_initialized" not in st.session_state:
+        st.session_state.provider_initialized = False
+    # 검색 결과 컨텍스트 저장을 위한 변수
     if "search_contexts" not in st.session_state:
         st.session_state.search_contexts = {}
     if "current_context" not in st.session_state:
         st.session_state.current_context = None
 
-# 사용자 및 채팅 기록 관리
-def create_or_get_user(nickname):
-    user = supabase.table("users").select("*").eq("nickname", nickname).execute()
-    if user.data:
-        return user.data[0]["id"], True
-    new_user = supabase.table("users").insert({"nickname": nickname, "created_at": datetime.now().isoformat()}).execute()
-    return new_user.data[0]["id"], False
+def ensure_provider_initialized():
+    """필요할 때만 provider를 초기화합니다."""
+    if not st.session_state.provider_initialized:
+        try:
+            with st.spinner("AI 연결 준비 중..."):
+                client, provider_name = select_random_available_provider()
+                st.session_state.client = client
+                st.session_state.provider_name = provider_name
+                st.session_state.provider_initialized = True
+                logger.info(f"Provider 초기화 완료: {provider_name}")
+        except Exception as e:
+            logger.error(f"Provider 초기화 실패: {str(e)}")
+            st.error("AI 연결에 실패했습니다. 새로고침 후 다시 시도해주세요.")
+            return False
+    return True
 
-# def save_chat_history(user_id, session_id, question, answer, time_taken):
-#     if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-#         answer_to_save = {
-#             "header": answer["header"],
-#             "table": answer["table"].to_dict(orient="records"),
-#             "footer": answer["footer"]
-#         }
-#     else:
-#         answer_to_save = answer
-    
-#     supabase.table("chat_history").insert({
-#         "user_id": user_id,
-#         "session_id": session_id,
-#         "question": question,
-#         "answer": answer_to_save,
-#         "time_taken": time_taken,
-#         "created_at": datetime.now().isoformat()
-#     }).execute()
+def init_provider_async():
+    """백그라운드에서 provider를 초기화합니다."""
+    def _init_provider():
+        try:
+            client, provider_name = select_random_available_provider()
+            return client, provider_name
+        except Exception as e:
+            logger.error(f"비동기 provider 초기화 실패: {str(e)}")
+            return None, None
 
-def save_chat_history(user_id, session_id, question, answer, time_taken):
-    try:
-        # answer가 딕셔너리이고 table 키에 DataFrame이 포함된 경우
-        if isinstance(answer, dict) and "table" in answer and isinstance(answer["table"], pd.DataFrame):
-            answer_to_save = {
-                "header": answer["header"],
-                "table": answer["table"].to_dict(orient="records"),
-                "footer": answer["footer"]
-            }
-        # answer가 딕셔너리이지만 table이 DataFrame이 아닌 경우
-        elif isinstance(answer, dict):
-            answer_to_save = answer
-        # answer가 DataFrame인 경우
-        elif isinstance(answer, pd.DataFrame):
-            answer_to_save = answer.to_dict(orient="records")
-        # 그 외의 경우 (문자열 등)
-        else:
-            answer_to_save = answer
+    result_queue = queue.Queue()
+    def worker():
+        result = _init_provider()
+        result_queue.put(result)
+    thread = threading.Thread(target=worker)
+    thread.daemon = True
+    thread.start()
+    return result_queue
 
-        logger.info(f"Saving chat history: user_id={user_id}, session_id={session_id}, question={question}, answer_type={type(answer_to_save)}")
-        
-        supabase.table("chat_history").insert({
-            "user_id": user_id,
-            "session_id": session_id,
-            "question": question,
-            "answer": answer_to_save,
-            "time_taken": time_taken,
-            "created_at": datetime.now().isoformat()
-        }).execute()
-    except Exception as e:
-        logger.error(f"Failed to save chat history: {str(e)}", exc_info=True)
-
-def async_save_chat_history(user_id, session_id, question, answer, time_taken):
-    threading.Thread(target=save_chat_history, args=(user_id, session_id, question, answer, time_taken)).start()
-
-# 대화형 응답 (비동기)
-conversation_cache = MemoryCache()
-_client_instance = None
-
-# 대화형 응답 함수 수정
 async def get_conversational_response(query, chat_history):
     logger.info(f"대화형 응답 시작 - 쿼리: '{query}'")
-    
+    # provider 초기화 확인
+    if not ensure_provider_initialized():
+        return "AI 연결에 문제가 있습니다. 잠시 후 다시 시도해주세요."
     # 캐시 확인
     cache_key = f"conv:{needs_search(query)}:{query}"
     cached = conversation_cache.get(cache_key)
@@ -751,17 +719,17 @@ def display_chat_messages():
 def handle_user_input():
     """사용자 입력 처리"""
     if user_prompt := st.chat_input("질문해 주세요!"):
+        # 첫 번째 질문 시 provider 초기화 확인
+        if not ensure_provider_initialized():
+            return
         st.session_state.messages.append({"role": "user", "content": user_prompt})
         with st.chat_message("user"):
             st.markdown(user_prompt)
-
         with st.chat_message("assistant"):
             placeholder = st.empty()
             placeholder.markdown("답변을 준비하고 있습니다... 🤔")
-            
             try:
                 start_time = time.time()
-                
                 # 후속 질문인지 확인
                 if is_followup_question(user_prompt) and st.session_state.current_context:
                     response = asyncio.run(get_conversational_response(user_prompt, st.session_state.messages))
@@ -769,21 +737,16 @@ def handle_user_input():
                     if needs_search(user_prompt) is None:
                         st.session_state.current_context = None
                     response = process_query(user_prompt)
-                
                 end_time = time.time()
                 time_taken = end_time - start_time
-                
                 placeholder.empty()
-                
                 if isinstance(response, dict) and "table" in response:
                     st.markdown(response["header"])
                     st.dataframe(response["table"])
                     st.markdown(response["footer"])
                 else:
                     st.markdown(response, unsafe_allow_html=True)
-                
                 st.session_state.messages.append({"role": "assistant", "content": response})
-                
                 # 비동기로 채팅 기록 저장
                 async_save_chat_history(
                     st.session_state.user_id,
@@ -792,7 +755,6 @@ def handle_user_input():
                     response,
                     time_taken
                 )
-                
             except Exception as e:
                 placeholder.empty()
                 error_msg = f"응답을 준비하다 문제: {str(e)} 😓"
@@ -802,10 +764,24 @@ def handle_user_input():
 
 def show_login_page():
     st.title("로그인 🤗")
+    # 백그라운드 초기화 시작
+    if "async_init_started" not in st.session_state:
+        st.session_state.async_init_started = True
+        st.session_state.provider_queue = init_provider_async()
+    # 백그라운드 초기화 상태 확인
+    if hasattr(st.session_state, 'provider_queue') and not st.session_state.provider_initialized:
+        try:
+            client, provider_name = st.session_state.provider_queue.get_nowait()
+            if client is not None:
+                st.session_state.client = client
+                st.session_state.provider_name = provider_name
+                st.session_state.provider_initialized = True
+                st.success("AI 연결 준비 완료! 🚀")
+        except queue.Empty:
+            pass  # 아직 초기화 중
     with st.form("login_form"):
         nickname = st.text_input("닉네임", placeholder="예: 후안")
         submit_button = st.form_submit_button("시작하기 🚀")
-
         if submit_button and nickname:
             try:
                 user_id, is_existing = create_or_get_user(nickname)
@@ -813,8 +789,6 @@ def show_login_page():
                 st.session_state.is_logged_in = True
                 st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요? 도움말도 활용해 보세요 😊"}]
                 st.session_state.session_id = str(uuid.uuid4())
-                
-                # ✅ 수정된 부분: 불필요한 상태 삭제 제거
                 st.success(f"환영합니다, {nickname}님! 🎉")
                 st.rerun()
             except Exception:
