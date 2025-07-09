@@ -786,17 +786,18 @@ def show_login_page():
                 st.session_state.provider_name = provider_name
                 st.session_state.provider_initialized = True
                 st.success("준비 완료! 🚀")
+                st.rerun()  # provider 준비 후 즉시 rerun
         except queue.Empty:
-            st.info("서버 연결 준비 중입니다. 잠시만 기다려주세요 🙂")
+            with st.spinner("서버 연결 중입니다. 잠시만 기다려주세요 🙂⏳"):
+                pass  # 안내 메시지는 spinner에만 표시
 
-    # provider가 준비될 때까지 로그인 폼 비활성화
     login_disabled = not st.session_state.provider_initialized
 
     with st.form("login_form"):
         nickname = st.text_input("닉네임", placeholder="예: 후안", disabled=login_disabled)
         submit_button = st.form_submit_button("시작하기 🚀", disabled=login_disabled)
         if login_disabled:
-            st.warning("AI 연결이 완료될 때까지 기다려주세요.🙏")
+            pass  # 별도 안내 메시지 없이 spinner만 사용
         elif submit_button and nickname:
             try:
                 user_id, is_existing = create_or_get_user(nickname)
