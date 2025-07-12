@@ -852,25 +852,99 @@ class SeoulHospitalAPI:
         
         return None
 
-    def _extract_hospital_name(self, query):
-        keywords_to_remove = ["병원", "의원", "치과", "한방", "한의원", "종합병원", "병원명", "병원검색", "병원정보", "서울시", "검색"]
-        cleaned_query = query
-        for keyword in keywords_to_remove:
-            cleaned_query = cleaned_query.replace(keyword, "")
-        cleaned_query = cleaned_query.strip()
+    # def _extract_hospital_name(self, query):
+    #     keywords_to_remove = ["병원", "의원", "치과", "한방", "한의원", "종합병원", "병원명", "병원검색", "병원정보", "서울시", "검색"]
+    #     cleaned_query = query
+    #     for keyword in keywords_to_remove:
+    #         cleaned_query = cleaned_query.replace(keyword, "")
+    #     cleaned_query = cleaned_query.strip()
         
+    #     district = self._extract_district(query)
+    #     if district:
+    #         cleaned_query = cleaned_query.replace(district, "")
+        
+    #     hospital_type = self._extract_hospital_type(query)
+    #     if hospital_type:
+    #         cleaned_query = cleaned_query.replace(hospital_type, "")
+        
+    #     cleaned_query = cleaned_query.strip()
+    #     if len(cleaned_query) < 2:
+    #         return None
+    #     return cleaned_query
+    def _extract_hospital_name(self, query):
+        """
+        병원명 추출 (수정된 로직)
+        """
+        # 지역구와 병원 타입을 먼저 추출
         district = self._extract_district(query)
+        hospital_type = self._extract_hospital_type(query)
+        
+        # 원본 쿼리에서 지역구와 병원 타입 제거
+        cleaned_query = query
         if district:
             cleaned_query = cleaned_query.replace(district, "")
-        
-        hospital_type = self._extract_hospital_type(query)
         if hospital_type:
             cleaned_query = cleaned_query.replace(hospital_type, "")
         
-        cleaned_query = cleaned_query.strip()
+        # 검색 관련 키워드만 제거 (의료 관련 용어는 보존)
+        search_keywords = ["검색", "찾기", "조회", "정보", "서울시"]
+        for keyword in search_keywords:
+            cleaned_query = cleaned_query.replace(keyword, "")
+        
+        # 페이지 번호 제거
+        page_patterns = [r'\d+페이지', r'\d+번째', r'페이지\s*\d+', r'\d+p']
+        for pattern in page_patterns:
+            cleaned_query = re.sub(pattern, '', cleaned_query)
+        
+        # 공백 정리
+        cleaned_query = ' '.join(cleaned_query.split())
+        
+        # 의미있는 병원명이 남았는지 확인
+        # 너무 짧거나 일반적인 단어면 None 반환
         if len(cleaned_query) < 2:
             return None
+        
+        # 단순한 지역구명이나 병원 타입만 남은 경우 None 반환
+        if cleaned_query in ["병원", "의원", "치과", "한의원", "종합", "전문"]:
+            return None
+        
         return cleaned_query
+
+def _apply_filters(self, hospitals, district, hospital_name, hospital_type):
+    """
+    클라이언트 측에서 필터링 적용 (수정된 로직)
+    """
+    filtered = hospitals
+    
+    # 지역구 필터링
+    if district:
+        filtered = [h for h in filtered if district in h.get("address", "")]
+        logger.info(f"지역구 필터링 후: {len(filtered)}개")
+    
+    # 병원 종류 필터링 (지역구 필터링 후 먼저 적용)
+    if hospital_type:
+        original_count = len(filtered)
+        
+        if hospital_type == "병원":
+            filtered = [h for h in filtered if any(keyword in h.get("type", "") for keyword in ["병원", "종합병원"])]
+        elif hospital_type == "의원":
+            filtered = [h for h in filtered if any(keyword in h.get("type", "") for keyword in ["의원", "한의원"])]
+        else:
+            filtered = [h for h in filtered if hospital_type in h.get("type", "")]
+        
+        logger.info(f"병원 종류 필터링 후: {len(filtered)}개 ('{hospital_type}' 검색)")
+    
+    # 병원명 필터링 (가장 마지막에 적용, 있을 때만)
+    if hospital_name:
+        original_count = len(filtered)
+        filtered = [h for h in filtered if hospital_name in h.get("name", "")]
+        logger.info(f"병원명 필터링 후: {len(filtered)}개 ('{hospital_name}' 검색)")
+        
+        # 병원명 필터링 결과가 0개면 경고 로그
+        if len(filtered) == 0 and original_count > 0:
+            logger.warning(f"병원명 '{hospital_name}' 필터링 결과 0개. 원래 {original_count}개에서 필터링")
+    
+    return filtered
 
     def _fetch_hospital_data(self, limit=100):
         """
