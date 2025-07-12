@@ -15,3 +15,4 @@ curl_cffi>=0.5.0
 konlpy
 soynlp
 pypdf>=3.0.0
+google-generativeai

@@ -37,6 +37,7 @@ from utils.paper_search import PaperSearchAPI
 from utils.culture_event import CultureEventAPI
 from utils.web_search import WebSearchAPI
 from utils.drug_store import DrugStoreAPI  # 🔴 추가
+from utils.hos import SeoulHospitalAPI  # 🔵 병원 API 임포트 추가
 
 # set logger
 logging.basicConfig(level=logging.INFO)  # 디버깅을 위해 INFO 레벨로 변경
@@ -160,7 +161,8 @@ def initialize_apis():
         'weather': WeatherAPI(cache_handler=cache_handler, WEATHER_API_KEY=WEATHER_API_KEY),
         'football': FootballAPI(api_key=SPORTS_API_KEY, cache_handler=cache_handler),
         'drug': DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler),
-        'drug_store': DrugStoreAPI(api_key=DRUG_STORE_KEY, cache_handler=cache_handler),  # 🔴 추가
+        'drug_store': DrugStoreAPI(api_key=DRUG_STORE_KEY, cache_handler=cache_handler),
+        'hospital': SeoulHospitalAPI(api_key=DRUG_STORE_KEY, cache_handler=cache_handler),  # 🔵 병원 API 추가
         'paper_search': PaperSearchAPI(ncbi_key=NCBI_KEY, cache_handler=cache_handler),
         'culture_event': CultureEventAPI(api_key=CULTURE_API_KEY, cache_handler=cache_handler),
         'web_search': WebSearchAPI(client_id=NAVER_CLIENT_ID, client_secret=NAVER_CLIENT_SECRET, cache_handler=cache_handler)
@@ -174,7 +176,8 @@ drug_api = apis['drug']
 paper_search_api = apis['paper_search']
 culture_event_api = apis['culture_event']
 web_search_api = apis['web_search']
-drug_store_api = apis['drug_store']  # 🔴 추가
+drug_store_api = apis['drug_store']
+hospital_api = apis['hospital']  # 🔵 병원 API 인스턴스화
 
 st.set_page_config(page_title="AI 챗봇", page_icon="🤖")
 
@@ -396,6 +399,12 @@ def process_query(query):
     # 약국 검색 케이스 추가 (최우선 처리)
     if query_type == "pharmacy_search":
         result = drug_store_api.search_pharmacies(query)
+        cache_handler.setex(cache_key, 600, result)
+        return result
+
+    # 🔵 병원 검색 케이스 추가
+    elif query_type == "hospital_search" or ("병원" in query and "약국" not in query):
+        result = hospital_api.search_hospitals(query)
         cache_handler.setex(cache_key, 600, result)
         return result
 
@@ -634,25 +643,39 @@ def show_chat_dashboard():
             
             """)
 
-        # 전문 정보 안내
-        with st.expander("🎯 전문 정보"):
+        # 전문 의약 정보 안내
+        with st.expander("🎯 전문 의약 정보"):
             st.markdown("""
             **의약품 정보** 💊
             - "약품검색 타이레놀", "약품검색 게보린"
             - 약품명, 제조사, 효능, 용법용량, 주의사항 확인 가능
             
-            **서울시 약국 정보** 🏥
+            **서울시 약국 정보** 🏪
             - "강남구 약국", "약국 검색 서초구"
             - 약국 위치, 운영시간, 연락처 확인 가능
-            
-            **논문 검색** 📚
-            - "공학논문 Transformers"
-            - "의학논문 Gene Therapy"
-            
-            **문화행사** 🎭
-            - "강남구 문화행사", "문화행사"
-            """)
 
+            **서울시 병원 정보** 🏥
+            - "강남구 병원", "병원 검색 서초구", "종합병원 강남구"
+            - 병원명, 위치, 운영시간, 응급실, 연락처 확인 가능
+            """)
+            
+        # 논문 검색 안내
+        with st.expander("📖 논문 정보"):
+            st.markdown("""
+            
+            **논문 검색** 📄
+            - 공학논문 검색: "공학논문 Transformers"
+            - 의학논문 검색: "의학논문 Gene Therapy"
+            """)
+            
+        # 문화행사 안내
+        with st.expander("🎭 문화행사 정보"):
+            st.markdown("""
+            **문화행사 검색** 🎉
+            - "강남구 문화행사", "문화행사"
+            - 서울시 및 지역별 문화 행사 정보 제공
+            """)
+        
         # 축구 정보 안내
         with st.expander("⚽ 축구 정보"):
             st.markdown("""
@@ -660,7 +683,7 @@ def show_chat_dashboard():
             - "EPL 리그순위", "라리가 리그순위"
             - "분데스리가 리그순위", "세리에A 리그순위"
             
-            **득점 순위** ⚽
+            **득점 순위** 🥅
             - "EPL 득점순위", "라리가 득점순위"
             
             **챔피언스리그** 🏅
@@ -680,7 +703,7 @@ def show_chat_dashboard():
         # 사용 팁
         with st.expander("💡 사용 팁"):
             st.markdown("""
-            **검색 후 활용** 🔍
+            **검색 후 활용 방법** 🔍
             - 검색 후 "요약해줘"
             - "첫 번째 결과 자세히 설명해줘"
             - "3번째 링크 요약해줘"
