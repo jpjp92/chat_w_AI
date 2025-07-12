@@ -17,7 +17,7 @@ class SeoulHospitalAPI:
         self.api_key = api_key
         self.cache_handler = cache_handler
 
-    def search_hospitals(self, query, limit=10):
+    def search_hospitals(self, query, limit=10000):
         """
         병의원 검색 및 정보 조회 (drug_store.py 스타일, 페이지네이션 포함)
         :param query: 검색 쿼리 (지역구, 병원명 등 포함 가능)
