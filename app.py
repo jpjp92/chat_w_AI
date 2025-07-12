@@ -36,8 +36,8 @@ from utils.drug_info import DrugAPI
 from utils.paper_search import PaperSearchAPI
 from utils.culture_event import CultureEventAPI
 from utils.web_search import WebSearchAPI
-from utils.drug_store import DrugStoreAPI  # 🔴 추가
-from utils.hos import SeoulHospitalAPI  # 🔵 병원 API 임포트 추가
+from utils.drug_store import DrugStoreAPI  
+from utils.hos import SeoulHospitalAPI
 
 # set logger
 logging.basicConfig(level=logging.INFO)  # 디버깅을 위해 INFO 레벨로 변경
@@ -162,7 +162,7 @@ def initialize_apis():
         'football': FootballAPI(api_key=SPORTS_API_KEY, cache_handler=cache_handler),
         'drug': DrugAPI(api_key=DRUG_API_KEY, cache_handler=cache_handler),
         'drug_store': DrugStoreAPI(api_key=DRUG_STORE_KEY, cache_handler=cache_handler),
-        'hospital': SeoulHospitalAPI(api_key=DRUG_STORE_KEY, cache_handler=cache_handler),  # 🔵 병원 API 추가
+        'hospital': SeoulHospitalAPI(api_key=HOSPITAL_KEY, cache_handler=cache_handler),  # 🔵 병원 API 추가
         'paper_search': PaperSearchAPI(ncbi_key=NCBI_KEY, cache_handler=cache_handler),
         'culture_event': CultureEventAPI(api_key=CULTURE_API_KEY, cache_handler=cache_handler),
         'web_search': WebSearchAPI(client_id=NAVER_CLIENT_ID, client_secret=NAVER_CLIENT_SECRET, cache_handler=cache_handler)
