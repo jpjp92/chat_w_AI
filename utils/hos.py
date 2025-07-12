@@ -17,7 +17,7 @@ class SeoulHospitalAPI:
         self.api_key = api_key
         self.cache_handler = cache_handler
 
-    def search_hospitals(self, query, limit=1000):
+    def search_hospitals(self, query, limit=100):
         """
         병의원 검색 및 정보 조회 (수정버전)
         """
@@ -162,7 +162,7 @@ class SeoulHospitalAPI:
             return None
         return cleaned_query
 
-    def _fetch_hospital_data(self, limit=1000):
+    def _fetch_hospital_data(self, limit=100):
         """
         서울시 병원 데이터 조회 (필터링 제거)
         """
