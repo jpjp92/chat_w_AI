@@ -26,7 +26,7 @@ from utils.query_analyzer import (
     is_paper_search,
     extract_keywords_for_paper_search,
     is_time_query,
-    is_pharmacy_search,  # 🔴 추가
+    is_pharmacy_search,  
     LEAGUE_MAPPING
 )
 # Import weather, football, drug, paper search, culture event, and web search modules
@@ -734,7 +734,7 @@ def handle_user_input():
 
         with st.chat_message("assistant"):
             placeholder = st.empty()
-            placeholder.markdown("답변을 준비하고 있습니다... 🤔")
+            placeholder.markdown("답변을 준비하고 있습니다... 💭")
 
             try:
                 start_time = time.time()
