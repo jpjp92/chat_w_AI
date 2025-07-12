@@ -8,13 +8,13 @@ def select_best_provider_with_priority():
     """
     우선순위에 따라 가장 적합한 프로바이더를 선택합니다.
     """
-    providers = ["GeekGpt", "Liaobots"]  # 우선순위 설정
+    providers = ["Liaobots"]  # 우선순위 설정
     for provider in providers:
         try:
             client = Client(include_providers=[provider])
             # 테스트 요청 (챗봇의 역할에 맞는 메시지 사용)
             client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "당신은 친절한 AI 챗봇입니다. 사용자의 질문에 적절히 응답하세요."},
                 ]
@@ -26,14 +26,14 @@ def select_best_provider_with_priority():
     raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
 
 def select_random_available_provider():
-    providers = ["GeekGpt", "Liaobots"]
+    providers = ["Liaobots"]
     random.shuffle(providers)  # 랜덤 순서로 섞기
     for provider in providers:
         try:
             client = Client(include_providers=[provider])
             # 실제로 간단한 테스트 요청
             client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[{"role": "system", "content": "테스트 메시지입니다."}]
             )
             logger.info(f"선택된 프로바이더(랜덤): {provider}")

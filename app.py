@@ -734,7 +734,7 @@ def handle_user_input():
 
         with st.chat_message("assistant"):
             placeholder = st.empty()
-            placeholder.markdown("답변을 준비하고 있습니다... 💭")
+            placeholder.markdown("답변을 준비하고 있습니다. 💬")
 
             try:
                 start_time = time.time()
