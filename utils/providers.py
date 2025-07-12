@@ -8,7 +8,7 @@ def select_best_provider_with_priority():
     """
     우선순위에 따라 가장 적합한 프로바이더를 선택합니다.
     """
-    providers = ["GeekGpt", "Liaobots", "Raycast", "Phind"]  # 우선순위 설정
+    providers = ["GeekGpt", "Liaobots"]  # 우선순위 설정
     for provider in providers:
         try:
             client = Client(include_providers=[provider])
@@ -26,7 +26,7 @@ def select_best_provider_with_priority():
     raise RuntimeError("사용 가능한 프로바이더가 없습니다.")
 
 def select_random_available_provider():
-    providers = ["GeekGpt", "Liaobots", "Raycast"]
+    providers = ["GeekGpt", "Liaobots"]
     random.shuffle(providers)  # 랜덤 순서로 섞기
     for provider in providers:
         try:
