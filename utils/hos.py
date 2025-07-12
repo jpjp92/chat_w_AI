@@ -41,8 +41,9 @@ class SeoulHospitalAPI:
             logger.info(f"추출된 병원종류: {hospital_type}")
             logger.info(f"추출된 페이지: {page}")
 
-            # API 호출 (필터링 없이 전체 데이터를 가져옴)
-            result = self._fetch_hospital_data(limit*5)
+            # limit*5가 1000을 넘지 않도록 제한
+            fetch_limit = min(limit * 5, 1000)
+            result = self._fetch_hospital_data(fetch_limit)
             if result["status"] == "error":
                 return result["message"]
 
