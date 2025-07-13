@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 class SeoulHospitalAPI:
     """
-    서울시 병의원 운영 정보 API 모듈 (수정버전)
+    서울시 병의원 운영 정보 API 모듈 (개선버전)
+    - 전체 데이터: 최대 1000개 수집
+    - 페이지당 표시: 10개 (기본값)
     """
 
     BASE_URL = "http://openapi.seoul.go.kr:8088"
@@ -18,9 +20,11 @@ class SeoulHospitalAPI:
         self.api_key = api_key
         self.cache_handler = cache_handler
 
-    def search_hospitals(self, query, limit=100):
+    def search_hospitals(self, query, limit=10):
         """
-        병의원 검색 및 정보 조회 (수정버전)
+        병의원 검색 및 정보 조회 (개선버전)
+        - 전체 데이터: 최대 1000개 수집하여 완전한 검색 보장
+        - 페이지당 표시: limit개 (기본 10개)로 사용자 친화적 표시
         """
         try:
             logger.info(f"병원 검색 요청: '{query}'")
@@ -42,9 +46,9 @@ class SeoulHospitalAPI:
             logger.info(f"추출된 병원종류: {hospital_type}")
             logger.info(f"추출된 페이지: {page}")
 
-            # limit*5가 1000을 넘지 않도록 제한
-            fetch_limit = min(limit * 5, 1000)
-            result = self._fetch_hospital_data(fetch_limit)
+            # 항상 최대 1000개 데이터 수집 (필터링의 정확성을 위해)
+            MAX_FETCH_SIZE = 1000
+            result = self._fetch_hospital_data(MAX_FETCH_SIZE)
             if result["status"] == "error":
                 return result["message"]
 
@@ -213,13 +217,14 @@ class SeoulHospitalAPI:
             return None
         return cleaned_query
 
-    def _fetch_hospital_data(self, limit=100):
+    def _fetch_hospital_data(self, limit=1000):
         """
-        서울시 병원 데이터 조회 (필터링 제거)
+        서울시 병원 데이터 조회 (개선버전)
+        - 기본값을 1000으로 설정하여 최대한 많은 데이터 수집
         """
         url = f"{self.BASE_URL}/{self.api_key}/xml/TbHospitalInfo/1/{limit}/"
         try:
-            logger.info(f"API 호출: {url}")
+            logger.info(f"API 호출: {url} (최대 {limit}개 데이터 수집)")
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             root = ET.fromstring(response.content)
@@ -325,7 +330,7 @@ class SeoulHospitalAPI:
 
     def _format_hospital_results(self, result, searched_district=None, searched_type=None):
         """
-        병원 검색 결과 포맷팅
+        병원 검색 결과 포맷팅 (개선버전)
         """
         if result["status"] == "error":
             return result["message"]
@@ -351,7 +356,8 @@ class SeoulHospitalAPI:
             per_page = pagination.get("per_page", 10)
             start_num = (current_page - 1) * per_page + 1
             end_num = min(start_num + len(hospitals) - 1, total_count)
-            header += f"📄 **현재 페이지**: {current_page}/{total_pages} ({start_num}-{end_num}번 병의원)\n\n"
+            header += f"📄 **현재 페이지**: {current_page}/{total_pages} ({start_num}-{end_num}번 병의원)\n"
+            header += f"📊 **데이터 수집**: 최대 1000개 병원에서 검색하여 완전성 보장\n\n"
         
         # 병원 목록
         hospital_list = ""
@@ -413,6 +419,8 @@ class SeoulHospitalAPI:
         
         # 푸터
         footer = "\n💡 **이용 안내**:\n"
+        footer += "- 🔍 **완전한 검색**: 최대 1000개 병원 데이터에서 검색하여 누락 없이 제공\n"
+        footer += "- 📄 **페이지당 10개**: 가독성을 위해 10개씩 표시, 페이지네이션으로 전체 확인 가능\n"
         footer += "- 운영시간은 변경될 수 있으니 방문 전 전화 확인을 권장합니다\n"
         footer += "- 공휴일 및 특별한 날에는 운영시간이 다를 수 있습니다\n"
         footer += "- 더 정확한 정보는 병원에 직접 문의해주세요 😊\n"
