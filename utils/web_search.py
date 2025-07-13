@@ -133,7 +133,7 @@ class WebSearchAPI:
         enhanced_result += "- '검색 결과를 요약해'\n"
         enhanced_result += "- '첫 번째 결과에 대해 자세히 설명해줘'\n"
         enhanced_result += "- '3번째 링크 요약해줘' (해당 순서 웹페이지 전체 내용 요약)\n"
-        enhanced_result += "- 'URL 요약해줘' (특정 링크의 전체 내용 확인)"
+        # enhanced_result += "- 'URL 요약해줘' (특정 링크의 전체 내용 확인)"
         
         return enhanced_result
     
