@@ -551,6 +551,108 @@ def needs_search(query):
     logger.info("✅ 일반 대화로 분류됨")
     return "conversation"
 
+
+
+# @lru_cache(maxsize=100)
+# def needs_search(query):
+#     """쿼리 타입을 분석하여 적절한 검색 타입을 반환"""
+#     query_lower = query.strip().lower()
+    
+#     logger.info(f"🔍 쿼리 분석: '{query}' -> '{query_lower}'")
+    
+#     # 🔴 명시적 웹 검색 요청 (최우선 체크)
+#     if "검색해줘" in query_lower or "검색해" in query_lower:
+#         logger.info("✅ 네이버 검색으로 분류됨 (검색 키워드 명시)")
+#         return "naver_search"
+    
+#     # 🔴 약국 검색 (공공 API)
+#     if is_pharmacy_search(query):
+#         logger.info("✅ 약국 검색으로 분류됨")
+#         return "pharmacy_search"
+    
+#     # 🔴 병원 검색 (공공 API)
+#     if is_hospital_search(query):
+#         logger.info("✅ 병원 검색으로 분류됨")
+#         return "hospital_search"
+    
+#     # 🔴 문화행사 검색
+#     if "문화행사" in query_lower or "문화이벤트" in query_lower:
+#         logger.info("✅ 문화행사 검색으로 분류됨")
+#         return "cultural_event"
+    
+#     # 날씨 관련 쿼리
+#     if "날씨" in query_lower:
+#         logger.info("✅ 날씨 검색으로 분류됨")
+#         return "weather" if "내일" not in query_lower else "tomorrow_weather"
+    
+#     # 시간 관련 쿼리
+#     if "시간" in query_lower or "날짜" in query_lower:
+#         if is_time_query(query_lower):
+#             logger.info("✅ 시간 검색으로 분류됨")
+#             return "time"
+    
+#     # 축구 리그 순위
+#     if "리그순위" in query_lower:
+#         logger.info("✅ 리그순위 검색으로 분류됨")
+#         return "league_standings"
+    
+#     # 축구 득점 순위
+#     if "리그득점순위" in query_lower or "득점순위" in query_lower:
+#         logger.info("✅ 득점순위 검색으로 분류됨")
+#         return "league_scorers"
+    
+#     # 챔피언스리그 관련
+#     if ("챔피언스리그" in query_lower or "ucl" in query_lower) and (
+#         "토너먼트" in query_lower or "knockout" in query_lower or "16강" in query_lower or "8강" in query_lower or "4강" in query_lower or "결승" in query_lower):
+#         logger.info("✅ 챔피언스리그 토너먼트 검색으로 분류됨")
+#         return "cl_knockout"
+    
+#     # 약품 검색
+#     if "약품검색" in query_lower:
+#         logger.info("✅ 약품 검색으로 분류됨")
+#         return "drug"
+    
+#     # 논문 검색
+#     if "공학논문" in query_lower or "arxiv" in query_lower:
+#         logger.info("✅ 공학논문 검색으로 분류됨")
+#         return "arxiv_search"
+#     if "의학논문" in query_lower:
+#         logger.info("✅ 의학논문 검색으로 분류됨")
+#         return "pubmed_search"
+    
+#     # MBTI 관련
+#     if "mbti검사" in query_lower:
+#         logger.info("✅ MBTI 검사로 분류됨")
+#         return "mbti"
+#     if "mbti유형설명" in query_lower or "mbti유형" in query_lower or "mbti설명" in query_lower:
+#         logger.info("✅ MBTI 유형 설명으로 분류됨")
+#         return "mbti_types"
+    
+#     # 다중지능 관련
+#     if "다중지능유형설명" in query_lower or "다중지능유형" in query_lower or "다중지능설명" in query_lower or \
+#        "다중지능 유형 설명" in query.strip().lower() or "다중지능 유형" in query.strip().lower():
+#         logger.info("✅ 다중지능 유형 설명으로 분류됨")
+#         return "multi_iq_types"
+#     if "다중지능직업" in query_lower or "다중지능추천" in query_lower or \
+#        "다중지능 직업" in query.strip().lower() or "다중지능 추천" in query.strip().lower():
+#         logger.info("✅ 다중지능 직업 추천으로 분류됨")
+#         return "multi_iq_jobs"
+#     if "다중지능검사" in query_lower or "다중지능 검사" in query.strip().lower():
+#         logger.info("✅ 다중지능 검사로 분류됨")
+#         return "multi_iq"
+#     if "다중지능" in query_lower:
+#         logger.info("✅ 다중지능 전체 설명으로 분류됨")
+#         return "multi_iq_full"
+    
+#     # 인사말
+#     if any(greeting in query_lower for greeting in GREETINGS):
+#         logger.info("✅ 인사말로 분류됨")
+#         return "conversation"
+    
+#     # 기본값: 대화
+#     logger.info("✅ 일반 대화로 분류됨")
+#     return "conversation"
+
 def is_drug_inquiry(query):
     """약품 관련 질문인지 확인"""
     query_lower = query.lower().replace(" ", "")
