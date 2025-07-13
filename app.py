@@ -385,6 +385,195 @@ async def get_conversational_response(query, chat_history):
 GREETINGS = ["안녕", "하이", "헬로", "ㅎㅇ", "왓업", "할롱", "헤이"]
 GREETING_RESPONSE = "안녕하세요! 반갑습니다. 무엇을 도와드릴까요? 😊"
 
+# def process_query(query):
+#     cache_key = f"query:{hash(query)}"
+#     cached = cache_handler.get(cache_key)
+#     if cached is not None:
+#         return cached
+
+#     query_type = needs_search(query)
+#     query_lower = query.strip().lower().replace(" ", "")
+
+#     logger.info(f"🎯 쿼리 타입: {query_type}")
+
+#     # 약국 검색 케이스 추가 (최우선 처리)
+#     if query_type == "pharmacy_search":
+#         result = drug_store_api.search_pharmacies(query)
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     # 🔵 병원 검색 케이스 추가
+#     elif query_type == "hospital_search" or ("병원" in query and "약국" not in query):
+#         result = hospital_api.search_hospitals(query)
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     # 문화행사 검색 케이스 추가
+#     elif query_type == "cultural_event":
+#         result = culture_event_api.search_cultural_events(query)
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     # 날씨 관련 쿼리
+#     elif "날씨" in query_lower:
+#         result = weather_api.get_forecast_by_day(extract_city_from_query(query), 1) if "내일" in query_lower else weather_api.get_city_weather(extract_city_from_query(query))
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     # 시간 관련 쿼리
+#     elif "시간" in query_lower or "날짜" in query_lower:
+#         if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
+#             result = get_kst_time()
+#             cache_handler.setex(cache_key, 600, result)
+#             return result
+#         else:
+#             city = extract_city_from_time_query(query)
+#             result = get_time_by_city(city)
+#             cache_handler.setex(cache_key, 600, result)
+#             return result
+
+#     # 축구 리그 순위
+#     elif "리그순위" in query_lower:
+#         league_key = extract_league_from_query(query)
+#         if league_key in LEAGUE_MAPPING:
+#             league_info = LEAGUE_MAPPING[league_key]
+#             result = football_api.fetch_league_standings(league_info["code"], league_info["name"])
+#             if "error" not in result:
+#                 result = {
+#                     "header": f"### {result['league_name']} 리그 순위 🏆",
+#                     "table": result["data"].to_dict(orient="records"),  # DataFrame을 즉시 직렬화
+#                     "footer": "더 궁금한 점 있나요? 😊"
+#                 }
+#             cache_handler.setex(cache_key, 600, result)
+#             return result
+#         else:
+#             result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague"
+#             cache_handler.setex(cache_key, 600, result)
+#             return result
+
+#     # 축구 득점 순위
+#     elif "득점순위" in query_lower:
+#         league_key = extract_league_from_query(query)
+#         if league_key in LEAGUE_MAPPING:
+#             league_info = LEAGUE_MAPPING[league_key]
+#             result = football_api.fetch_league_scorers(league_info["code"], league_info["name"])
+#             if "error" not in result:
+#                 result = {
+#                     "header": f"### {result['league_name']} 득점 순위 ⚽ (상위 10명)",
+#                     "table": result["data"].to_dict(orient="records"),  # DataFrame을 즉시 직렬화
+#                     "footer": "더 궁금한 점 있나요? 😊"
+#                 }
+#             cache_handler.setex(cache_key, 600, result)
+#             return result
+#         else:
+#             result = "지원하지 않는 리그입니다. 😓 지원 리그: EPL, LaLiga, Bundesliga, Serie A, Ligue 1, ChampionsLeague"
+#             cache_handler.setex(cache_key, 600, result)
+#             return result
+
+#     # 챔피언스리그 관련
+#     elif "챔피언스리그" in query_lower or "ucl" in query_lower:
+#         result = football_api.fetch_championsleague_knockout_matches()
+#         if isinstance(result, list) and result:
+#             result = {
+#                 "header": "### 챔피언스리그 Knockout Stage 결과 🏅",
+#                 "table": result,  # 이미 직렬화 가능한 리스트
+#                 "footer": "더 궁금한 점 있나요? 😊"
+#             }
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     # 약품 검색
+#     elif is_drug_inquiry(query):
+#         result = drug_api.get_drug_info(query)
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     # 논문 검색
+#     elif "논문" in query_lower:
+#         keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
+#         result = paper_search_api.get_arxiv_papers(keywords)
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "pubmed_search":
+#         keywords = query.replace("의학논문", "").strip()
+#         result = paper_search_api.get_pubmed_papers(keywords)
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "naver_search":
+#         logger.info(f"네이버 검색 직접 호출: '{query}'")
+#         result = web_search_api.search_and_create_context(query, st.session_state)
+#         logger.info(f"검색 후 컨텍스트 상태: {st.session_state.current_context}")
+#         if hasattr(st.session_state, 'search_contexts'):
+#             logger.info(f"저장된 컨텍스트 수: {len(st.session_state.search_contexts)}")
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "mbti":
+#         result = (
+#             "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
+#             "[16Personalities MBTI 검사](https://www.16personalities.com/ko/%EB%AC%B4%EB%A3%8C-%EC%84%B1%EA%B2%A9-%EC%9C%A0%ED%98%95-%EA%B2%80%EC%82%AC) 🌟\n"
+#             "이 사이트는 16가지 성격 유형을 기반으로 한 테스트를 제공하며, 결과에 따라 성격 설명과 인간관계 조언 등을 확인할 수 있어요! 💡"
+#         )
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "mbti_types":
+#         specific_type = query_lower.replace("mbti", "").replace("유형", "").replace("설명", "").strip().upper()
+#         if specific_type in mbti_descriptions:
+#             result = f"### 🎭 {specific_type} 한 줄 설명\n- ✅ **{specific_type}** {mbti_descriptions[specific_type]}"
+#         else:
+#             result = mbti_full_description
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "multi_iq":
+#         result = (
+#             "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
+#             "[Multi IQ Test](https://multiiqtest.com/) 🚀\n"
+#             "이 사이트는 하워드 가드너의 다중지능 이론을 기반으로 한 테스트를 제공하며, 다양한 지능 영역을 평가해줍니다! 📚✨"
+#         )
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "multi_iq_types":
+#         specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("유형", "").replace("설명", "").strip().replace(" ", "")
+#         if specific_type in multi_iq_descriptions:
+#             result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 한 줄 설명\n- 📖 **{specific_type.replace('지능', ' 지능')}** {multi_iq_descriptions[specific_type]['description']}"
+#         else:
+#             result = multi_iq_full_description
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "multi_iq_jobs":
+#         specific_type = query_lower.replace("다중지능", "").replace("multi_iq", "").replace("직업", "").replace("추천", "").strip().replace(" ", "")
+#         if specific_type in multi_iq_descriptions:
+#             result = f"### 🎨 {specific_type.replace('지능', ' 지능')} 추천 직업\n- 📖 **{specific_type.replace('지능', ' 지능')}**: {multi_iq_descriptions[specific_type]['description']}\n- **추천 직업**: {multi_iq_descriptions[specific_type]['jobs']}"
+#         else:
+#             result = multi_iq_full_description
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "multi_iq_full":
+#         result = multi_iq_full_description
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     elif query_type == "conversation":
+#         if query_lower in GREETINGS:
+#             result = GREETING_RESPONSE
+#         else:
+#             result = asyncio.run(get_conversational_response(query, st.session_state.messages))
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+#     else:
+#         result = "아직 지원하지 않는 기능이에요. 😅"
+#         cache_handler.setex(cache_key, 600, result)
+#         return result
+
+
 def process_query(query):
     cache_key = f"query:{hash(query)}"
     cached = cache_handler.get(cache_key)
@@ -396,44 +585,52 @@ def process_query(query):
 
     logger.info(f"🎯 쿼리 타입: {query_type}")
 
-    # 약국 검색 케이스 추가 (최우선 처리)
+    # 약국 검색 케이스
     if query_type == "pharmacy_search":
         result = drug_store_api.search_pharmacies(query)
         cache_handler.setex(cache_key, 600, result)
         return result
 
-    # 🔵 병원 검색 케이스 추가
-    elif query_type == "hospital_search" or ("병원" in query and "약국" not in query):
+    # 🔵 병원 검색 케이스 (query_type에만 의존)
+    elif query_type == "hospital_search":
         result = hospital_api.search_hospitals(query)
         cache_handler.setex(cache_key, 600, result)
         return result
 
-    # 문화행사 검색 케이스 추가
+    # 네이버 검색 케이스
+    elif query_type == "naver_search":
+        logger.info(f"네이버 검색 직접 호출: '{query}'")
+        result = web_search_api.search_and_create_context(query, st.session_state)
+        logger.info(f"검색 후 컨텍스트 상태: {st.session_state.current_context}")
+        if hasattr(st.session_state, 'search_contexts'):
+            logger.info(f"저장된 컨텍스트 수: {len(st.session_state.search_contexts)}")
+        cache_handler.setex(cache_key, 600, result)
+        return result
+
+    # 문화행사 검색 케이스
     elif query_type == "cultural_event":
         result = culture_event_api.search_cultural_events(query)
         cache_handler.setex(cache_key, 600, result)
         return result
 
     # 날씨 관련 쿼리
-    elif "날씨" in query_lower:
-        result = weather_api.get_forecast_by_day(extract_city_from_query(query), 1) if "내일" in query_lower else weather_api.get_city_weather(extract_city_from_query(query))
+    elif query_type == "weather" or query_type == "tomorrow_weather":
+        result = weather_api.get_forecast_by_day(extract_city_from_query(query), 1) if query_type == "tomorrow_weather" else weather_api.get_city_weather(extract_city_from_query(query))
         cache_handler.setex(cache_key, 600, result)
         return result
 
     # 시간 관련 쿼리
-    elif "시간" in query_lower or "날짜" in query_lower:
+    elif query_type == "time":
         if "오늘날짜" in query_lower or "현재날짜" in query_lower or "금일날짜" in query_lower:
             result = get_kst_time()
-            cache_handler.setex(cache_key, 600, result)
-            return result
         else:
             city = extract_city_from_time_query(query)
             result = get_time_by_city(city)
-            cache_handler.setex(cache_key, 600, result)
-            return result
+        cache_handler.setex(cache_key, 600, result)
+        return result
 
     # 축구 리그 순위
-    elif "리그순위" in query_lower:
+    elif query_type == "league_standings":
         league_key = extract_league_from_query(query)
         if league_key in LEAGUE_MAPPING:
             league_info = LEAGUE_MAPPING[league_key]
@@ -441,7 +638,7 @@ def process_query(query):
             if "error" not in result:
                 result = {
                     "header": f"### {result['league_name']} 리그 순위 🏆",
-                    "table": result["data"].to_dict(orient="records"),  # DataFrame을 즉시 직렬화
+                    "table": result["data"].to_dict(orient="records"),
                     "footer": "더 궁금한 점 있나요? 😊"
                 }
             cache_handler.setex(cache_key, 600, result)
@@ -452,7 +649,7 @@ def process_query(query):
             return result
 
     # 축구 득점 순위
-    elif "득점순위" in query_lower:
+    elif query_type == "league_scorers":
         league_key = extract_league_from_query(query)
         if league_key in LEAGUE_MAPPING:
             league_info = LEAGUE_MAPPING[league_key]
@@ -460,7 +657,7 @@ def process_query(query):
             if "error" not in result:
                 result = {
                     "header": f"### {result['league_name']} 득점 순위 ⚽ (상위 10명)",
-                    "table": result["data"].to_dict(orient="records"),  # DataFrame을 즉시 직렬화
+                    "table": result["data"].to_dict(orient="records"),
                     "footer": "더 궁금한 점 있나요? 😊"
                 }
             cache_handler.setex(cache_key, 600, result)
@@ -471,25 +668,25 @@ def process_query(query):
             return result
 
     # 챔피언스리그 관련
-    elif "챔피언스리그" in query_lower or "ucl" in query_lower:
+    elif query_type == "cl_knockout":
         result = football_api.fetch_championsleague_knockout_matches()
         if isinstance(result, list) and result:
             result = {
                 "header": "### 챔피언스리그 Knockout Stage 결과 🏅",
-                "table": result,  # 이미 직렬화 가능한 리스트
+                "table": result,
                 "footer": "더 궁금한 점 있나요? 😊"
             }
         cache_handler.setex(cache_key, 600, result)
         return result
 
     # 약품 검색
-    elif is_drug_inquiry(query):
+    elif query_type == "drug":
         result = drug_api.get_drug_info(query)
         cache_handler.setex(cache_key, 600, result)
         return result
 
     # 논문 검색
-    elif "논문" in query_lower:
+    elif query_type == "arxiv_search":
         keywords = query.replace("공학논문", "").replace("arxiv", "").strip()
         result = paper_search_api.get_arxiv_papers(keywords)
         cache_handler.setex(cache_key, 600, result)
@@ -501,15 +698,7 @@ def process_query(query):
         cache_handler.setex(cache_key, 600, result)
         return result
 
-    elif query_type == "naver_search":
-        logger.info(f"네이버 검색 직접 호출: '{query}'")
-        result = web_search_api.search_and_create_context(query, st.session_state)
-        logger.info(f"검색 후 컨텍스트 상태: {st.session_state.current_context}")
-        if hasattr(st.session_state, 'search_contexts'):
-            logger.info(f"저장된 컨텍스트 수: {len(st.session_state.search_contexts)}")
-        cache_handler.setex(cache_key, 600, result)
-        return result
-
+    # MBTI 관련
     elif query_type == "mbti":
         result = (
             "MBTI 검사를 원하시나요? ✨ 아래 사이트에서 무료로 성격 유형 검사를 할 수 있어요! 😊\n"
@@ -528,6 +717,7 @@ def process_query(query):
         cache_handler.setex(cache_key, 600, result)
         return result
 
+    # 다중지능 관련
     elif query_type == "multi_iq":
         result = (
             "다중지능 검사를 원하시나요? 🎉 아래 사이트에서 무료로 다중지능 테스트를 해볼 수 있어요! 😄\n"
@@ -560,6 +750,7 @@ def process_query(query):
         cache_handler.setex(cache_key, 600, result)
         return result
 
+    # 일반 대화
     elif query_type == "conversation":
         if query_lower in GREETINGS:
             result = GREETING_RESPONSE
@@ -636,7 +827,9 @@ def show_chat_dashboard():
             
             **웹 검색** 🔍
             - "ChatGPT 사용방법 검색해줘"
+            - "강남구 약국 검색해줘"
             - 검색 후 "3번째 링크 요약해줘"
+            
             
             **웹 페이지 요약** 📝 
             - "https://www.aitimes.com 요약해줘"
