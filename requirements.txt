@@ -16,3 +16,4 @@ konlpy
 soynlp
 pypdf>=3.0.0
 google-generativeai
+youtube_transcript_api
