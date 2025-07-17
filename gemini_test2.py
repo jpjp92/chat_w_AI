@@ -755,4 +755,4 @@ if user_input:
 # <div style="text-align: center; color: #666; font-size: 14px; margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
 #     💡 <strong>팁:</strong> URL을 붙여넣고 '요약해줘', 이미지를 업로드하고 '분석해줘', 또는 자유롭게 질문해보세요!
 # </div>
-""", unsafe_allow_html=True)
+# """, unsafe_allow_html=True)
