@@ -1,4 +1,3 @@
-
 import streamlit as st
 import google.generativeai as genai
 import os
@@ -14,9 +13,7 @@ from pypdf import PdfReader
 import io
 from PIL import Image
 import base64
-from config.env import GEMINI_API_KEY  
-# from dotenv import load_dotenv
-# load_dotenv()  # .env 파일 로드
+from config.env import GEMINI_API_KEY
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +27,10 @@ st.set_page_config(
 )
 
 # --- Gemini API 설정 ---
+if not GEMINI_API_KEY:
+    st.error("❌ GEMINI_API_KEY가 설정되지 않았습니다. Streamlit Secrets 또는 config/env.py를 확인하세요.")
+    st.stop()
+
 try:
     genai.configure(api_key=GEMINI_API_KEY)
 except Exception as e:
@@ -37,7 +38,6 @@ except Exception as e:
     st.stop()
 
 # --- 기존 함수들 (이미지, 유튜브, 웹페이지, PDF 처리 등) ---
-# (기존 함수들은 그대로 유지하되, 필요 시 최적화 가능)
 def validate_image_file(uploaded_file):
     """업로드된 이미지 파일 유효성 검사"""
     supported_types = ['image/png', 'image/jpeg', 'image/webp']
@@ -565,7 +565,7 @@ def get_system_prompt(language):
         - You can provide image analysis features
         - Keep responses concise yet useful"""
 
-# --- 사이드바: 채팅 내역만 표시 ---
+# --- 사이드바: 채팅 내역 표시 ---
 with st.sidebar:
     st.markdown("### 📜 채팅 내역")
     if st.session_state.get("messages"):
@@ -577,6 +577,7 @@ with st.sidebar:
                     st.markdown(f"**Gemini**: {message['content'][:50]}...")
                 if st.button(f"대화 {idx+1} 보기", key=f"history_{idx}"):
                     st.session_state.selected_message = message
+                    # st.rerun() 제거: 선택된 메시지 표시를 메인 화면에서 처리
                 st.markdown("---")
     else:
         st.markdown("아직 대화 기록이 없습니다.")
@@ -593,17 +594,18 @@ if "system_language" not in st.session_state:
     st.session_state.system_language = "ko"
 if "uploaded_images" not in st.session_state:
     st.session_state.uploaded_images = []
+if "welcome_dismissed" not in st.session_state:
+    st.session_state.welcome_dismissed = False
 
 # Gemini 모델 초기화
 system_prompt = get_system_prompt(st.session_state.system_language)
 model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prompt)
 
 # 첫 방문 시 환영 메시지
-if not st.session_state.messages:
+if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
-    
     <div style="text-align: center; margin: 20px 0;">
-        <h4>🚀 빠른 시작 예시</h4>
+       
     </div>
     """, unsafe_allow_html=True)
     
@@ -625,13 +627,15 @@ if not st.session_state.messages:
         st.info(f"💡 예시 입력: {st.session_state.example_input}")
         st.markdown("아래 채팅 입력창에 직접 입력해보세요!")
         del st.session_state.example_input
-    # st.markdown("---")
-    # st.markdown("### 💬 대화를 시작해보세요!")
+    
+    if st.button("환영 메시지 닫기"):
+        st.session_state.welcome_dismissed = True
 
 # 채팅 기록 표시 (메인 채팅 영역)
 chat_container = st.container()
 with chat_container:
-    for message in st.session_state.messages:
+    if "selected_message" in st.session_state:
+        message = st.session_state.selected_message
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             if "images" in message and message["images"]:
@@ -640,6 +644,18 @@ with chat_container:
                     with cols[idx % 3]:
                         img = Image.open(io.BytesIO(img_data))
                         st.image(img, caption=f"이미지 {idx+1}", use_container_width=True)
+        if st.button("전체 대화 보기"):
+            del st.session_state.selected_message  # 선택 해제
+    else:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                if "images" in message and message["images"]:
+                    cols = st.columns(min(3, len(message["images"])))
+                    for idx, img_data in enumerate(message["images"]):
+                        with cols[idx % 3]:
+                            img = Image.open(io.BytesIO(img_data))
+                            st.image(img, caption=f"이미지 {idx+1}", use_container_width=True)
 
 # 하단 고정 입력 영역
 st.markdown("---")
