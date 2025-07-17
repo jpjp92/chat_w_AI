@@ -13,7 +13,7 @@ from pypdf import PdfReader
 import io
 from PIL import Image
 import base64
-from config.env import GEMINI_API_KEY
+from config.env import GEMINI_API_KEY  
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -21,12 +21,282 @@ logger = logging.getLogger(__name__)
 
 # --- 페이지 설정 ---
 st.set_page_config(
-    page_title="Chat with Gemini",
+    page_title="🚀 Gemini Chat",
     page_icon="🚀",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --- Gemini API 설정 ---
+# --- 현대적인 CSS 스타일 ---
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    * {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    .stApp {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+    }
+    
+    .main-header {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    }
+    
+    .hero-title {
+        font-size: 3rem;
+        font-weight: 700;
+        background: linear-gradient(45deg, #fff, #f0f0f0);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    
+    .hero-subtitle {
+        font-size: 1.2rem;
+        color: rgba(255, 255, 255, 0.8);
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .glass-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.2);
+        transition: all 0.3s ease;
+    }
+    
+    .glass-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px 0 rgba(31, 38, 135, 0.3);
+    }
+    
+    .feature-button {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        border: none;
+        border-radius: 12px;
+        color: white;
+        padding: 1rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    .feature-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .chat-container {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        margin-bottom: 2rem;
+    }
+    
+    .user-message {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 20px 20px 5px 20px;
+        margin: 1rem 0;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+    
+    .assistant-message {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 20px 20px 20px 5px;
+        margin: 1rem 0;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
+    }
+    
+    .sidebar-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.2);
+    }
+    
+    .status-badge {
+        background: linear-gradient(45deg, #00c9ff, #92fe9d);
+        color: #333;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-bottom: 1rem;
+    }
+    
+    .input-container {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.2);
+    }
+    
+    .tip-box {
+        background: linear-gradient(45deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-top: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.2);
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+    }
+    
+    .stTextInput > div > div > input {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+        border-radius: 10px !important;
+        color: white !important;
+    }
+    
+    .stTextInput > div > div > input::placeholder {
+        color: rgba(255, 255, 255, 0.5) !important;
+    }
+    
+    .stSelectbox > div > div > select {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+        border-radius: 10px !important;
+        color: white !important;
+    }
+    
+    .stButton > button {
+        background: linear-gradient(45deg, #667eea, #764ba2) !important;
+        border: none !important;
+        border-radius: 10px !important;
+        color: white !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
+    }
+    
+    .metric-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 1.5rem;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.2);
+    }
+    
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #00c9ff;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-label {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+    
+    .floating-element {
+        animation: float 3s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+    
+    .pulse-animation {
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    
+    .stExpander {
+        background: rgba(255, 255, 255, 0.1) !important;
+        backdrop-filter: blur(10px) !important;
+        border-radius: 15px !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    }
+    
+    .stFileUploader {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border-radius: 10px !important;
+        padding: 1rem !important;
+    }
+    
+    .stProgress > div > div {
+        background: linear-gradient(45deg, #667eea, #764ba2) !important;
+        border-radius: 10px !important;
+    }
+    
+    .stAlert {
+        background: rgba(255, 255, 255, 0.1) !important;
+        backdrop-filter: blur(10px) !important;
+        border-radius: 15px !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    }
+    
+    .stSpinner {
+        color: #00c9ff !important;
+    }
+    
+    /* 스크롤바 스타일링 */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(45deg, #764ba2, #667eea);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- API 키 설정 ---
 if not GEMINI_API_KEY:
     st.error("❌ GEMINI_API_KEY가 설정되지 않았습니다. Streamlit Secrets 또는 config/env.py를 확인하세요.")
     st.stop()
@@ -37,7 +307,7 @@ except Exception as e:
     st.error(f"❌ API 키 오류: {e}")
     st.stop()
 
-# --- 기존 함수들 (이미지, 유튜브, 웹페이지, PDF 처리 등) ---
+# --- 기존 함수들 (완성 및 유지) ---
 def validate_image_file(uploaded_file):
     """업로드된 이미지 파일 유효성 검사"""
     supported_types = ['image/png', 'image/jpeg', 'image/webp']
@@ -567,23 +837,25 @@ def get_system_prompt(language):
 
 # --- 사이드바: 채팅 내역 표시 ---
 with st.sidebar:
-    st.markdown("### 📜 채팅 내역")
+    st.markdown("### 📜 채팅 내역", unsafe_allow_html=True)
     if st.session_state.get("messages"):
         for idx, message in enumerate(st.session_state.messages):
             with st.container():
-                if message["role"] == "user":
-                    st.markdown(f"**나**: {message['content'][:50]}...")
-                else:
-                    st.markdown(f"**Gemini**: {message['content'][:50]}...")
-                if st.button(f"대화 {idx+1} 보기", key=f"history_{idx}"):
+                role = "나" if message["role"] == "user" else "Gemini"
+                st.markdown(f"<div class='sidebar-card'><strong>{role}</strong>: {message['content'][:50]}...</div>", unsafe_allow_html=True)
+                if st.button(f"대화 {idx+1} 보기", key=f"history_{idx}_{datetime.now().timestamp()}"):
                     st.session_state.selected_message = message
-                    # st.rerun() 제거: 선택된 메시지 표시를 메인 화면에서 처리
                 st.markdown("---")
     else:
-        st.markdown("아직 대화 기록이 없습니다.")
+        st.markdown("<div class='sidebar-card'>아직 대화 기록이 없습니다.</div>", unsafe_allow_html=True)
 
 # --- 메인 앱 ---
-st.title("🚀 Chat with Gemini")
+st.markdown("""
+<div class="main-header">
+    <h1 class="hero-title">🚀 Gemini Chat</h1>
+    <p class="hero-subtitle">웹, 유튜브, PDF 요약과 이미지 분석을 즐겨보세요!</p>
+</div>
+""", unsafe_allow_html=True)
 
 # 초기 설정
 if "messages" not in st.session_state:
@@ -604,61 +876,63 @@ model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prom
 # 첫 방문 시 환영 메시지
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
-    <div style="text-align: center; margin: 20px 0;">
-       
+    <div class="glass-card">
+        <h4 class="pulse-animation">🚀 빠른 시작 예시</h4>
     </div>
     """, unsafe_allow_html=True)
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if st.button("🌐 웹페이지 요약 예시", use_container_width=True):
+        if st.button("🌐 웹페이지 요약", key="example_web", help="웹페이지 요약 예시", type="primary"):
             st.session_state.example_input = "https://www.google.com 이 사이트에 대해 설명해줘"
     with col2:
-        if st.button("📺 유튜브 요약 예시", use_container_width=True):
+        if st.button("📺 유튜브 요약", key="example_youtube", help="유튜브 비디오 요약 예시", type="primary"):
             st.session_state.example_input = "https://www.youtube.com/watch?v=dQw4w9WgXcQ 이 영상 요약해줘"
     with col3:
-        if st.button("🤖 AI 질문 예시", use_container_width=True):
+        if st.button("🤖 AI 질문", key="example_ai", help="AI 관련 질문 예시", type="primary"):
             st.session_state.example_input = "인공지능의 미래에 대해 어떻게 생각해?"
     with col4:
-        if st.button("💡 창의적 질문 예시", use_container_width=True):
+        if st.button("💡 창의적 질문", key="example_creative", help="창의적 질문 예시", type="primary"):
             st.session_state.example_input = "달에 집을 짓는다면 어떤 점을 고려해야 할까?"
 
     if "example_input" in st.session_state:
-        st.info(f"💡 예시 입력: {st.session_state.example_input}")
-        st.markdown("아래 채팅 입력창에 직접 입력해보세요!")
+        st.info(f"💡 예시 입력: {st.session_state.example_input}", icon="💡")
+        st.markdown("<div class='tip-box'>아래 채팅 입력창에 직접 입력해보세요!</div>", unsafe_allow_html=True)
         del st.session_state.example_input
     
-    if st.button("환영 메시지 닫기"):
+    if st.button("환영 메시지 닫기", key="dismiss_welcome", type="secondary"):
         st.session_state.welcome_dismissed = True
 
 # 채팅 기록 표시 (메인 채팅 영역)
 chat_container = st.container()
 with chat_container:
+    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     if "selected_message" in st.session_state:
         message = st.session_state.selected_message
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        with st.chat_message(message["role"], avatar="🚀" if message["role"] == "assistant" else "🙋‍♂️"):
+            st.markdown(f"<div class='{ 'assistant-message' if message['role'] == 'assistant' else 'user-message' }'>{message['content']}</div>", unsafe_allow_html=True)
             if "images" in message and message["images"]:
                 cols = st.columns(min(3, len(message["images"])))
                 for idx, img_data in enumerate(message["images"]):
                     with cols[idx % 3]:
                         img = Image.open(io.BytesIO(img_data))
                         st.image(img, caption=f"이미지 {idx+1}", use_container_width=True)
-        if st.button("전체 대화 보기"):
-            del st.session_state.selected_message  # 선택 해제
+        if st.button("전체 대화 보기", key="show_all_chats", type="secondary"):
+            del st.session_state.selected_message
     else:
         for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+            with st.chat_message(message["role"], avatar="🚀" if message["role"] == "assistant" else "🙋‍♂️"):
+                st.markdown(f"<div class='{ 'assistant-message' if message['role'] == 'assistant' else 'user-message' }'>{message['content']}</div>", unsafe_allow_html=True)
                 if "images" in message and message["images"]:
                     cols = st.columns(min(3, len(message["images"])))
                     for idx, img_data in enumerate(message["images"]):
                         with cols[idx % 3]:
                             img = Image.open(io.BytesIO(img_data))
                             st.image(img, caption=f"이미지 {idx+1}", use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # 하단 고정 입력 영역
-st.markdown("---")
+st.markdown("<div class='input-container'>", unsafe_allow_html=True)
 
 # 이미지 업로드 영역
 with st.expander("📎 이미지 첨부", expanded=False):
@@ -671,7 +945,7 @@ with st.expander("📎 이미지 첨부", expanded=False):
     )
     if uploaded_files:
         st.session_state.uploaded_images = uploaded_files
-        st.success(f"📸 {len(uploaded_files)}개 이미지가 준비되었습니다!")
+        st.success(f"📸 {len(uploaded_files)}개 이미지가 준비되었습니다!", icon="✅")
         cols = st.columns(min(4, len(uploaded_files)))
         for idx, img_file in enumerate(uploaded_files):
             with cols[idx % 4]:
@@ -679,7 +953,7 @@ with st.expander("📎 이미지 첨부", expanded=False):
                 st.image(img, caption=f"이미지 {idx+1}", use_container_width=True)
 
 # 메인 채팅 입력창
-user_input = st.chat_input("💬 메시지를 입력해주세요.")
+user_input = st.chat_input("💬 메시지를 입력해주세요...")
 
 # 채팅 입력 처리
 if user_input:
@@ -693,7 +967,7 @@ if user_input:
         st.session_state.messages.append({"role": "assistant", "content": lang_change_msg})
 
     if get_usage_count() >= 100:
-        st.error("⚠️ 일일 무료 한도를 초과했습니다!")
+        st.error("⚠️ 일일 무료 한도를 초과했습니다!", icon="⚠️")
     else:
         increment_usage()
         image_data = []
@@ -701,7 +975,7 @@ if user_input:
             for img_file in st.session_state.uploaded_images:
                 valid, msg = validate_image_file(img_file)
                 if not valid:
-                    st.error(msg)
+                    st.error(msg, icon="❌")
                     continue
                 img_file.seek(0)
                 image_data.append(img_file.read())
@@ -720,16 +994,16 @@ if user_input:
         
         with st.status("🤖 요청을 처리하는 중...", expanded=True) as status:
             if is_youtube_request:
-                status.update(label="📺 유튜브 자막을 가져오는 중...")
+                status.update(label="📺 유튜브 자막을 가져오는 중...", state="running")
                 response = summarize_youtube_with_gemini(youtube_url, user_input, model, detected_lang)
             elif is_webpage_request:
-                status.update(label="🌐 웹페이지 내용을 가져오는 중...")
+                status.update(label="🌐 웹페이지 내용을 가져오는 중...", state="running")
                 response = summarize_webpage_with_gemini(webpage_url, user_input, model, detected_lang)
             elif is_pdf_request:
-                status.update(label="📄 PDF 내용을 가져오는 중...")
+                status.update(label="📄 PDF 내용을 가져오는 중...", state="running")
                 response = summarize_pdf_with_gemini(pdf_url, user_input, model, detected_lang)
             elif is_image_analysis and has_images:
-                status.update(label="📸 이미지를 분석하는 중...")
+                status.update(label="📸 이미지를 분석하는 중...", state="running")
                 images = [process_image_for_gemini(img) for img in st.session_state.uploaded_images]
                 if all(img is not None for img in images):
                     chat_session = model.start_chat(history=[])
@@ -737,7 +1011,7 @@ if user_input:
                 else:
                     response = "❌ 이미지 처리 중 오류가 발생했습니다."
             else:
-                status.update(label="💬 응답을 생성하는 중...")
+                status.update(label="💬 응답을 생성하는 중...", state="running")
                 chat_session = model.start_chat(history=st.session_state.chat_history)
                 response = chat_session.send_message(user_input).text
                 st.session_state.chat_history = chat_session.history
@@ -745,11 +1019,15 @@ if user_input:
         
         st.session_state.messages.append({"role": "assistant", "content": response})
         st.session_state.uploaded_images = []
+        if "selected_message" in st.session_state:
+            del st.session_state.selected_message  # 새로운 입력 후 선택된 메시지 초기화
         st.rerun()
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 하단 팁
 st.markdown("""
-<div style="text-align: center; color: #666; font-size: 14px; margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
+<div class="tip-box">
     💡 <strong>팁:</strong> URL을 붙여넣고 '요약해줘', 이미지를 업로드하고 '분석해줘', 또는 자유롭게 질문해보세요!
 </div>
 """, unsafe_allow_html=True)
