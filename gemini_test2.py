@@ -621,7 +621,7 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
             st.session_state.example_input = "https://arxiv.org/pdf/2410.04064 요약해줘"
     with col4:
         if st.button("🖼️ 이미지 분석 예시", use_container_width=True):
-            st.session_state.example_input = "이 이미지를 분석해줘"
+            st.session_state.example_input = "이미지를 분석해줘"
     with col5:
         if st.button("💬 일상대화 예시", use_container_width=True):
             st.session_state.example_input = "오늘 기분이 어때?"
@@ -751,8 +751,8 @@ if user_input:
         st.rerun()
 
 # 하단 팁
-st.markdown("""
-<div style="text-align: center; color: #666; font-size: 14px; margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
-    💡 <strong>팁:</strong> URL을 붙여넣고 '요약해줘', 이미지를 업로드하고 '분석해줘', 또는 자유롭게 질문해보세요!
-</div>
+# st.markdown("""
+# <div style="text-align: center; color: #666; font-size: 14px; margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
+#     💡 <strong>팁:</strong> URL을 붙여넣고 '요약해줘', 이미지를 업로드하고 '분석해줘', 또는 자유롭게 질문해보세요!
+# </div>
 """, unsafe_allow_html=True)
