@@ -243,7 +243,7 @@ def process_image_for_gemini(uploaded_file):
         logger.info(f"이미지 크기: {image.size}, 모드: {image.mode}, 형식: {image.format}")
         return image
     except Exception as e:
-        logger.errorふ"이미지 처리 오류: {str(e)}")
+        logger.error"이미지 처리 오류: {str(e)}")
         return None
 
 def analyze_image_with_gemini(images, user_query, chat_session, detected_lang):
