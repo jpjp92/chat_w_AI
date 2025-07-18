@@ -41,19 +41,30 @@ st.markdown("""
         box-shadow: 0 10px 30px rgba(0,0,0,0.1);
     }
     
-    .feature-card {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        padding: 1.5rem;
+    .welcome-container {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 2rem;
         border-radius: 15px;
-        margin: 0.5rem;
+        margin: 1rem 0;
         text-align: center;
-        color: white;
         box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        transition: transform 0.3s ease;
     }
     
-    .feature-card:hover {
-        transform: translateY(-5px);
+    .simple-button {
+        background: #e0e0e0;
+        color: #333;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 0.5rem;
+    }
+    
+    .simple-button:hover {
+        background: #d0d0d0;
+        transform: translateY(-2px);
     }
     
     .chat-session {
@@ -91,9 +102,9 @@ st.markdown("""
     
     .example-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 1rem;
-        margin: 2rem 0;
+        margin: 1rem 0;
     }
     
     .stats-container {
@@ -232,7 +243,10 @@ def export_chat_session():
                     "last_updated": session["last_updated"].isoformat(),
                     "messages": serialized_messages
                 }
-                return json.dumps(export_data, ensure_ascii=False, indent=2)
+                logger.info("대화 내보내기 시작")
+                result = json.dumps(export_data, ensure_ascii=False, indent=2)
+                logger.info(f"내보내기 완료: 세션 ID {session['id']}")
+                return result
     return None
 
 def validate_image_file(uploaded_file):
@@ -811,49 +825,42 @@ st.markdown('<div class="main-header"><h1>🚀 Chat with Gemini</h1></div>', uns
 # 첫 방문 시 환영 메시지
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
-    <div class="main-header">
-        <h3>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</h3>
-  
-    </div>
+    <div class="welcome-container">
+        <h3>🚀 Chat with Gemini</h3>
+        <p>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</p>
+        <p>아래 예시를 클릭하거나 직접 메시지를 입력해 다양한 기능을 사용해보세요.</p>
+        <div class="example-grid">
     """, unsafe_allow_html=True)
-
-    st.markdown('<div class="example-grid">', unsafe_allow_html=True)
+    
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        st.markdown('<div class="feature-card">', unsafe_allow_html=True)
-        if st.button("🌐 웹페이지 요약", use_container_width=True):
+        if st.button("🌐 웹페이지 요약", key="example_webpage", help="웹페이지 요약 기능을 시험해보세요", use_container_width=True):
             st.session_state.example_input = "https://www.google.com 이 사이트에 대해 설명해줘"
-        st.markdown('</div>', unsafe_allow_html=True)
     with col2:
-        st.markdown('<div class="feature-card">', unsafe_allow_html=True)
-        if st.button("📺 유튜브 요약", use_container_width=True):
+        if st.button("📺 유튜브 요약", key="example_youtube", help="유튜브 비디오 요약 기능을 시험해보세요", use_container_width=True):
             st.session_state.example_input = "https://www.youtube.com/watch?v=dQw4w9WgXcQ 이 영상 요약해줘"
-        st.markdown('</div>', unsafe_allow_html=True)
     with col3:
-        st.markdown('<div class="feature-card">', unsafe_allow_html=True)
-        if st.button("📄 PDF 요약", use_container_width=True):
+        if st.button("📄 PDF 요약", key="example_pdf", help="PDF 문서 요약 기능을 시험해보세요", use_container_width=True):
             st.session_state.example_input = "https://arxiv.org/pdf/2410.04064 요약해줘"
-        st.markdown('</div>', unsafe_allow_html=True)
     with col4:
-        st.markdown('<div class="feature-card">', unsafe_allow_html=True)
-        if st.button("🖼️ 이미지 분석", use_container_width=True):
+        if st.button("🖼️ 이미지 분석", key="example_image", help="이미지 분석 기능을 시험해보세요", use_container_width=True):
             st.session_state.example_input = "이미지를 분석해줘"
-        st.markdown('</div>', unsafe_allow_html=True)
     with col5:
-        st.markdown('<div class="feature-card">', unsafe_allow_html=True)
-        if st.button("💬 일상 대화", use_container_width=True):
+        if st.button("💬 일상 대화", key="example_chat", help="일상 대화 기능을 시험해보세요", use_container_width=True):
             st.session_state.example_input = "오늘 기분이 어때?"
-        st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # if "example_input" in st.session_state:
-    #     st.info(f"💡 예시 입력: {st.session_state.example_input}")
-    #     st.markdown("아래 채팅 입력창에 직접 입력해보세요!")
-    #     del st.session_state.example_input
-
-    # if st.button("환영 메시지 닫기", key="dismiss_welcome"):
-    #     st.session_state.welcome_dismissed = True
-    #     st.rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    if "example_input" in st.session_state:
+        st.info(f"💡 예시 입력: {st.session_state.example_input}")
+        st.markdown("아래 채팅 입력창에 직접 입력해보세요!")
+        del st.session_state.example_input
+    
+    if st.button("환영 메시지 닫기", key="dismiss_welcome"):
+        st.session_state.welcome_dismissed = True
+        st.rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # 채팅 기록 표시
 chat_container = st.container()
