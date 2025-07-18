@@ -217,11 +217,20 @@ def export_chat_session():
     if st.session_state.current_session_id:
         for session in st.session_state.chat_sessions:
             if session["id"] == st.session_state.current_session_id:
+                # 메시지 데이터를 복사하여 수정
+                serialized_messages = []
+                for msg in session["messages"]:
+                    msg_copy = msg.copy()
+                    if "images" in msg_copy and msg_copy["images"]:
+                        # bytes 데이터를 Base64 문자열로 변환
+                        msg_copy["images"] = [base64.b64encode(img).decode('utf-8') for img in msg_copy["images"]]
+                    serialized_messages.append(msg_copy)
+                
                 export_data = {
                     "title": session["title"],
                     "created_at": session["created_at"].isoformat(),
                     "last_updated": session["last_updated"].isoformat(),
-                    "messages": session["messages"]
+                    "messages": serialized_messages
                 }
                 return json.dumps(export_data, ensure_ascii=False, indent=2)
     return None
@@ -781,14 +790,20 @@ with st.sidebar:
 
     st.markdown("### 💾 대화 내보내기")
     if st.button("대화 내보내기", key="export_chat"):
-        export_data = export_chat_session()
-        if export_data:
-            st.download_button(
-                label="JSON 다운로드",
-                data=export_data,
-                file_name=f"chat_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json"
-            )
+        try:
+            export_data = export_chat_session()
+            if export_data:
+                st.download_button(
+                    label="JSON 다운로드",
+                    data=export_data,
+                    file_name=f"chat_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json"
+                )
+            else:
+                st.error("❌ 내보낼 대화 세션이 없습니다.")
+        except Exception as e:
+            st.error(f"❌ 대화 내보내기 중 오류가 발생했습니다: {str(e)}")
+            logger.error(f"대화 내보내기 오류: {str(e)}")
 
 # --- 메인 앱 ---
 st.markdown('<div class="main-header"><h1>🚀 Chat with Gemini</h1></div>', unsafe_allow_html=True)
@@ -798,7 +813,7 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
         <h3>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</h3>
-        <p>아래 예시를 클릭하거나 직접 메시지를 입력해 다양한 기능을 사용해보세요.</p>
+  
     </div>
     """, unsafe_allow_html=True)
 
