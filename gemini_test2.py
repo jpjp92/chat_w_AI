@@ -825,7 +825,7 @@ with st.sidebar:
 # 첫 방문 시 환영 메시지
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
-    <div class="welcome-container">
+    <div class="main-header">
         <h3>🚀 Chat with Gemini</h3>
         <p>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</p>
         <p>아래 예시를 클릭하거나 직접 메시지를 입력해 다양한 기능을 사용해보세요.</p>
@@ -856,9 +856,9 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
         st.markdown("아래 채팅 입력창에 직접 입력해보세요!")
         del st.session_state.example_input
     
-    if st.button("환영 메시지 닫기", key="dismiss_welcome"):
-        st.session_state.welcome_dismissed = True
-        st.rerun()
+    # if st.button("환영 메시지 닫기", key="dismiss_welcome"):
+    #     st.session_state.welcome_dismissed = True
+    #     st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
 
