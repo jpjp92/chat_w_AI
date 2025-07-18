@@ -846,14 +846,14 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
         st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    if "example_input" in st.session_state:
-        st.info(f"💡 예시 입력: {st.session_state.example_input}")
-        st.markdown("아래 채팅 입력창에 직접 입력해보세요!")
-        del st.session_state.example_input
+    # if "example_input" in st.session_state:
+    #     st.info(f"💡 예시 입력: {st.session_state.example_input}")
+    #     st.markdown("아래 채팅 입력창에 직접 입력해보세요!")
+    #     del st.session_state.example_input
 
-    if st.button("환영 메시지 닫기", key="dismiss_welcome"):
-        st.session_state.welcome_dismissed = True
-        st.rerun()
+    # if st.button("환영 메시지 닫기", key="dismiss_welcome"):
+    #     st.session_state.welcome_dismissed = True
+    #     st.rerun()
 
 # 채팅 기록 표시
 chat_container = st.container()
