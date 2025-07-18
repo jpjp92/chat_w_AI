@@ -820,7 +820,7 @@ with st.sidebar:
             logger.error(f"대화 내보내기 오류: {str(e)}")
 
 # --- 메인 앱 ---
-st.markdown('<div class="main-header"><h1>🚀 Chat with Gemini</h1></div>', unsafe_allow_html=True)
+# st.markdown('<div class="main-header"><h2>🚀 Chat with Gemini</h2></div>', unsafe_allow_html=True)
 
 # 첫 방문 시 환영 메시지
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
