@@ -826,19 +826,19 @@ with st.sidebar:
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
-        <h3>🚀 Chat with Gemini</h3>
+        <h2>🚀 Chat with Gemini</h2>
         <p>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</p>
-        <p>아래 예시를 클릭하거나 직접 메시지를 입력해 다양한 기능을 사용해보세요.</p>
+        <p>아래 예시를 참고하여 다양한 기능을 사용해보세요.</p>
         <div class="example-grid">
     """, unsafe_allow_html=True)
     
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         if st.button("🌐 웹페이지 요약", key="example_webpage", help="웹페이지 요약 기능을 시험해보세요", use_container_width=True):
-            st.session_state.example_input = "https://www.google.com 이 사이트에 대해 설명해줘"
+            st.session_state.example_input = "https://www.aitimes.com/news/articleView.html?idxno=200667 이 사이트에 대해 설명해줘"
     with col2:
         if st.button("📺 유튜브 요약", key="example_youtube", help="유튜브 비디오 요약 기능을 시험해보세요", use_container_width=True):
-            st.session_state.example_input = "https://www.youtube.com/watch?v=dQw4w9WgXcQ 이 영상 요약해줘"
+            st.session_state.example_input = "https://www.youtube.com/watch?v=HnvitMTkXro 이 영상 요약해줘"
     with col3:
         if st.button("📄 PDF 요약", key="example_pdf", help="PDF 문서 요약 기능을 시험해보세요", use_container_width=True):
             st.session_state.example_input = "https://arxiv.org/pdf/2410.04064 요약해줘"
@@ -847,13 +847,13 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
             st.session_state.example_input = "이미지를 분석해줘"
     with col5:
         if st.button("💬 일상 대화", key="example_chat", help="일상 대화 기능을 시험해보세요", use_container_width=True):
-            st.session_state.example_input = "오늘 기분이 어때?"
+            st.session_state.example_input = "스페인어 공부하자! 기본회화 알려줘"
     
     st.markdown("</div>", unsafe_allow_html=True)
     
     if "example_input" in st.session_state:
         st.info(f"💡 예시 입력: {st.session_state.example_input}")
-        st.markdown("아래 채팅 입력창에 직접 입력해보세요!")
+        # st.markdown("아래 채팅창에 직접 입력해보세요!")
         del st.session_state.example_input
     
     # if st.button("환영 메시지 닫기", key="dismiss_welcome"):
@@ -909,7 +909,7 @@ with st.container():
                 with cols[idx % 4]:
                     img = Image.open(img_file)
                     st.image(img, caption=f"이미지 {idx+1}", use_container_width=True)
-        if st.button("🗑️ 업로드된 이미지 초기화", key="clear_images"):
+        if st.button("🗑️ 이미지 초기화", key="clear_images"):
             st.session_state.uploaded_images = []
             st.rerun()
 
