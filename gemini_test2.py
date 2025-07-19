@@ -762,7 +762,7 @@ initialize_session_state()
 # --- Gemini 모델 초기화 ---
 logger.info(f"System language: {st.session_state.system_language}")
 system_prompt = get_system_prompt(st.session_state.system_language)
-model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prompt)
 
 # --- 사이드바: 세션 관리 및 설정 ---
 with st.sidebar:
@@ -789,7 +789,7 @@ with st.sidebar:
     if language != ("한국어 (ko)" if st.session_state.system_language == "ko" else "English (en)"):
         st.session_state.system_language = "ko" if language == "한국어 (ko)" else "en"
         system_prompt = get_system_prompt(st.session_state.system_language)
-        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+        model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prompt)
         st.session_state.chat_history = []
         st.session_state.messages.append({
             "role": "assistant",
@@ -828,7 +828,7 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
         <h2>🚀 Chat with Gemini</h2>
-        <h5>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</h5>
+        <h5>Gemini와 대화를 시작해보세요! 😊</h5>
         
     """, unsafe_allow_html=True)
     
@@ -926,7 +926,7 @@ if user_input:
     if detected_lang != st.session_state.system_language:
         st.session_state.system_language = detected_lang
         system_prompt = get_system_prompt(detected_lang)
-        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+        model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prompt)
         st.session_state.chat_history = []
         st.session_state.messages.append({
             "role": "assistant",
