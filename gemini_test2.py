@@ -998,6 +998,6 @@ st.markdown("""
             <span>×</span>
             <span style="background: linear-gradient(135deg, #ff6b6b, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Streamlit</span>
         </div>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.7;">Experience the future of AI conversation</p>
+        
     </div>
 """, unsafe_allow_html=True)
