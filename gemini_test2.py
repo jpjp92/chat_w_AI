@@ -1,3 +1,4 @@
+# 라이브러리 설정
 import streamlit as st
 import google.generativeai as genai
 import os
@@ -25,7 +26,7 @@ st.set_page_config(
     page_title="Chat with Gemini",
     page_icon="🚀",
     layout="wide",
-    initial_sidebar_state="expanded"
+    # initial_sidebar_state="expanded"
 )
 
 # --- 사용자 정의 CSS ---
@@ -34,8 +35,8 @@ st.markdown("""
     .main-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 2rem;
-        border-radius: 20px;
-        margin-bottom: 2rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
         text-align: center;
         color: white;
         box-shadow: 0 10px 30px rgba(0,0,0,0.1);
@@ -827,8 +828,7 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
         <h2>🚀 Chat with Gemini</h2>
-        <p>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</p>
-        <p>아래 예시를 참고하여 다양한 기능을 사용해보세요.</p>
+        <h3>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</h3>
         <div class="example-grid">
     """, unsafe_allow_html=True)
     
@@ -844,7 +844,7 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
             st.session_state.example_input = "https://arxiv.org/pdf/2410.04064 요약해줘"
     with col4:
         if st.button("🖼️ 이미지 분석", key="example_image", help="이미지 분석 기능을 시험해보세요", use_container_width=True):
-            st.session_state.example_input = "이미지를 분석해줘"
+            st.session_state.example_input = "첨부한 이미지를 분석해줘"
     with col5:
         if st.button("💬 일상 대화", key="example_chat", help="일상 대화 기능을 시험해보세요", use_container_width=True):
             st.session_state.example_input = "스페인어 공부하자! 기본회화 알려줘"
