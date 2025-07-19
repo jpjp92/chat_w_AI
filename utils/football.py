@@ -2,6 +2,31 @@ import requests
 import time
 import pandas as pd
 
+# 축구리그 
+LEAGUE_MAPPING = {
+    "epl": {"name": "프리미어리그 (영국)", "code": "PL"},
+    "laliga": {"name": "라리가 (스페인)", "code": "PD"},
+    "bundesliga": {"name": "분데스리가 (독일)", "code": "BL1"},
+    "seriea": {"name": "세리에 A (이탈리아)", "code": "SA"},
+    "ligue1": {"name": "리그 1 (프랑스)", "code": "FL1"},
+    "championsleague": {"name": "챔피언스 리그", "code": "CL"}
+}
+
+def extract_league_from_query(query):
+    query_lower = query.lower().replace(" ", "")
+    league_keywords = {
+        "epl": ["epl", "프리미어리그"],
+        "laliga": ["laliga", "라리가"],
+        "bundesliga": ["bundesliga", "분데스리가"],
+        "seriea": ["seriea", "세리에a"],
+        "ligue1": ["ligue1", "리그1"],
+        "championsleague": ["championsleague", "챔피언스리그", "ucl"]
+    }
+    for league_key, keywords in league_keywords.items():
+        if any(keyword in query_lower for keyword in keywords):
+            return league_key
+    return None
+
 class FootballAPI:
     def __init__(self, api_key, cache_handler, cache_ttl=600):
         self.api_key = api_key
