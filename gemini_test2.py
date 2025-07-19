@@ -42,6 +42,46 @@ st.markdown("""
         box-shadow: 0 10px 30px rgba(0,0,0,0.1);
     }
     
+    .main-title {
+        background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57);
+        background-size: 300% 300%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem 0;
+        animation: gradient 3s ease infinite;
+        text-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        line-height: 1.2;
+    }
+    
+    @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    
+    .subtitle {
+        color: rgba(255, 255, 255, 0.95);
+        font-weight: 500;
+        line-height: 1.6;
+        margin: 0;
+        font-size: 1.25rem; /* 가독성 향상 */
+    }
+    
+    .icon-bounce {
+        display: inline-block;
+        animation: bounce 2s infinite;
+        will-change: transform; /* 성능 최적화 */
+    }
+    
+    @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+        40% { transform: translateY(-10px); }
+        60% { transform: translateY(-5px); }
+    }
+    
     .welcome-container {
         background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         padding: 2rem;
@@ -114,6 +154,17 @@ st.markdown("""
         border-radius: 10px;
         margin: 1rem 0;
         text-align: center;
+    }
+    
+    @media (max-width: 768px) {
+        .main-title { 
+            font-size: 1.5rem;
+            line-height: 1.3;
+        }
+        .main-header {
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -821,14 +872,17 @@ with st.sidebar:
             logger.error(f"대화 내보내기 오류: {str(e)}")
 
 # --- 메인 앱 ---
-
+# 첫 방문 시 환영 메시지
+# --- 메인 앱 ---
 # 첫 방문 시 환영 메시지
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
-        <h2>✨ Chat with Gemini</h2>
-        <h5>Gemini와 대화를 시작해보세요! 😊</h5>
-        
+        <h2 class="main-title">
+            <span class="icon-bounce">✨</span> Chat with Gemini
+        </h2>
+        <h5 class="subtitle">Gemini와 대화를 시작해보세요! 😊</h5>
+    </div>
     """, unsafe_allow_html=True)
     
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -848,18 +902,9 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
         if st.button("💬 일상 대화", key="example_chat", help="일상 대화 기능을 시험해보세요", use_container_width=True):
             st.session_state.example_input = "스페인어 공부하자! 기본회화 알려줘"
     
-    st.markdown("</div>", unsafe_allow_html=True)
-    
     if "example_input" in st.session_state:
         st.info(f"💡 예시 입력: {st.session_state.example_input}")
-        # st.markdown("아래 채팅창에 직접 입력해보세요!")
         del st.session_state.example_input
-    
-    # if st.button("환영 메시지 닫기", key="dismiss_welcome"):
-    #     st.session_state.welcome_dismissed = True
-    #     st.rerun()
-    
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # 채팅 기록 표시
 chat_container = st.container()
