@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # --- 페이지 설정 ---
 st.set_page_config(
     page_title="Chat with Gemini",
-    page_icon="🚀",
+    page_icon="✨",
     layout="wide",
     # initial_sidebar_state="expanded"
 )
@@ -821,13 +821,12 @@ with st.sidebar:
             logger.error(f"대화 내보내기 오류: {str(e)}")
 
 # --- 메인 앱 ---
-# st.markdown('<div class="main-header"><h2>🚀 Chat with Gemini</h2></div>', unsafe_allow_html=True)
 
 # 첫 방문 시 환영 메시지
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
-        <h2>🚀 Chat with Gemini</h2>
+        <h2>✨ Chat with Gemini</h2>
         <h5>Gemini와 대화를 시작해보세요! 😊</h5>
         
     """, unsafe_allow_html=True)
@@ -890,7 +889,7 @@ with chat_container:
                             st.image(img, caption=f"이미지 {idx+1}", use_container_width=True)
 
 # 하단 고정 입력 영역
-st.markdown("---")
+# st.markdown("---")
 with st.container():
     # 이미지 업로드 영역
     with st.expander("📎 이미지 첨부", expanded=False):
@@ -899,7 +898,7 @@ with st.container():
             type=['png', 'jpg', 'jpeg', 'webp'],
             accept_multiple_files=True,
             key="chat_image_uploader",
-            help="이미지를 분석하고 싶다면 여기에 업로드하세요"
+            help="이미지를 업로드하고 분석을 요청 해 보세요"
         )
         if uploaded_files:
             st.session_state.uploaded_images = uploaded_files
@@ -990,6 +989,7 @@ if user_input:
         st.rerun()
         
 # 개선된 푸터
+st.markdown("---")
 st.markdown("""
     <div class="footer">
         <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap;">
