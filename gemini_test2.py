@@ -34,8 +34,8 @@ st.markdown("""
 <style>
     .main-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 10px;
+        padding: 1rem;
+        border-radius: 5px;
         margin-bottom: 1rem;
         text-align: center;
         color: white;
@@ -828,8 +828,8 @@ if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
         <h2>🚀 Chat with Gemini</h2>
-        <h3>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</h3>
-        <div class="example-grid">
+        <h5>환영합니다! Gemini와 함께 대화를 시작해보세요! 😊</h5>
+        
     """, unsafe_allow_html=True)
     
     col1, col2, col3, col4, col5 = st.columns(5)
