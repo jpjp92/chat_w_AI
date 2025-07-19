@@ -988,3 +988,16 @@ if user_input:
         st.session_state.uploaded_images = []
         save_current_session()
         st.rerun()
+        
+# 개선된 푸터
+st.markdown("""
+    <div class="footer">
+        <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <span>✨ Powered by</span>
+            <span style="background: linear-gradient(135deg, #6c63ff, #4ecdc4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Gemini AI</span>
+            <span>×</span>
+            <span style="background: linear-gradient(135deg, #ff6b6b, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Streamlit</span>
+        </div>
+        <p style="margin: 0.5rem 0 0 0; opacity: 0.7;">Experience the future of AI conversation</p>
+    </div>
+""", unsafe_allow_html=True)
