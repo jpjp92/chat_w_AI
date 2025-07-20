@@ -74,14 +74,7 @@ st.markdown("""
         font-size: 1.25rem;
     }
     
-    .icon-bounce {
-        display: inline-block;
-        animation: bounce 2s ease-in-out infinite;
-        -webkit-animation: bounce 2s ease-in-out infinite;
-        will-change: transform;
-        font-size: 1.5em;
-        text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
-    }
+
     
     @keyframes bounce {
         0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
@@ -895,9 +888,7 @@ with st.sidebar:
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
-        <h2 class="main-title">
-            <span class="icon-bounce">✨</span> Chat with Gemini
-        </h2>
+        <h2 class="main-title"> ✨Chat with Gemini</h2>
         <h5 class="subtitle">Gemini와 대화를 시작해보세요! 😊</h5>
     </div>
     """, unsafe_allow_html=True)
@@ -1052,13 +1043,15 @@ if user_input:
 
 # 개선된 푸터
 st.markdown("---")
+
 st.markdown("""
-<div class="footer">
-    <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap;">
-        <span>✨ Powered by</span>
-        <span style="background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Gemini AI</span>
-        <span>×</span>
-        <span style="background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Streamlit</span>
+    <div class="footer">
+        <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <span>✨ Powered by</span>
+            <span style="background: linear-gradient(135deg, #6c63ff, #4ecdc4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Gemini AI</span>
+            <span>×</span>
+            <span style="background: linear-gradient(135deg, #ff6b6b, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Streamlit</span>
+        </div>
+        
     </div>
-</div>
 """, unsafe_allow_html=True)
