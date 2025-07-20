@@ -15,6 +15,7 @@ import io
 from PIL import Image
 import base64
 import uuid
+
 from config.env import GEMINI_API_KEY
 
 # 로깅 설정
@@ -1049,7 +1050,7 @@ st.markdown("""
         <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap;">
             <span>✨ Powered by</span>
             <span style="background: linear-gradient(135deg, #6c63ff, #4ecdc4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Gemini AI</span>
-            <span>×</span>
+            <span>x</span>
             <span style="background: linear-gradient(135deg, #ff6b6b, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Streamlit</span>
         </div>
         
