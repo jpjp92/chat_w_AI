@@ -32,8 +32,12 @@ st.set_page_config(
 # --- 사용자 정의 CSS ---
 st.markdown("""
 <style>
+    :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
     .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: var(--primary-gradient);
         padding: 1rem;
         border-radius: 5px;
         margin-bottom: 1rem;
@@ -67,19 +71,22 @@ st.markdown("""
         font-weight: 500;
         line-height: 1.6;
         margin: 0;
-        font-size: 1.25rem; /* 가독성 향상 */
+        font-size: 1.25rem;
     }
     
     .icon-bounce {
         display: inline-block;
-        animation: bounce 2s infinite;
-        will-change: transform; /* 성능 최적화 */
+        animation: bounce 2s ease-in-out infinite;
+        -webkit-animation: bounce 2s ease-in-out infinite;
+        will-change: transform;
+        font-size: 1.5em;
+        text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
     }
     
     @keyframes bounce {
         0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-        40% { transform: translateY(-10px); }
-        60% { transform: translateY(-5px); }
+        40% { transform: translateY(-15px); }
+        60% { transform: translateY(-7px); }
     }
     
     .welcome-container {
@@ -124,7 +131,7 @@ st.markdown("""
     }
     
     .new-chat-btn {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: var(--primary-gradient);
         color: white;
         border: none;
         padding: 0.75rem 1.5rem;
@@ -164,6 +171,18 @@ st.markdown("""
         .main-header {
             padding: 0.75rem;
             margin-bottom: 0.75rem;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .subtitle {
+            font-size: 1rem;
+        }
+    }
+    
+    @media (prefers-reduced-motion: reduce) {
+        .icon-bounce {
+            animation: none;
         }
     }
 </style>
@@ -873,8 +892,6 @@ with st.sidebar:
 
 # --- 메인 앱 ---
 # 첫 방문 시 환영 메시지
-# --- 메인 앱 ---
-# 첫 방문 시 환영 메시지
 if not st.session_state.messages and not st.session_state.welcome_dismissed:
     st.markdown("""
     <div class="main-header">
@@ -1032,17 +1049,16 @@ if user_input:
         st.session_state.uploaded_images = []
         save_current_session()
         st.rerun()
-        
+
 # 개선된 푸터
 st.markdown("---")
 st.markdown("""
-    <div class="footer">
-        <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap;">
-            <span>✨ Powered by</span>
-            <span style="background: linear-gradient(135deg, #6c63ff, #4ecdc4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Gemini AI</span>
-            <span>×</span>
-            <span style="background: linear-gradient(135deg, #ff6b6b, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Streamlit</span>
-        </div>
-        
+<div class="footer">
+    <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <span>✨ Powered by</span>
+        <span style="background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Gemini AI</span>
+        <span>×</span>
+        <span style="background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">Streamlit</span>
     </div>
+</div>
 """, unsafe_allow_html=True)
